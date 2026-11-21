@@ -423,6 +423,57 @@ def test_key_segment_empty_and_invalid_transcript(
         ks_mod.run({"transcript": [_seg(0, 1, "x")]}, {"max_segments": "八"}, ctx)
 
 
+# ── c2) 三态裁决（AI-1 批 2026-11-21：auto_adopt 双态 + 建议语义）──
+
+
+def test_key_segment_auto_adopt_defaults_to_draft(
+    ks_mod: ModuleType, tmp_path: Path
+) -> None:
+    """裁决批硬要求 15：缺省与显式 auto_adopt=false → **每项** status='draft'，
+    日志体现「建议」语义（AI 从替用户决定 → 给用户建议）。状态在 run() 公共
+    尾部加盖（AI/规则两路径同覆盖），规则路径断言即代表两路。"""
+    m = _manifest_of("key-segment")
+    assert m["config_schema"]["auto_adopt"]["type"] == "boolean"
+    assert m["config_schema"]["auto_adopt"]["default"] is False
+
+    ctx_default = _FakeCtx(tmp_path / "d")
+    out_default = ks_mod.run({"transcript": _three_group_segments()}, {}, ctx_default)
+    assert out_default["ranges"]
+    assert all(r["status"] == "draft" for r in out_default["ranges"])
+    assert any(
+        "AI 建议" in line and "draft" in line and "待人工裁决" in line
+        for line in ctx_default.logs
+    )
+
+    ctx_false = _FakeCtx(tmp_path / "f")
+    out_false = ks_mod.run(
+        {"transcript": _three_group_segments()}, {"auto_adopt": False}, ctx_false
+    )
+    assert all(r["status"] == "draft" for r in out_false["ranges"])
+
+
+def test_key_segment_auto_adopt_true_adopts(
+    ks_mod: ModuleType, tmp_path: Path
+) -> None:
+    """auto_adopt=true → 每项 status='adopted'（旧行为，供信任 AI 的用户）。"""
+    ctx = _FakeCtx(tmp_path / "ctx")
+    out = ks_mod.run(
+        {"transcript": _three_group_segments()}, {"auto_adopt": True}, ctx
+    )
+    assert out["ranges"] and all(r["status"] == "adopted" for r in out["ranges"])
+    assert any("auto_adopt=true" in line for line in ctx.logs)
+    assert not any("待人工裁决" in line for line in ctx.logs)
+
+
+def test_key_segment_auto_adopt_invalid_rejected(
+    ks_mod: ModuleType, tmp_path: Path
+) -> None:
+    """非布尔 auto_adopt 可读报错（引擎只填 default 不深校验，插件自验布尔）。"""
+    with pytest.raises(PluginError, match="auto_adopt 须为布尔"):
+        ks_mod.run({"transcript": [_seg(0, 1, "x")]}, {"auto_adopt": "yes"},
+                   _FakeCtx(tmp_path / "ctx"))
+
+
 # ── d) frame-grab：argv 断言 / artifacts_dir / clip / 校验 ─────────
 
 

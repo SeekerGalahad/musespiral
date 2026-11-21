@@ -20,6 +20,13 @@ AI（v1 引擎尚不注入独立 AI 客户端对象，治理层网关即「受�
 核对），静默删除才是错的。AI 自评 confidence 被要求诚实；规则路径的
 confidence 来自可解释的加权分（密度/标题词/停顿/转写质量四因子）。
 
+三态裁决（AI 产物裁决机制正典 2026-11-21，AI-1 批）：ranges 每项带
+``status``——默认 ``draft``（**AI 建议不是结论**：可用但 UI 须标「AI 建议」
+徽章，待人工采纳/弃用；流水线不因未裁决卡死，draft 下游照常可消费）；
+``config.auto_adopt=true`` 时直接 ``adopted``（旧行为，供信任 AI 的用户）。
+切片是「什么重要」的判断——创作者最不愿被替代的那个决定，默认给建议、
+不替用户拍板。
+
 编辑流（评审 G-2/G-3，正典 PL-3 契约）：前端在转写面板改完段落会落
 ``workspace/<上游节点>/segments.edited.json``（不覆盖原始 outputs.json，
 保留对照）；本插件经 ctx.upstream 接线面定位**实际供给 transcript 的
@@ -45,6 +52,12 @@ TASK = "plugin_key_segment"
 # config 缺省（与 manifest.config_schema.default 同一事实，双写保直读可测）
 _DEFAULT_MAX_SEGMENTS = 8
 _DEFAULT_MIN_CONFIDENCE = 0.4
+_DEFAULT_AUTO_ADOPT = False
+
+# 三态裁决取值（全系统统一，正典 §二：draft=AI 建议/adopted=人工确认/
+# discarded=人工否定——本插件只产前两态，discarded 由裁决端点写入）
+_STATUS_DRAFT = "draft"
+_STATUS_ADOPTED = "adopted"
 
 # 规则路径参数（可解释启发式，改值须同步测试注释）
 _PAUSE_SPLIT_S = 1.2      # 停顿 ≥ 此值视为话题边界（分组切点）
@@ -435,6 +448,10 @@ def run(inputs: dict, config: dict, ctx: Any) -> dict:
         min_confidence = min(max(float(config.get("min_confidence", _DEFAULT_MIN_CONFIDENCE)), 0.0), 1.0)
     except (TypeError, ValueError):
         raise PluginError(f"config.min_confidence 须为数值: {config.get('min_confidence')!r}") from None
+    # 三态裁决开关：引擎 _merge_config 只填 default 不深校验——布尔性插件自验
+    auto_adopt = config.get("auto_adopt", _DEFAULT_AUTO_ADOPT)
+    if not isinstance(auto_adopt, bool):
+        raise PluginError(f"config.auto_adopt 须为布尔: {auto_adopt!r}")
 
     if not transcript:
         ctx.log("key-segment: 转写为空（纯音乐/静音素材），ranges 置空")
@@ -464,6 +481,17 @@ def run(inputs: dict, config: dict, ctx: Any) -> dict:
             marked += 1
     if marked:
         ctx.log(f"key-segment: {marked} 段低置信（< {min_confidence}）已标 ⚠️（不丢弃）")
+
+    # 三态裁决（AI-1 批，公共尾部——AI/规则两路径同覆盖）：切片判断默认是
+    # 「建议」不是「正式结果」。draft 不禁用下游（流水线不卡），状态在场，
+    # 用户想审查时随手可采纳/弃用（裁决端点按 run 产物操作，本层只产态）。
+    status = _STATUS_ADOPTED if auto_adopt else _STATUS_DRAFT
+    for r in ranges:
+        r["status"] = status
+    if status == _STATUS_DRAFT:
+        ctx.log(f"key-segment: AI 建议 {len(ranges)} 段（draft 态，待人工裁决）")
+    else:
+        ctx.log(f"key-segment: 产出 {len(ranges)} 段（auto_adopt=true，直接 adopted）")
 
     ctx.progress(1, 1)
     return {"ranges": ranges}

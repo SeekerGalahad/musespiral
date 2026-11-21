@@ -232,6 +232,7 @@ def test_f77_5_cache_rerun_counts_one_call(env, ai_on) -> None:
 
 def test_f77_6_api_contract_tags_suggest(server, studio_root, env, ai_on, monkeypatch) -> None:
     from musespiral.studio.actions import _ACTION_ROUTES
+    from musespiral.studio.plugin_actions import POST_DYNAMIC_SURFACE
     from musespiral.studio.server import _BINARY_POST_ROUTES
 
     from tests.test_architecture import CONTRACT_POST_EXACT
@@ -240,10 +241,13 @@ def test_f77_6_api_contract_tags_suggest(server, studio_root, env, ai_on, monkey
     fake, _calls = _fake_chat()
     monkeypatch.setattr(gateway_mod, "_real_chat", fake)  # API 层唯一假件缝（服务线程同进程）
 
-    # 双锁同步：路由入表 + 入 POST 锁 + 面锁仍逐条相等（本组路由登记后）
+    # 双锁同步：路由入表 + 入 POST 锁 + 面锁仍逐条相等（本组路由登记后；
+    # AI-1 批起 POST 面含动态段占位 runs/<run_id>/adopt|discard）
     assert "/api/action/tags_suggest" in _ACTION_ROUTES
     assert "/api/action/tags_suggest" in CONTRACT_POST_EXACT
-    assert (set(_ACTION_ROUTES) | set(_BINARY_POST_ROUTES)) == CONTRACT_POST_EXACT
+    assert (
+        set(_ACTION_ROUTES) | set(_BINARY_POST_ROUTES) | set(POST_DYNAMIC_SURFACE)
+    ) == CONTRACT_POST_EXACT
 
     # confirm 全局闸门 / 缺 id → 400
     assert _request(server, "POST", "/api/action/tags_suggest", {"id": row["id"]})[0] == 400

@@ -26,6 +26,11 @@
       "type": "number",
       "default": 0.4,
       "description": "置信度低于此值的片段在 label 前标 ⚠️（不丢弃，提示不拦截）"
+    },
+    "auto_adopt": {
+      "type": "boolean",
+      "default": false,
+      "description": "切片裁决态：false（默认）=每段 status='draft'（AI 建议待人工裁决，UI 标「AI 建议」徽章，下游照常可用不禁用）；true=直接 adopted（旧行为，信任 AI 全自动）"
     }
   }
 }

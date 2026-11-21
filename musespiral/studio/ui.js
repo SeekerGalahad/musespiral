@@ -4478,7 +4478,7 @@ bindPlugins();
 // G-3 ranges 增删——segments/audio 三端点 PL-6 批已接驳（GET/POST segments
 // 编辑面 + audio 裁段原声；POST 走精确路径 /api/pipelines/runs/segments +
 // body run_id，PL-3 先例）。
-var PR={mode:'',pipeId:'',def:null,runId:'',jobId:'',timer:null,t0:0,steps:[],status:'',error:'',artifacts:[],segs:null,ranges:null,edits:{},editIdx:-1,rngDel:{},rngAdd:{},pipes:[],miss:0,hasSegs:false};
+var PR={mode:'',pipeId:'',def:null,runId:'',jobId:'',timer:null,t0:0,steps:[],status:'',error:'',artifacts:[],segs:null,ranges:null,edits:{},editIdx:-1,rngDel:{},rngAdd:{},pipes:[],miss:0,hasSegs:false,hasArticle:false,awStatus:'',verdicts:{}};
 // hasSegs 门控（复核 medium-4）：链上存在 segments 型输出端口才挂载转写编辑面板
 // ——判定数据全部来自 manifest（def.nodes 联表 / runs 读面 plugins 输出表），
 // 「manifest 即 UI」同纪律；无 segments 的链（如 csv 导出）跑完不再被套上转写面板。
@@ -4487,6 +4487,14 @@ return (nodes||[]).some(function(n){
 var o=((n&&n.plugin)||{}).outputs||{};
 return Object.keys(o).some(function(k){return o[k]&&o[k].type==='segments';});
 });
+}
+// 读面回落（GET runs → PR）：verdicts 归并 + 成稿端口是否存在（AI-1 批）。
+// hasArticle 双源判定：链上 manifest 输出类型（「manifest 即 UI」同纪律）或
+// 读面 ai_verdicts 有 article 端口——节点被卸载时 manifest 表可能缺项，读面兜底。
+function prApplyVerdicts(d,nodes){
+PR.verdicts=(d&&d.ai_verdicts)||{};
+PR.awStatus=prVerdict(PR.verdicts,'article');
+PR.hasArticle=prChainHasArticle(nodes)||PR.awStatus!=='';
 }
 // 纯函数段（pgFmt..pgApplyRanges）不触 DOM——tests/test_plugins_ui.py node 直跑
 function pgFmt(sec){
@@ -4520,6 +4528,61 @@ return edits[i]==null?s:Object.assign({},s,{text:edits[i],edited:true});
 function pgApplyRanges(ranges,del,add){
 return (ranges||[]).filter(function(r,i){return !del[i];}).concat(add||[]);
 }
+// ④ AI 产物裁决态徽章（AI-1 批 2026-11-21，正典=AI 产物裁决机制设计 §4.1）。
+// draft=「AI 建议」琥珀（**提醒不是警告**：产物可用，只是未经人确认）/ adopted=
+// 无徽章 / discarded=「已弃用」灰。纯字符串函数（不触 DOM，node 直测）。
+// 注意 draft 走 .badge.warn（琥珀）而非 .badge.failed——draft 从不代表出错。
+function prStBadge(st,draftText){
+if(st==='draft')return '<span class="badge warn" title="AI 建议：可用但未经人工确认——可采纳为正式结果，或弃用">'+esc(draftText||'AI 建议')+'</span>';
+if(st==='discarded')return '<span class="badge archived" title="已弃用：人工否定，下游跳过">已弃用</span>';
+return '';
+}
+// ranges 标题徽章：「AI 建议 N 段」——N 只数显式 draft 态（无 status 的旧稿不计，
+// 不把「未知」冒充「建议」）；全非 draft 且有态 → 「已全部裁决」。
+function prRangeTitleBadge(ranges){
+var n=0,any=false;
+(ranges||[]).forEach(function(r){
+if(!r||!r.status)return;
+any=true;
+if(r.status==='draft')n++;
+});
+if(!any)return '';
+return n>0?'<span class="badge warn">AI 建议 '+n+' 段</span>':'<span class="badge pass">已全部裁决</span>';
+}
+// 单条裁决入口（每条旁 ✓/✗）：已终态不出重复入口（adopted 不再出「采纳」）；
+// 无 status 的老稿整组不出口（不知道态就无从裁决）。
+function prRngOps(r,i){
+var st=r&&r.status,ops='';
+if(!st)return '';
+if(st!=='adopted')ops+='<button class="btn btn-sm" data-rngadopt="'+i+'" title="采纳为正式结果">采纳</button>';
+if(st!=='discarded')ops+='<button class="btn btn-sm" data-rngdiscard="'+i+'" title="弃用（下游跳过）">弃用</button>';
+return ops;
+}
+// 成稿裁决入口（单产物整稿）：同上不出重复入口；无状态不出入口。
+function prAwOps(aw){
+var st=aw&&aw.status;
+if(!st)return '';
+return (st==='adopted'?'':'<button class="btn btn-sm" data-awadopt title="采纳为正式稿">采纳</button>')+
+(st==='discarded'?'':'<button class="btn btn-sm" data-awdiscard title="弃用（下游跳过）">弃用</button>');
+}
+// 读面聚合（GET runs 的 ai_verdicts={节点id:{端口:态}} → 按端口归并成单值）：
+// 全同 → 该态；有分歧 → mixed；无任何节点报该端口 → 空串（不渲染徽章——
+// 老 run 的零回归路径）。纯函数，node 直测。
+function prVerdict(verdicts,port){
+var st='';
+Object.keys(verdicts||{}).forEach(function(n){
+var p=(verdicts[n]||{})[port];
+if(p==null)return;
+st=st&&st!==p?'mixed':p;
+});
+return st;
+}
+function prChainHasArticle(nodes){
+return (nodes||[]).some(function(n){
+var o=((n&&n.plugin)||{}).outputs||{};
+return Object.keys(o).some(function(k){return o[k]&&o[k].type==='article';});
+});
+}
 function prKindIcon(kind){return kind==='source'?'download':kind==='sink'?'publish':'settings';}
 function p2k(n){n=String(n);return n.length<2?'0'+n:n;}
 function prStop(){if(PR.timer){clearInterval(PR.timer);PR.timer=null;}}
@@ -4527,6 +4590,7 @@ function prReset(){
 prStop();
 PR.runId='';PR.jobId='';PR.steps=[];PR.status='';PR.error='';PR.artifacts=[];
 PR.segs=null;PR.ranges=null;PR.edits={};PR.editIdx=-1;PR.rngDel={};PR.rngAdd={};PR.hasSegs=false;
+PR.hasArticle=false;PR.awStatus='';PR.verdicts={};
 $('pr-segs-wrap').hidden=true;$('pr-segs-wrap').innerHTML='';
 prPaint();
 }
@@ -4540,6 +4604,7 @@ async function prLoadPipe(id){
 try{
 PR.def=await getJSON(`/api/pipelines/${encodeURIComponent(id)}`);
 PR.hasSegs=prChainHasSegs(PR.def&&PR.def.nodes);
+PR.hasArticle=prChainHasArticle(PR.def&&PR.def.nodes);
 }catch(err){PR.def=null;toast('读取流水线失败：'+err.message,ER);}
 }
 async function prRun(){
@@ -4547,6 +4612,7 @@ if(!PR.def||!PR.def.nodes||!PR.def.nodes.length){toast('流水线无节点可运
 var btn=$('pr-run-btn');
 btn.disabled=true;
 PR.segs=null;PR.ranges=null;PR.edits={};PR.rngDel={};PR.rngAdd={};PR.editIdx=-1;
+PR.hasArticle=false;PR.awStatus='';PR.verdicts={};
 $('pr-segs-wrap').hidden=true;$('pr-segs-wrap').innerHTML='';
 try{
 var d=await postJSON('/api/pipelines/run',{id:PR.pipeId,confirm:true});
@@ -4566,6 +4632,7 @@ if(!d)return;
 PR.status=d.status||'running';
 if(d.steps)PR.steps=d.steps;
 if(d.artifacts)PR.artifacts=d.artifacts;
+prApplyVerdicts(d,(d.plugins||[]).map(function(p){return {plugin:{outputs:(p.outputs||{})}};}).concat((PR.def&&PR.def.nodes)||[]));
 PR.error=d.error||'';
 PR.steps.forEach(function(s){if(s.t==null&&PR.t0)s.t=(Date.now()-PR.t0)/1000;});
 prPaint();
@@ -4594,7 +4661,9 @@ async function prRestore(){
 var d=await prFetchRun();
 if(d){
 PR.status=d.status||'';PR.steps=d.steps||[];PR.artifacts=d.artifacts||[];PR.error=d.error||'';
-PR.hasSegs=prChainHasSegs((d.plugins||[]).map(function(p){return {plugin:{outputs:(p.outputs||{})}};}));
+var pl=(d.plugins||[]).map(function(p){return {plugin:{outputs:(p.outputs||{})}};});
+PR.hasSegs=prChainHasSegs(pl);
+prApplyVerdicts(d,pl);
 prPaint();
 if(PR.status==='done'&&PR.hasSegs)prLoadSegs();
 else if(['running','queued'].indexOf(PR.status)>=0)prPoll();
@@ -4646,13 +4715,20 @@ var arts=(PR.artifacts||[]).map(function(a){
 var p=typeof a==='string'?a:(a.path||a.name||'');
 return '<span class="badge pass" title="'+esc(p)+'">'+esc(String(p).split('/').pop()||p)+'</span>';
 }).join(' ')||'<span class="action-hint">无登记产物</span>';
+// ④ 成稿状态徽章（AI-1 批）：链上有 article 型输出才出现——标题旁「AI 建议稿」
+// 琥珀（draft 可用但未经人确认，不是错误）、「已弃用」灰；adopted 按规范无徽章。
+// 裁决入口与 ranges 同语义（采纳/弃用各自不出重复入口）。
+var aw='';
+if(PR.hasArticle){
+aw='<div class="pr-lines"><div class="pr-line"><span class="pr-ts">成稿</span><span class="pr-tx">'+prStBadge(PR.awStatus,'AI 建议稿')+'</span><span class="pr-seg-ops">'+prAwOps({status:PR.awStatus})+'</span></div></div>';
+}
 var lines='';
 if(PR.segs&&PR.segs.length){
 lines='<div class="pr-lines">'+PR.segs.slice(0,4).map(function(s){
 return '<div class="pr-line"><span class="pr-ts">'+pgFmt(s.start)+'</span><span class="pr-tx">'+esc(s.text)+'</span></div>';
 }).join('')+'</div><p class="action-hint">时间戳锚可回跳原处；逐段核对与编辑见下方「转写逐段编辑」。</p>';
 }
-return '<div class="pr-out">'+arts+lines+'</div>';
+return '<div class="pr-out">'+arts+aw+lines+'</div>';
 }
 function prPaint(){
 var pick=PR.mode==='pick';
@@ -4706,7 +4782,9 @@ if(PR.ranges==null)return '';
 if(!PR.ranges.length&&!Object.keys(PR.rngAdd).length)return '<p class="action-hint">无切片 ranges（切片节点跑完后出现；也可在下表从 segments 勾选加入）。</p>';
 var rows=PR.ranges.map(function(r,i){
 if(PR.rngDel[i])return '';
-return '<div class="pr-rng"><span class="pr-seg-ts">'+pgFmtPair(r.start,r.end)+'</span><button class="btn btn-sm" data-delrng="'+i+'" title="从 ranges 移除（落 ranges.edited）">×</button></div>';
+// ④ 裁决态（AI-1 批）：每条旁徽章 + 采纳/弃用入口。无 status 的老稿不出徽章
+// 也不出入口（不知道态就无从裁决——裁决端点自会按产物现状盖态）。
+return '<div class="pr-rng"><span class="pr-seg-ts">'+pgFmtPair(r.start,r.end)+'</span>'+(r.label?'<span class="pr-tx">'+esc(r.label)+'</span>':'')+prStBadge(r.status)+'<span class="pr-seg-ops">'+prRngOps(r,i)+'</span><button class="btn btn-sm" data-delrng="'+i+'" title="从 ranges 移除（落 ranges.edited）">×</button></div>';
 }).join('');
 var adds=Object.keys(PR.rngAdd).map(function(k){var a=PR.rngAdd[k];return '<div class="pr-rng is-add"><span class="pr-seg-ts">'+pgFmtPair(a.start,a.end)+'</span><span class="badge pass">新增</span></div>';}).join('');
 return '<div class="pr-rngs">'+rows+adds+'</div>';
@@ -4717,9 +4795,26 @@ var dup=pgDupSet(PR.segs),cap=200,n=Object.keys(PR.edits).length;
 var rows=PR.segs.slice(0,cap).map(function(s,i){return prSegRow(s,i,dup);}).join('');
 var note=PR.segs.length>cap?'<p class="action-hint">仅显示前 '+cap+' 段（共 '+PR.segs.length+' 段）。</p>':'';
 $('pr-segs-wrap').hidden=false;
-$('pr-segs-wrap').innerHTML='<div class="card pr-panel"><div class="pr-phead"><h3 class="pr-ptitle">切片 ranges</h3><span class="badge queued">可增删</span></div><div class="pr-pbody">'+prRangesHtml()+'</div></div>'+
+$('pr-segs-wrap').innerHTML='<div class="card pr-panel"><div class="pr-phead"><h3 class="pr-ptitle">切片 ranges</h3>'+prRangeTitleBadge(PR.ranges)+'<span class="badge queued">可增删</span></div><div class="pr-pbody">'+prRangesHtml()+'</div></div>'+
 '<div class="card pr-panel"><div class="pr-phead"><h3 class="pr-ptitle">转写逐段编辑</h3><span class="badge '+(n?'pass':'queued')+'">'+(n?'已改 '+n+' 段':'未修改')+'</span><button class="btn btn-sm btn-primary" data-segsave>保存编辑</button></div><div class="pr-pbody pr-segs">'+rows+note+'</div></div>'+
 '<p class="action-hint">编辑落 edited 副本（原始转写不覆盖）；低置信标记段建议先 [▶] 听原声核对再改。</p>';
+}
+// ⑤ 裁决动作（AI-1 批契约 §3.19）：adopt/discard 两端点同形——POST 后重拉
+// runs 读面（ai_verdicts 与 ranges 的 status 都是同一份生效文档的回读，避免
+// 前端自算态与后端分叉）。indices 缺省=全集；step 取 ks 或 aw。
+async function prAdjudicate(action,step,indices){
+if(!PR.runId)return;
+var body={step:step,confirm:true};
+if(indices!=null)body.indices=indices;
+try{
+var d=await postJSON(`/api/pipelines/runs/${encodeURIComponent(PR.runId)}/${action}`,body);
+toast((action==='adopt'?'已采纳':'已弃用')+'（'+(d.changed||0)+'/'+(d.total||0)+' 项）',OK);
+if(PR.hasSegs)await prLoadSegs(true);
+var rd=await prFetchRun();
+if(rd)prApplyVerdicts(rd,(rd.plugins||[]).map(function(p){return {plugin:{outputs:(p.outputs||{})}};}).concat((PR.def&&PR.def.nodes)||[]));
+if(PR.hasArticle||step==='aw')prPaint();
+else prPaintSegs();
+}catch(err){toast((action==='adopt'?'采纳':'弃用')+'失败：'+err.message,WN);}
 }
 async function prSaveSegs(){
 if(PR.segs==null)return;
@@ -4746,6 +4841,7 @@ PR.editIdx=-1;
 // 视图入口清转写编辑态（冒烟2 发现）：上一条链的 segments 面板/编辑副本
 // 不得残留进本入口——门控（hasSegs）只决定「是否重新挂载」，不负责清旧 DOM。
 PR.segs=null;PR.ranges=null;PR.edits={};PR.rngDel={};PR.rngAdd={};
+PR.hasArticle=false;PR.awStatus='';PR.verdicts={};
 $('pr-segs-wrap').hidden=true;$('pr-segs-wrap').innerHTML='';
 var run=params.get('run'),id=params.get('id');
 if(run){
@@ -4774,6 +4870,12 @@ if(b)location.hash='#plugin-pipeline?id='+encodeURIComponent(b.getAttribute('dat
 $('pr-run-btn').addEventListener('click',prRun);
 $('pr-reset-btn').addEventListener('click',prReset);
 $('pr-back-btn').addEventListener('click',function(){location.hash='#plugins';});
+// ④ 产出物区成稿裁决入口（AI-1 批）：#pr-out 此前只读渲染，本批起承接
+// 采纳/弃用两动作（事件委托与 #pr-segs-wrap 同款，DOM 零新增——壳余量 73B）。
+$('pr-out').addEventListener('click',function(e){
+if(e.target.closest('[data-awadopt]'))prAdjudicate('adopt','aw',null);
+else if(e.target.closest('[data-awdiscard]'))prAdjudicate('discard','aw',null);
+});
 $('pr-segs-wrap').addEventListener('click',function(e){
 var t;
 if((t=e.target.closest('[data-playseg]')))prPlay(+t.getAttribute('data-playseg'));
@@ -4790,6 +4892,8 @@ if(s&&!PR.rngAdd[j])PR.rngAdd[j]={start:s.start,end:s.end};
 prPaintSegs();
 }
 else if((t=e.target.closest('[data-delrng]'))){PR.rngDel[+t.getAttribute('data-delrng')]=1;prPaintSegs();}
+else if((t=e.target.closest('[data-rngadopt]')))prAdjudicate('adopt','ks',[+t.getAttribute('data-rngadopt')]);
+else if((t=e.target.closest('[data-rngdiscard]')))prAdjudicate('discard','ks',[+t.getAttribute('data-rngdiscard')]);
 else if(e.target.closest('[data-segsave]'))prSaveSegs();
 });
 $('pr-segs-wrap').addEventListener('keydown',function(e){

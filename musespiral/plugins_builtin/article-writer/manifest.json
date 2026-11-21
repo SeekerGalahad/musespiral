@@ -27,6 +27,11 @@
       "type": "string",
       "default": "chronological",
       "description": "chronological=按视频时间顺序组织（叙事流）；thematic=AI 按主题重组（概念跨时间合并，一段多锚）——AI 不可用时自动降级 chronological 模板拼装"
+    },
+    "auto_adopt": {
+      "type": "boolean",
+      "default": false,
+      "description": "成稿裁决态：false（默认）=article.status='draft' 且 outputs.article_status='draft'（AI 建议稿待人工裁决，UI 标「AI 建议」徽章，不禁用下游）；true=直接 adopted（旧行为，信任 AI 全自动）"
     }
   }
 }

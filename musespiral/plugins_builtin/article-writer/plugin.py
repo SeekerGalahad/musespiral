@@ -28,6 +28,13 @@ tie 取更早；AI 自造数值像 key-segment 的 snap 一样被拉回），降
 缓存）；未配置/失败 → 模板化拼装（按 ranges 顺序引原文+插图），绝不因
 AI 不可用卡死流水线。红线（正典 §7.3）：只走 chat_policed 治理层。
 
+**三态裁决（AI 产物裁决机制正典 2026-11-21，AI-1 批）**：成稿默认
+``draft``——**AI 建议稿不是正式结果**，可用但 UI 须标「AI 建议」徽章，待
+人工采纳/弃用（流水线不因未裁决卡死）；``config.auto_adopt=true`` 直接
+``adopted``（旧行为，信任 AI 全自动）。``outputs.article_status`` 同步携带
+该态（下游免解包 article 即可判），``article.status`` 字段级承载（契约裁决
+A：status 是元数据不是类型差异，不新增包裹类型）。
+
 产物受管（沿 frame-grab 先例）：md 落 ``ctx.artifacts_dir/<slug>.md``、
 帧图复制进 ``ctx.artifacts_dir/images/``（正文以相对路径引用——产物目录
 自包含可搬移），frontmatter 带 source_video/video_duration/anchor_map/
@@ -54,6 +61,11 @@ TASK = "plugin_article_writer"
 
 _MODES = ("chronological", "thematic")
 _DEFAULT_MODE = "chronological"
+_DEFAULT_AUTO_ADOPT = False
+
+# 三态裁决取值（全系统统一，正典 §二；本插件只产前两态，discarded 由裁决端点写）
+_STATUS_DRAFT = "draft"
+_STATUS_ADOPTED = "adopted"
 
 # AI 路径参数（生成类：温度略高于切片的稳态 0.2，恒不缓存 §八-3）
 _AI_TEMPERATURE = 0.4
@@ -488,6 +500,10 @@ def run(inputs: dict, config: dict, ctx: Any) -> dict:
     mode = str(config.get("mode") or _DEFAULT_MODE).strip().lower()
     if mode not in _MODES:
         raise PluginError(f"config.mode 非法: {mode!r}（可选 {' / '.join(_MODES)}）")
+    # 三态裁决开关：引擎 _merge_config 只填 default 不深校验——布尔性插件自验
+    auto_adopt = config.get("auto_adopt", _DEFAULT_AUTO_ADOPT)
+    if not isinstance(auto_adopt, bool):
+        raise PluginError(f"config.auto_adopt 须为布尔: {auto_adopt!r}")
 
     actual_mode = mode
     paragraphs: list[dict[str, Any]]
@@ -562,6 +578,13 @@ def run(inputs: dict, config: dict, ctx: Any) -> dict:
         f"article-writer: 稿件落盘 {out_path.name}（{len(paragraphs)} 段 / "
         f"{total_anchors} 锚 / mode={actual_mode}）"
     )
+    # 三态裁决（AI-1 批）：成稿默认是「建议」不是「正式结果」——draft 不禁用
+    # 下游（流水线不卡），状态在场，用户想审查时随手可裁决。
+    status = _STATUS_ADOPTED if auto_adopt else _STATUS_DRAFT
+    if status == _STATUS_DRAFT:
+        ctx.log("article-writer: AI 建议成稿（draft 态，待人工裁决）")
+    else:
+        ctx.log("article-writer: 成稿直接 adopted（auto_adopt=true）")
     ctx.progress(1, 1)
     article = {
         **fields,
@@ -570,8 +593,12 @@ def run(inputs: dict, config: dict, ctx: Any) -> dict:
         "anchor_map": anchor_map,
         "paragraphs": len(paragraphs),
         "anchors": total_anchors,
+        "status": status,
     }
-    return {"article": article, "anchor_map": anchor_map}
+    # article_status：顶层直判面（下游免解包 article）；manifest.outputs 不
+    # 新增端口——status 是元数据不是类型差异（契约裁决 A），引擎对额外输出
+    # 键自然放行（req 13），不爆炸契约矩阵。
+    return {"article": article, "anchor_map": anchor_map, "article_status": status}
 
 
 __all__ = ["TASK", "run"]

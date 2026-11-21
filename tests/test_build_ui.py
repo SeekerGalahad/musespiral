@@ -139,6 +139,16 @@ FIRST_SCREEN_MAX_BYTES = 240 * 1024   # 245,760B：行业 size-limit 洞察=pars
 # 为有效值（原「待追认」标记就此销案）；「抬锚终止条款」由三档语义取代——
 # 这是最后一次数字调整，黄档（444,000~480,000B）不阻塞但须下批归因，
 # 红档（>480,000B）仍硬失败。
+# **批 AI-1 三态裁决前端（2026-11-21，黄档首次进入——归因）**：N-2 后基线
+# 443,744B → 实测 **447,540B（+3,796B）**：
+#   plugin-run.js 16,871→20,667B 为唯一增量源（core.js/core.css 零字节变动，
+#   构建双跑逐字节一致）：新增 prStBadge/prRangeTitleBadge/prRngOps/prAwOps/
+#   prVerdict/prChainHasArticle/prApplyVerdicts 七个纯函数（node 直测）+
+#   prAdjudicate（adopt/discard 两端点调用）+ ranges 每条徽章与采纳/弃用入口 +
+#   产物区成稿徽章与事件委托。
+# 壳**零增量**（49,124B 原样——徽章全走纯 JS 动态渲染，HTML/壳零新增；
+# 距 48KiB 硬锚余 28B 不变）。首屏 60.2%（148,010/245,760B）未承压：增量全在
+# 懒加载视图，不入首屏。故本批同时不触 core.js 160KiB 与首屏 240KiB 两硬门。
 
 # M1 双锚（防回涨锚；构建双跑一致后的 wc -c 值，手写口径）：壳 42,284B /
 # 手写 assets 总量 314,779B（core.js 204,442 + core.css 60,419 + editor.js
@@ -529,12 +539,15 @@ def test_assets_total_tier_semantics() -> None:
     import warnings as _w
 
     base = _assets_total_bytes()
-    assert base <= ASSETS_TOTAL_GREEN_MAX, f"基线本身已越绿档: {base}B"
+    assert base <= ASSETS_TOTAL_YELLOW_MAX, f"基线本身已越红档: {base}B"
     probe = STUDIO / "assets" / "views" / "zz-tier-probe.js"
     probe.parent.mkdir(parents=True, exist_ok=True)
     try:
-        # 黄档：推过绿上限（当前基线距绿档 <604B，1KB 探针必入黄带）
-        probe.write_bytes(b"/* tier probe */" * 64)  # 1,024B
+        # 黄档：基线在绿档 → 探针只补到刚过绿上限（1KB 另留余量）；基线已在
+        # 黄档（AI-1 批后 447,539B 即此态）→ 探针写满 1KB 不改变档位。两分支
+        # 都保留——回绿后本测试仍要能真的把总量推进黄带，不致空转。
+        pad = max(1024, ASSETS_TOTAL_GREEN_MAX + 1 - base)
+        probe.write_bytes(b"/* tier probe */" * (pad // 16 + 1))
         in_yellow = ASSETS_TOTAL_GREEN_MAX < _assets_total_bytes() <= ASSETS_TOTAL_YELLOW_MAX
         assert in_yellow, "探针未落入黄带——先核对基线与档位常量再重估本测试"
         with _w.catch_warnings(record=True) as caught:

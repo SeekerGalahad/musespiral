@@ -235,6 +235,7 @@ def test_builtin_template_change_invalidates_cache_key(ai_on):
 def test_api_contract_shape_and_confirm_gate(server, ai_on, monkeypatch):
     """锁面相等 + confirm 闸门 + 400/200 分档 + 响应键集。"""
     from musespiral.studio.actions import _ACTION_ROUTES
+    from musespiral.studio.plugin_actions import POST_DYNAMIC_SURFACE
     from musespiral.studio.server import _BINARY_POST_ROUTES
 
     from tests.test_architecture import CONTRACT_POST_EXACT
@@ -244,7 +245,9 @@ def test_api_contract_shape_and_confirm_gate(server, ai_on, monkeypatch):
 
     assert "/api/editor/ai-action" in _ACTION_ROUTES
     assert "/api/editor/ai-action" in CONTRACT_POST_EXACT
-    assert (set(_ACTION_ROUTES) | set(_BINARY_POST_ROUTES)) == CONTRACT_POST_EXACT
+    assert (
+        set(_ACTION_ROUTES) | set(_BINARY_POST_ROUTES) | set(POST_DYNAMIC_SURFACE)
+    ) == CONTRACT_POST_EXACT  # AI-1 批起 POST 面含动态段占位（runs/<run_id>/adopt|discard）
 
     # confirm 闸门（缺省 → 400，文案同全局）
     code, err = _request(server, "POST", "/api/editor/ai-action",

@@ -27,6 +27,13 @@ API 契约 §3.19）。
   GET  /api/pipelines/runs/<run_id>/audio?start=&end= → 裁段音频 wav 字节流
                                         （E-4；从源媒体现场裁——音轨 tmpdir
                                         运行后已清理）
+  POST /api/pipelines/runs/<run_id>/adopt|discard → 三态裁决（AI-1 批
+                                        2026-11-21，契约 §3.19 修订 3；body
+                                        {step:'ks'|'aw', indices?}——动态段
+                                        POST 本批为 URL 形（run_id 在段内，
+                                        server._handle 裁决分流先于 GET 面
+                                        判定），把 run 的 draft 产物转
+                                        adopted/discarded；regenerate 归 AI-3）
 
 存储：~/.musespiral/pipelines/<id>.json（设计 §六）；运行真相=~/.musespiral/pipeline_runs/
 <run_id>/meta.json（引擎终态写全——steps/artifacts/failed_at）。
@@ -142,6 +149,9 @@ def _pipeline_run_payload(ctx: _StudioContext, run_id: str) -> dict[str, Any]:
     - 终态 steps/artifacts 由引擎终态写入（psp._write_meta 终态写全）；
     - plugins=[{id, outputs}] 输出端口类型表：前端据「链上是否有 segments 型
       输出」门控转写编辑面板（复核 medium-4——不装在任何链上）；
+    - ai_verdicts={node_id: {port: status}}：AI 端口裁决态（AI-1 批）——前端
+      产物区徽章唯一数据源（draft→「AI 建议」琥珀 / adopted→无 / discarded→
+      「已弃用」灰）；老 run 无 status 字段时该端口键缺席（前端不渲染）；
     - failed 时附可读 error（失败节点+原因），前端 toast 消费。
     """
     if not psp._RUN_ID_RE.match(run_id or ""):
@@ -174,6 +184,10 @@ def _pipeline_run_payload(ctx: _StudioContext, run_id: str) -> dict[str, Any]:
         "steps": steps,
         "artifacts": meta.get("artifacts") or [],
         "plugins": plugins_out,
+        # AI 端口裁决态读面（AI-1 批 2026-11-21）：{节点id: {端口: 态}}——前端
+        # 徽章唯一数据源。只放标量态零正文；老 run（无 status 字段）该端口
+        # 键不存在 → 前端不渲染徽章（零回归）。
+        "ai_verdicts": _ai_verdicts(psp.pipeline_runs_root() / run_id),
         **({"error": error} if error else {}),
     }
 
@@ -216,15 +230,69 @@ def _node_output_docs(run_dir: Path) -> list[tuple[Path, dict[str, Any]]]:
 
 
 def _find_output_node(
-    run_dir: Path, key: str
-) -> tuple[Path, list[dict[str, Any]]] | None:
-    """workspace 里 inline 含列表键 <key> 的第一个节点（目录名序稳定）——
-    即该端口的产出节点（编辑版文件的落盘位置）。"""
+    run_dir: Path, key: str, *, expect: type = list
+) -> tuple[Path, Any] | None:
+    """workspace 里 inline 含 <key>（值型如 expect，默认列表）的第一个节点
+    （目录名序稳定）——即该端口的产出节点（编辑版文件的落盘位置）。
+    expect=dict 供 article-writer 的单产物 article 端口（裁决端点用）。"""
     for node_dir, doc in _node_output_docs(run_dir):
         value = (doc.get("inline") or {}).get(key)
-        if isinstance(value, list):
+        if isinstance(value, expect):
             return node_dir, value
     return None
+
+
+# AI 端口合法裁决态（与 key-segment/article-writer/material-sink 同枚举；
+# material-sink 侧另有自己的副本 _AI_STATUSES——插件是独立可安装单元）
+_AI_STATUS_VALUES = ("draft", "adopted", "discarded")
+
+
+def _group_ranges_status(items: list[Any]) -> str | None:
+    """ranges 整组裁决态：全部同态 → 该态；存在异态/缺态/非对象项 → "mixed"；
+    一项态都没有（旧稿）→ None（调用方不进映射）。"""
+    if not items:
+        return None
+    seen: set[str] = set()
+    for item in items:
+        st = item.get("status") if isinstance(item, dict) else None
+        seen.add(st if isinstance(st, str) else "")  # 缺态统一记空串（≠ 任何合法态）
+    if seen == {""}:
+        return None
+    return seen.pop() if len(seen) == 1 else "mixed"
+
+
+def _ai_verdicts(run_dir: Path) -> dict[str, dict[str, str]]:
+    """{node_id: {port: status}}——AI 端口裁决态读面（AI-1 批 2026-11-21）。
+
+    形状 `{节点id: {端口名: 状态字符串}}`，**只放标量态**（draft/adopted/
+    discarded；ranges 另有整组态 "mixed"）——零正文，与「计数无正文」纪律
+    一致（正典=AI 产物裁决机制设计 §二）。端口口径：
+      - ``article``：``inline.article.status``（article-writer 单产物）；
+      - ``ranges``：整组态（全同→该态 / 异态或缺态→"mixed"），**编辑版优先**
+        （ranges.edited.json 在场读编辑版——与 GET segments 读面同源，裁决
+        端点写的就是这份生效文档；只读 outputs.json 会把已裁决的 run 读回
+        draft）。
+    缺节点目录/缺 outputs.json/缺 status 字段（本批前的老 run）→ 该端口
+    不进映射（不是填 null——前端据「键不存在」判「无状态可显示」，零回归）。
+    """
+    out: dict[str, dict[str, str]] = {}
+    for node_dir, doc in _node_output_docs(run_dir):
+        inline = doc.get("inline") or {}
+        ports: dict[str, str] = {}
+        article = inline.get("article")
+        if isinstance(article, dict):
+            status = article.get("status")
+            if status in _AI_STATUS_VALUES:
+                ports["article"] = status
+        ranges = inline.get("ranges")
+        if isinstance(ranges, list):
+            ranges = _effective_edited(node_dir, "ranges.edited.json", "ranges", ranges)
+            group = _group_ranges_status(ranges)
+            if group is not None:
+                ports["ranges"] = group
+        if ports:
+            out[node_dir.name] = ports
+    return out
 
 
 def _effective_edited(
@@ -401,6 +469,181 @@ def _pipeline_run_audio_response(
         raise _HttpError(500, f"裁段音频生成超时（>{_AUDIO_TIMEOUT_S}s）") from exc
     finally:
         wav_path.unlink(missing_ok=True)
+
+
+# ── 三态裁决端点（AI-1 批 2026-11-21，契约 §3.19 修订 3；正典=AI 产物裁决
+# 机制设计 §二/§三）────────────────────────────────────────────────
+# draft=AI 建议（可用但 UI 标「AI 建议」徽章）/ adopted=人工确认 /
+# discarded=人工否定。本批只落 adopt/discard（regenerate 归 AI-3：接
+# REFINE-ITER 版本链 + feedback，独立一块）。落点=**生效文档**：ranges 有
+# 编辑版（ranges.edited.json，E-4）改编辑版、无编辑版改原始 outputs.json
+# inline——与 GET segments「编辑版优先」读面同源，前端徽章读到的就是裁决
+# 后的态；article 无编辑版面，直改 outputs.json inline（article.status 与
+# 顶层 article_status 直判面同步）。已终态（adopted→adopt 等）幂等零改。
+
+_ADJUDICATE_STATUSES = {"adopt": "adopted", "discard": "discarded"}
+_ADJUDICATE_PATH_RE = re.compile(r"^/api/pipelines/runs/([^/]+)/(adopt|discard)$")
+
+# 动态 POST 面（占位形——契约锁 POST_EXACT 与 API 契约文档对齐用；
+# <run_id> 为运行期段，与 GET_DYNAMIC_PREFIXES 承载动态读面同一思路）
+POST_DYNAMIC_SURFACE = frozenset({
+    "/api/pipelines/runs/<run_id>/adopt",
+    "/api/pipelines/runs/<run_id>/discard",
+})
+
+
+def resolve_adjudicate_post(path: str) -> tuple[str, str] | None:
+    """路径 → (裁决动作名, run_id)；非裁决动作路径返回 None（server 分派用）。"""
+    m = _ADJUDICATE_PATH_RE.match(path)
+    return None if m is None else (m.group(2), m.group(1))
+
+
+def _validate_indices(raw: Any, total: int) -> list[int] | None:
+    """indices 校验：省略 → None（全集）；空数组/非数组/非整数/越界 → 400
+    可读拒绝（裁决点 18：非法参数不静默丢弃）。"""
+    if raw is None:
+        return None
+    if not isinstance(raw, list):
+        raise _HttpError(400, f"indices 须为下标数组或省略（省略=全集）: {raw!r}")
+    if not raw:
+        raise _HttpError(400, "indices 为空数组——至少选一个下标或省略（省略=全集）")
+    for i in raw:
+        if isinstance(i, bool) or not isinstance(i, int):  # bool 是 int 子类，显式排除
+            raise _HttpError(400, f"indices 须为非负整数下标: {i!r}")
+        if i < 0 or i >= total:
+            raise _HttpError(
+                400, f"indices 越界: {i}（产物共 {total} 项，合法下标 0-{total - 1}）"
+            )
+    return sorted(dict.fromkeys(raw))
+
+
+def _append_run_log(run_dir: Path, node_id: str, msg: str) -> None:
+    """裁决动作追加一行 run log（引擎 _log 同形状）——审计面，失败不吞裁决。"""
+    try:
+        with (run_dir / "log.jsonl").open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(
+                {"node": node_id, "msg": msg, "ts": now_iso()}, ensure_ascii=False
+            ) + "\n")
+    except OSError:
+        pass  # 状态已落 outputs.json，日志追加失败不影响裁决结果
+
+
+def _rewrite_inline_output(node_dir: Path, key: str, value: Any) -> None:
+    """把改后的 inline 值写回 outputs.json（refs 与其余端口原样保留）。"""
+    path = node_dir / "outputs.json"
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise _HttpError(500, f"outputs.json 读取失败: {exc}") from None
+    if not isinstance(doc, dict):
+        raise _HttpError(500, "outputs.json 结构损坏（顶层非对象）")
+    inline = doc.get("inline")
+    if not isinstance(inline, dict):
+        inline = doc["inline"] = {}
+    inline[key] = value
+    try:
+        path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    except OSError as exc:
+        raise _HttpError(500, f"outputs.json 写回失败: {exc}") from None
+
+
+def _adjudicate_ranges(run_dir: Path, indices: Any, target: str) -> dict[str, Any]:
+    """ks 切片裁决：生效 ranges（编辑版优先）按 indices（缺省全集）盖 status。"""
+    found = _find_output_node(run_dir, "ranges")
+    if found is None:
+        raise _HttpError(400, f"该运行无 ranges 产物节点（链上需有切片节点）: {run_dir.name}")
+    node_dir, original = found
+    edited_path = node_dir / "ranges.edited.json"
+    dest_list, dest_file = original, ""
+    if edited_path.is_file():
+        try:
+            data = json.loads(edited_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            data = None
+        if isinstance(data, dict):  # 宽容包装形（_effective_edited 同判据）
+            data = data.get("ranges")
+        if isinstance(data, list):  # 编辑版优先
+            dest_list, dest_file = data, "ranges.edited.json"
+    chosen = _validate_indices(indices, len(dest_list))
+    targets = dest_list if chosen is None else [dest_list[i] for i in chosen]
+    for i, item in enumerate(targets):
+        if not isinstance(item, dict):  # 先验全量再落笔——半途失败不留混合态
+            raise _HttpError(400, f"ranges 产物含非对象项（下标 {i}）: {item!r}")
+    changed = sum(1 for item in targets if item.get("status") != target)
+    for item in targets:
+        item["status"] = target
+    if dest_file:
+        try:
+            edited_path.write_text(
+                json.dumps(dest_list, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except OSError as exc:
+            raise _HttpError(500, f"ranges.edited.json 写回失败: {exc}") from None
+    else:
+        _rewrite_inline_output(node_dir, "ranges", original)
+    return {"changed": changed, "total": len(dest_list), "edited": bool(dest_file)}
+
+
+def _adjudicate_article(run_dir: Path, target: str) -> dict[str, Any]:
+    """aw 成稿裁决：单产物（article）整稿盖 status，顶层 article_status 同步。"""
+    found = _find_output_node(run_dir, "article", expect=dict)
+    if found is None:
+        raise _HttpError(400, f"该运行无 article 产物节点（链上需有成稿节点）: {run_dir.name}")
+    node_dir, _ = found
+    path = node_dir / "outputs.json"
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise _HttpError(500, f"outputs.json 读取失败: {exc}") from None
+    inline = doc.get("inline") if isinstance(doc, dict) else None
+    article = inline.get("article") if isinstance(inline, dict) else None
+    if not isinstance(article, dict):
+        raise _HttpError(500, "outputs.json 结构损坏（inline.article 非对象）")
+    changed = 1 if article.get("status") != target else 0
+    article["status"] = target
+    if isinstance(inline.get("article_status"), str):  # 顶层直判面同步（下游免解包判态）
+        inline["article_status"] = target
+    try:
+        path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    except OSError as exc:
+        raise _HttpError(500, f"outputs.json 写回失败: {exc}") from None
+    return {"changed": changed, "total": 1}
+
+
+def run_adjudicate(
+    ctx: _StudioContext, data: dict[str, Any], run_id: str, action: str
+) -> dict[str, Any]:
+    """POST /api/pipelines/runs/<run_id>/adopt|discard：把指定 run 的 draft
+    产物转 adopted/discarded（body: {step: 'ks'|'aw', indices?}；confirm 闸门
+    走 server 通用层）。动态段 POST（server 分派见 _handle 裁决分流），
+    run_id 在 URL 段内——白名单回验在 _run_dir_checked（404 面，防穿越）。"""
+    target = _ADJUDICATE_STATUSES[action]
+    run_dir = _run_dir_checked(run_id)
+    step = data.get("step")
+    if step not in ("ks", "aw"):
+        raise _HttpError(
+            400, f"step 须为 'ks'（key-segment 切片 ranges）或 'aw'（article-writer 成稿）: {step!r}"
+        )
+    if step == "ks":
+        outcome = _adjudicate_ranges(run_dir, data.get("indices"), target)
+        node = "ranges"
+    else:
+        if data.get("indices") is not None:
+            raise _HttpError(400, "step=aw 为单产物（article），不接受 indices（省略即整稿裁决）")
+        outcome = _adjudicate_article(run_dir, target)
+        node = "article"
+    _append_run_log(
+        run_dir, node,
+        f"裁决: {node} → {target}（changed={outcome['changed']}/{outcome['total']}）",
+    )
+    return {
+        "ok": True,
+        "run_id": run_dir.name,
+        "step": step,
+        "status": target,
+        "changed": outcome["changed"],
+        "total": outcome["total"],
+    }
 
 
 # ── POST 动作（actions._ACTION_ROUTES 合并面）──────────────────

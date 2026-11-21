@@ -47,7 +47,10 @@ CORE_MAX = 163_840            # 160KiB
 # +11,524B → 实测 443,396B）。正典三档语义在 test_build_ui.py（绿 ≤444,000 /
 # 黄 ≤480,000 软警报 / 红 >480,000）——本文件按绿档上限对齐同值，黄带判定
 # 以 test_build_ui.py::_assert_assets_total_tier 为准。
-TOTAL_MAX = 444_000
+# AI-1 三态裁决前端批（2026-11-21）实测 447,540B 已落黄档（归因见
+# test_build_ui.py 常量注释档）。本文件同按黄档上限对齐——此处若仍卡 444,000
+# 就等于在本文件把已生效的三档机制改回硬门（三档唯一权威仍是 test_build_ui.py）。
+TOTAL_MAX = 480_000
 FIRST_SCREEN_MAX = 245_760    # 240KiB
 
 
@@ -458,6 +461,128 @@ def test_shell_serves_both_view_sections(server) -> None:
     html = body.decode("utf-8")
     assert 'id="view-plugins"' in html and 'id="view-plugin-run"' in html
     assert 'href="#plugins"' in html and 'href="#plugin-run"' in html
+
+
+# ── c2) AI 产物裁决态徽章（AI-1 批 2026-11-21，④ 前端）──────────────
+# 徽章语义硬约束（正典 §4.1）：draft→「AI 建议」琥珀 / adopted→无徽章 /
+# discarded→「已弃用」灰；**draft 是提醒不是警告**（走 .badge warn 而非
+# .badge failed/error）。纯 JS 动态渲染，壳零新增（壳字节见体积五锚）。
+
+
+def test_status_badges_three_states() -> None:
+    """三态徽章纯函数：draft 琥珀「AI 建议」/ adopted 空串 / discarded 灰
+    「已弃用」；未知/缺省态同样空串（老稿不渲染）。"""
+    out = _run_node(
+        _pure_plugin_run(),
+        "{prStBadge:prStBadge,prRangeTitleBadge:prRangeTitleBadge}",
+        r"""
+console.log(JSON.stringify({
+  draft:prStBadge('draft'),
+  draft_art:prStBadge('draft','AI 建议稿'),
+  adopted:prStBadge('adopted'),
+  discarded:prStBadge('discarded'),
+  none:prStBadge(''),
+  undef:prStBadge(),
+  t_all_draft:prRangeTitleBadge([{status:'draft'},{status:'draft'},{status:'draft'}]),
+  t_all_adopted:prRangeTitleBadge([{status:'adopted'},{status:'adopted'}]),
+  t_mixed:prRangeTitleBadge([{status:'adopted'},{status:'draft'}]),
+  t_legacy:prRangeTitleBadge([{start:0,end:1},{start:1,end:2}]),
+  t_empty:prRangeTitleBadge([])
+}));
+""",
+    )
+    # draft：琥珀 .badge warn + 「AI 建议」——绝不是 failed/error（提醒非警告）
+    assert 'class="badge warn"' in out["draft"] and "AI 建议" in out["draft"]
+    assert "failed" not in out["draft"] and "error" not in out["draft"]
+    assert "AI 建议稿" in out["draft_art"]
+    # adopted：按规范无徽章
+    assert out["adopted"] == ""
+    # discarded：灰 .badge archived + 「已弃用」
+    assert 'class="badge archived"' in out["discarded"] and "已弃用" in out["discarded"]
+    assert out["none"] == "" and out["undef"] == ""
+    # 标题徽章：「AI 建议 N 段」只数显式 draft；全非 draft → 已全部裁决；
+    # 老稿（无 status）与空数组 → 不渲染（不把「未知」冒充「建议」）
+    assert "AI 建议 3 段" in out["t_all_draft"]
+    assert "已全部裁决" in out["t_all_adopted"]
+    assert "AI 建议 1 段" in out["t_mixed"]
+    assert out["t_legacy"] == "" and out["t_empty"] == ""
+
+
+def test_adjudicate_ops_hide_at_terminal_state() -> None:
+    """单条/整稿裁决入口：draft 出「采纳+弃用」；adopted 只出「弃用」；
+    discarded 只出「采纳」；无 status 老稿整组不出入口（无从裁决）。"""
+    out = _run_node(
+        _pure_plugin_run(),
+        "{prRngOps:prRngOps,prAwOps:prAwOps}",
+        r"""
+function n(s){return (s.match(/<button/g)||[]).length;}
+console.log(JSON.stringify({
+  draft:n(prRngOps({status:'draft'},0)),
+  draft_has_adopt:prRngOps({status:'draft'},0).indexOf('data-rngadopt="0"')>=0,
+  draft_has_discard:prRngOps({status:'draft'},0).indexOf('data-rngdiscard="0"')>=0,
+  adopted:n(prRngOps({status:'adopted'},1)),
+  discarded:n(prRngOps({status:'discarded'},2)),
+  legacy:prRngOps({start:0,end:1},3),
+  aw_draft:n(prAwOps({status:'draft'})),
+  aw_adopted:n(prAwOps({status:'adopted'})),
+  aw_discarded:n(prAwOps({status:'discarded'})),
+  aw_legacy:prAwOps({status:''})
+}));
+""",
+    )
+    assert out["draft"] == 2 and out["draft_has_adopt"] and out["draft_has_discard"]
+    assert out["adopted"] == 1      # 不出重复「采纳」
+    assert out["discarded"] == 1    # 不出重复「弃用」
+    assert out["legacy"] == ""      # 老稿无入口
+    assert out["aw_draft"] == 2 and out["aw_adopted"] == 1 and out["aw_discarded"] == 1
+    assert out["aw_legacy"] == ""
+
+
+def test_verdict_aggregation_and_article_gate() -> None:
+    """ai_verdicts 归并：全同→该态 / 有分歧→mixed / 无节点报该端口→空串；
+    成稿门控 prChainHasArticle 读 manifest 输出类型（manifest 即 UI 同纪律）。"""
+    out = _run_node(
+        _pure_plugin_run(),
+        "{prVerdict:prVerdict,prChainHasArticle:prChainHasArticle}",
+        r"""
+var M=function(types){return {plugin:{outputs:types}};};
+console.log(JSON.stringify({
+  one:prVerdict({aw:{article:'draft'}},'article'),
+  two_same:prVerdict({aw:{article:'draft'},aw2:{article:'draft'}},'article'),
+  two_diff:prVerdict({aw:{article:'draft'},aw2:{article:'adopted'}},'article'),
+  missing_port:prVerdict({ks:{ranges:'draft'}},'article'),
+  missing_key:prVerdict({aw:{}},'article'),
+  empty:prVerdict({},'article'),
+  null_v:prVerdict(null,'article'),
+  has_art:prChainHasArticle([M({article:{type:'article'}})]),
+  no_art:prChainHasArticle([M({ranges:{type:'ranges'}}),M({material:{type:'material'}})]),
+  empty_chain:prChainHasArticle([])
+}));
+""",
+    )
+    assert out["one"] == "draft"
+    assert out["two_same"] == "draft"
+    assert out["two_diff"] == "mixed"
+    assert out["missing_port"] == "" and out["missing_key"] == ""
+    assert out["empty"] == "" and out["null_v"] == ""
+    assert out["has_art"] is True and out["no_art"] is False and out["empty_chain"] is False
+
+
+def test_badge_rendering_is_pure_js_shell_zero_added() -> None:
+    """壳零新增（任务书硬要求 20）：徽章全在 plugin-run 视图 JS 里动态生成，
+    HTML 侧无徽章静态标记——壳里既无「AI 建议」也无 data-rngadopt/awadopt。"""
+    shell, rjs = _shell(), _plugin_run()
+    for marker in ("AI 建议", "已弃用", "data-rngadopt", "data-rngdiscard",
+                   "data-awadopt", "data-awdiscard"):
+        assert marker not in shell, f"壳出现徽章静态标记（违反 HTML 零新增）: {marker}"
+    # 徽章函数与两处挂载点都在视图产物内
+    for marker in ("function prStBadge(", "function prRangeTitleBadge(",
+                   "function prRngOps(", "function prAwOps(",
+                   "prRangeTitleBadge(PR.ranges)", "prStBadge(PR.awStatus",
+                   "prAdjudicate('adopt','ks'", "prAdjudicate('discard','aw'"):
+        assert marker in rjs, marker
+    # 裁决端点走动态段 URL（adopt|discard），confirm 闸门随 body
+    assert "prAdjudicate(" in rjs and "{step:step,confirm:true}" in rjs
 
 
 # ── d) 体积五锚（本批实测口径）────────────────────────────

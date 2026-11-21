@@ -51,6 +51,7 @@ from musespiral.infra.ai.profiles import TASKS
 from musespiral.infra.ai.prompts import prompt_tasks
 from musespiral.services import materials_service
 from musespiral.services import pipeline_service_plugins as psp
+from musespiral.studio import plugin_actions  # ai_verdicts 读面（AI-1 批）
 
 BUILTIN_DIR = loader.builtin_plugins_dir()
 _ANCHOR_RE = re.compile(r"\(#t=(\d+)\)")
@@ -431,6 +432,51 @@ def test_article_writer_fractional_start_snap(
     _assert_anchors_traceable(md, out["anchor_map"], segments)
 
 
+# ── e2) 三态裁决（AI-1 批 2026-11-21：auto_adopt 双态 + 建议语义）──
+
+
+def test_article_writer_auto_adopt_defaults_to_draft(
+    aw_mod: ModuleType, tmp_path: Path
+) -> None:
+    """裁决批硬要求 16：缺省 → article.status='draft' 且 outputs.article_status
+    ='draft'（顶层直判面，下游免解包），日志体现「建议」语义。降级路径断言
+    （fixture 钉死 AI 未配置）——状态在 run() 公共尾部加盖，AI/降级同覆盖。"""
+    m = _manifest_of("article-writer")
+    assert m["config_schema"]["auto_adopt"]["type"] == "boolean"
+    assert m["config_schema"]["auto_adopt"]["default"] is False
+    assert "article_status" not in m["outputs"]  # 字段级裁决（契约 A）：不新增输出端口类型
+
+    ctx = _FakeCtx(tmp_path / "ctx")
+    out = aw_mod.run({"transcript": _topic_segments()}, {}, ctx)
+    assert out["article"]["status"] == "draft"
+    assert out["article_status"] == "draft"
+    assert any(
+        "AI 建议" in line and "draft" in line and "待人工裁决" in line
+        for line in ctx.logs
+    )
+
+
+def test_article_writer_auto_adopt_true_adopts(
+    aw_mod: ModuleType, tmp_path: Path
+) -> None:
+    """auto_adopt=true → article.status='adopted'（旧行为，信任 AI 全自动）。"""
+    ctx = _FakeCtx(tmp_path / "ctx")
+    out = aw_mod.run({"transcript": _topic_segments()}, {"auto_adopt": True}, ctx)
+    assert out["article"]["status"] == "adopted"
+    assert out["article_status"] == "adopted"
+    assert any("auto_adopt=true" in line for line in ctx.logs)
+    assert not any("待人工裁决" in line for line in ctx.logs)
+
+
+def test_article_writer_auto_adopt_invalid_rejected(
+    aw_mod: ModuleType, tmp_path: Path
+) -> None:
+    """非布尔 auto_adopt 可读报错（引擎只填 default 不深校验，插件自验布尔）。"""
+    with pytest.raises(PluginError, match="auto_adopt 须为布尔"):
+        aw_mod.run({"transcript": _topic_segments()}, {"auto_adopt": 1},
+                   _FakeCtx(tmp_path / "ctx"))
+
+
 # ── f) material-sink：preview 态 / sub_type / provenance ──────────
 
 
@@ -495,6 +541,37 @@ def test_material_sink_lands_preview_video_article(
     # 分诊查询默认过滤面：enabled=false 不进推荐（preview 语义的结构化表达）
     assert materials_service.query(enabled=True) == []
     assert [m["id"] for m in materials_service.query(enabled=False)] == [mid]
+
+
+def test_material_sink_carries_upstream_ai_status(
+    sink_mod: ModuleType, aw_mod: ModuleType, tmp_path: Path
+) -> None:
+    """裁决批（AI-1 2026-11-21）硬要求 17：上游 article.status=draft →
+    meta.ai_status='draft'（UI「AI 建议」徽章数据源）且 triage.enabled 仍
+    false（preview 红线与裁决态两层不混）；adopted 同步透传；无合法状态
+    （旧稿手造 dict）→ 不写该键，存量读侧零回归。落库瞬间态就此定格
+    （payload immutable），run 侧后续裁决走裁决端点。"""
+    article = _make_article(aw_mod, tmp_path)
+    assert article["status"] == "draft"  # article-writer 缺省即 draft（② 批语义）
+
+    ctx = _FakeCtx(tmp_path / "sink-draft", run_id="pl-ais-draft1")
+    mid = sink_mod.run({"article": article}, {}, ctx)["material"]
+    row = materials_service.get_material(mid)
+    assert row["payload"]["meta"]["ai_status"] == "draft"
+    assert row["triage"]["enabled"] is False
+    assert any("ai_status=draft" in line for line in ctx.logs)
+
+    adopted = {**article, "status": "adopted"}
+    ctx2 = _FakeCtx(tmp_path / "sink-adopted", run_id="pl-ais-adopt1")
+    mid2 = sink_mod.run({"article": adopted}, {}, ctx2)["material"]
+    meta2 = materials_service.get_material(mid2)["payload"]["meta"]
+    assert meta2["ai_status"] == "adopted"
+
+    legacy = {k: v for k, v in article.items() if k != "status"}
+    ctx3 = _FakeCtx(tmp_path / "sink-legacy", run_id="pl-ais-legacy")
+    mid3 = sink_mod.run({"article": legacy}, {}, ctx3)["material"]
+    meta3 = materials_service.get_material(mid3)["payload"]["meta"]
+    assert "ai_status" not in meta3  # 无合法状态不写键（零回归）
 
 
 def test_material_sink_config_triage_enabled_redline(
@@ -819,3 +896,93 @@ def test_engine_six_node_artifacts_survive_run_prune(
     _shutil.rmtree(run_dir)
     assert Path(meta["article_path"]).is_file()
     assert all(Path(img["path"]).is_file() for img in meta["images"])
+
+
+# ── h) ai_verdicts 读面 × 真实引擎链（AI-1 批 2026-11-21，④ 前端数据前提）──
+def test_ai_verdicts_on_real_engine_chain(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """真实引擎跑 auto_adopt 缺省（false）的链 → runs 读面 ai_verdicts 报态，
+    与产物侧 status 一致；adopt 端点翻态后读面同步（读面/写面同源）。
+
+    与 `test_engine_six_node_chain_material_in_library` 同 harness（全 mock），
+    差异只在断言面：本测只看裁决态在两份读面（产物 outputs.json / ai_verdicts）
+    是否一致——不重复六节点链的业务断言。
+    """
+    _mock_media_toolchain(monkeypatch)
+    monkeypatch.setattr(ai_profiles, "ai_configured", lambda task=None: True)
+
+    def fake_chat_policed(messages: list[dict[str, str]], **kwargs: Any) -> dict[str, Any]:
+        if kwargs["task"] == "plugin_key_segment":
+            return {"text": json.dumps([
+                {"start": 0.0, "end": 6.0, "label": "列式存储", "confidence": 0.9},
+                {"start": 14.0, "end": 20.0, "label": "查询路由", "confidence": 0.85},
+            ], ensure_ascii=False)}
+        return {"text": json.dumps([
+            {"heading": "列式存储", "text": "原理：列式存储。", "anchors": [0.0]},
+        ], ensure_ascii=False)}
+
+    monkeypatch.setattr(ai_gateway, "chat_policed", fake_chat_policed)
+    media = tmp_path / "video.mp4"
+    media.write_bytes(b"fake-media")
+    model_dir = tmp_path / "m"
+    model_dir.mkdir()
+    run_id = "pl6-verdict-0001"
+    # run_root 走默认（=MUSESPIRAL_HOME/pipeline_runs，本 fixture 已在沙箱内）——
+    # 裁决写面按 pipeline_runs_root() 定位 run，两面对齐才测得到「读面/写面同源」。
+    result = psp.run_pipeline(
+        [
+            {"id": "src", "plugin": "local-file", "inputs": {"path": str(media)}},
+            {"id": "tr", "plugin": "transcribe", "config": {"model": str(model_dir)}},
+            {"id": "ks", "plugin": "key-segment"},
+            {"id": "fg", "plugin": "frame-grab"},
+            {"id": "aw", "plugin": "article-writer"},
+        ],
+        plugins_root=BUILTIN_DIR,
+        run_id=run_id,
+    )
+    assert result["status"] == "done", result
+    verdicts = plugin_actions._ai_verdicts(Path(result["run_dir"]))
+    assert verdicts["ks"]["ranges"] == "draft"   # auto_adopt 缺省 false
+    assert verdicts["aw"]["article"] == "draft"
+    # 产物侧同一份态（读面无自造态；两面对拍）
+    ks_doc = json.loads(
+        (Path(result["run_dir"]) / "workspace" / "ks" / "outputs.json")
+        .read_text(encoding="utf-8"))["inline"]["ranges"]
+    assert all(r["status"] == "draft" for r in ks_doc)
+
+    # adopt（aw）→ 读面同步
+    plugin_actions.run_adjudicate(None, {"step": "aw"}, run_id, "adopt")
+    verdicts2 = plugin_actions._ai_verdicts(Path(result["run_dir"]))
+    assert verdicts2["aw"]["article"] == "adopted"
+    assert verdicts2["ks"]["ranges"] == "draft"  # 未裁决的端口不受影响
+
+
+def test_ai_verdicts_auto_adopt_true(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """config.auto_adopt=true 的节点 → 读面直接报 adopted（旧行为照常）。"""
+    _mock_media_toolchain(monkeypatch)
+    monkeypatch.setattr(ai_profiles, "ai_configured", lambda task=None: True)
+    monkeypatch.setattr(ai_gateway, "chat_policed",
+                        lambda messages, **kw: {"text": json.dumps(
+                            [{"start": 0.0, "end": 6.0, "label": "甲", "confidence": 0.9},
+                             {"start": 14.0, "end": 20.0, "label": "乙", "confidence": 0.9}],
+                            ensure_ascii=False)})
+    media = tmp_path / "video.mp4"
+    media.write_bytes(b"fake-media")
+    model_dir = tmp_path / "m"
+    model_dir.mkdir()
+    result = psp.run_pipeline(
+        [
+            {"id": "src", "plugin": "local-file", "inputs": {"path": str(media)}},
+            {"id": "tr", "plugin": "transcribe", "config": {"model": str(model_dir)}},
+            {"id": "ks", "plugin": "key-segment", "config": {"auto_adopt": True}},
+        ],
+        plugins_root=BUILTIN_DIR,
+        run_root=tmp_path / "runs",
+        run_id="pl6-verdict-0002",
+    )
+    assert result["status"] == "done", result
+    verdicts = plugin_actions._ai_verdicts(Path(result["run_dir"]))
+    assert verdicts["ks"]["ranges"] == "adopted"

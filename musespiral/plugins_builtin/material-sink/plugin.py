@@ -15,6 +15,14 @@ read/starred/tags，**改不了 enabled**——红线钉死在代码里而非约
 payload.meta 内的语义标注，读侧未命中者天然按普通 text 对待（零回归）。
 license 走 AI-GENERATED + meta.ai_generated=true（G1 既有 AI 产物双保险）。
 
+**三态裁决透传（AI 产物裁决机制正典 2026-11-21，AI-1 批）**：上游
+article-writer 的 ``article.status``（draft=AI 建议稿/adopted=已采纳/
+discarded=已弃用，裁决端点按 run 产物改写）落到 ``meta.ai_status``——
+UI 徽章数据源（draft→「AI 建议」琥珀，其余无徽章/灰）。上游没带合法
+状态（旧稿/手造输入）→ **不写该键**（存量行为零回归）；落库瞬间的
+裁决态就此定格（素材 payload immutable 不改写），run 侧后续裁决走
+裁决端点，素材侧采纳走 triage 面（两层语义不混）。
+
 **血统可溯（评审 §3.3「素材要能追溯来源」）**：``provenance.chain =
 [{from_id: <run_id>, op: "plugin_pipeline"}]``——run_id 经 ctx.run_id
 （引擎按 run 目录注入）取得，from_id 是**虚拟标记非素材 id**（run 目录归
@@ -46,6 +54,10 @@ from musespiral.services import materials_service as _materials
 # 素材归属（source_id 走线 precedent：upload/manual/novel——pipeline 产物独立源）
 SOURCE_ID = "plugin_pipeline"
 SUB_TYPE = "video_article"
+
+# 三态裁决取值（全系统统一，正典 §二；与 key-segment/article-writer 同枚举）。
+# 上游 article.status 命中其一才透传 meta.ai_status；缺省/脏值不写键。
+_AI_STATUSES = ("draft", "adopted", "discarded")
 
 
 def _initial_triage(cfg: Any, ctx: Any) -> dict[str, Any]:
@@ -151,6 +163,23 @@ def run(inputs: dict, config: dict, ctx: Any) -> dict:
     anchor_map = article.get("anchor_map")
     if not isinstance(anchor_map, dict):
         anchor_map = {}
+    # 三态裁决透传（AI-1 批）：上游裁决态定格进素材 meta——draft 徽章「AI
+    # 建议」；非三态取值（旧稿/手造 dict）不写键，存量读侧零回归。
+    ai_status = article.get("status")
+    ai_status = ai_status if ai_status in _AI_STATUSES else None
+
+    meta_block: dict[str, Any] = {
+        "sub_type": SUB_TYPE,
+        "ai_generated": True,
+        "organize_mode": str(article.get("organize_mode") or "chronological"),
+        "source_video": str(article.get("source_video") or ""),
+        "video_duration": duration,
+        "anchor_map": anchor_map,
+        "images": images_meta,  # durable 副本路径（run LRU 剪除后仍可回跳）
+        "article_path": str(durable_md),
+    }
+    if ai_status is not None:
+        meta_block["ai_status"] = ai_status
 
     material = _mat_model.make_material(
         mtype="text",
@@ -160,16 +189,7 @@ def run(inputs: dict, config: dict, ctx: Any) -> dict:
         license="AI-GENERATED",
         payload={
             "text": text,
-            "meta": {
-                "sub_type": SUB_TYPE,
-                "ai_generated": True,
-                "organize_mode": str(article.get("organize_mode") or "chronological"),
-                "source_video": str(article.get("source_video") or ""),
-                "video_duration": duration,
-                "anchor_map": anchor_map,
-                "images": images_meta,  # durable 副本路径（run LRU 剪除后仍可回跳）
-                "article_path": str(durable_md),
-            },
+            "meta": meta_block,
         },
         provenance={
             "chain": [{"from_id": run_id, "op": "plugin_pipeline"}],
@@ -185,7 +205,9 @@ def run(inputs: dict, config: dict, ctx: Any) -> dict:
         raise PluginError(f"素材落库被拒: {exc}") from exc
     ctx.log(
         f"material-sink: 落库 {row['id']}（sub_type={SUB_TYPE}, preview 态 "
-        f"enabled=false, provenance←run {run_id}）"
+        f"enabled=false, provenance←run {run_id}"
+        + (f", ai_status={ai_status}" if ai_status is not None else "")
+        + "）"
     )
     return {"material": row["id"]}
 

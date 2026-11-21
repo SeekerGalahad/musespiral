@@ -13,7 +13,11 @@
   d) 闸门与边界：confirm 闸门 / 404 面 / run_id 与 pid 白名单回验防穿越；
   e) E-4 转写编辑接驳（PL-6 批 2026-11-20，台账 §四「PL-6 = E-3+E-4」）：
      GET segments（编辑版优先）/ POST /api/pipelines/runs/segments（精确
-     路径 + body run_id，落 edited 于产出节点目录）/ GET audio 裁段 wav。
+     路径 + body run_id，落 edited 于产出节点目录）/ GET audio 裁段 wav；
+  f) 三态裁决端点（AI-1 批 2026-11-21，契约 §3.19 修订 3）：POST
+     /api/pipelines/runs/<run_id>/adopt|discard（动态段 POST，run_id 在
+     URL 段内）——ks ranges 全集/子集裁决与幂等、编辑版优先落点、aw
+     article 与 article_status 同步、非法参数/confirm/404 可读拒绝面。
 """
 from __future__ import annotations
 
@@ -417,3 +421,245 @@ def test_audio_clip_end_to_end(server, _isolate_home: Path, tmp_path: Path) -> N
     _make_transcript_run(_isolate_home, "pl-e4-deadref",
                          with_src_ref=str(tmp_path / "moved-away.wav"))
     assert _raw_get("/api/pipelines/runs/pl-e4-deadref/audio?start=0&end=1")[0] == 404
+
+
+# ── f) 三态裁决端点（AI-1 批 2026-11-21，契约 §3.19 修订 3；正典=
+# 《mdpub-AI产物裁决机制设计-2026-11-21》§二/§五）────────────────────
+# POST /api/pipelines/runs/<run_id>/adopt|discard（动态段 POST，run_id 在
+# URL 段内；body {step:'ks'|'aw', indices?}；confirm 闸门走 server 通用层）。
+# 落点=生效文档：ranges 有编辑版改编辑版（E-4 生效面）、无编辑版改原始
+# outputs.json inline；article 直改 inline 且顶层 article_status 同步。
+
+
+def _make_adjudication_run(
+    home: Path, run_id: str = "pl-adj-0001", *,
+    with_ranges: bool = True, with_edited: bool = False, with_article: bool = True,
+) -> Path:
+    """手工造带 ks ranges / aw article（可选 E-4 编辑版）的 run 目录——
+    裁决端点只读写 workspace 与 meta.json，无需真跑引擎。"""
+    run_dir = home / "pipeline_runs" / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    # 最小 transcript 节点（GET segments 读面要求有转写产物才回 ranges）
+    tr = run_dir / "workspace" / "tr"
+    tr.mkdir(parents=True, exist_ok=True)
+    (tr / "outputs.json").write_text(json.dumps({
+        "inline": {"transcript": [{"start": 0.0, "end": 2.0, "text": "第一段"}]},
+        "refs": {}}), encoding="utf-8")
+    if with_ranges:
+        ks = run_dir / "workspace" / "ks"
+        ks.mkdir(parents=True, exist_ok=True)
+        (ks / "outputs.json").write_text(json.dumps({
+            "inline": {"ranges": [
+                {"start": 0.0, "end": 2.0, "label": "开头", "status": "draft"},
+                {"start": 3.0, "end": 5.5, "label": "后段", "status": "draft"},
+            ]}, "refs": {}}), encoding="utf-8")
+        if with_edited:  # E-4 编辑版在场（1 项）→ 裁决落编辑版
+            (ks / "ranges.edited.json").write_text(json.dumps(
+                [{"start": 3.0, "end": 5.5, "label": "后段（改）", "status": "draft"}]),
+                encoding="utf-8")
+    if with_article:
+        aw = run_dir / "workspace" / "aw"
+        aw.mkdir(parents=True, exist_ok=True)
+        (aw / "outputs.json").write_text(json.dumps({
+            "inline": {"article": {"path": "/tmp/a.md", "status": "draft"},
+                       "article_status": "draft", "anchor_map": {"p1": [0.0]}},
+            "refs": {}}), encoding="utf-8")
+    (run_dir / "meta.json").write_text(
+        json.dumps({"status": "done", "steps": [], "plugins": []}), encoding="utf-8")
+    return run_dir
+
+
+def _ks_outputs(home: Path, run_id: str) -> list[dict]:
+    ks = home / "pipeline_runs" / run_id / "workspace" / "ks"
+    return json.loads((ks / "outputs.json").read_text(encoding="utf-8"))["inline"]["ranges"]
+
+
+def test_adjudicate_ks_adopt_all_and_discard_subset(server, _isolate_home: Path) -> None:
+    """裁决批硬要求 18（金路径）：adopt 全集（indices 省略）→ 全部 adopted +
+    run log 留痕；discard 子集只翻选中项；重复裁决幂等 changed=0。"""
+    home = _isolate_home
+    _make_adjudication_run(home, "pl-adj-a1")
+    status, data = _call(server, "POST",
+                         "/api/pipelines/runs/pl-adj-a1/adopt",
+                         {"step": "ks", "confirm": True})
+    assert status == 200
+    assert data == {"ok": True, "run_id": "pl-adj-a1", "step": "ks",
+                    "status": "adopted", "changed": 2, "total": 2}
+    assert all(r["status"] == "adopted" for r in _ks_outputs(home, "pl-adj-a1"))
+    log = (home / "pipeline_runs" / "pl-adj-a1" / "log.jsonl").read_text("utf-8")
+    assert "裁决" in log and "adopted" in log and "ranges" in log
+
+    status, data = _call(server, "POST",
+                         "/api/pipelines/runs/pl-adj-a1/discard",
+                         {"step": "ks", "indices": [1], "confirm": True})
+    assert status == 200 and data["status"] == "discarded" and data["changed"] == 1
+    ranges = _ks_outputs(home, "pl-adj-a1")
+    assert ranges[0]["status"] == "adopted" and ranges[1]["status"] == "discarded"
+
+    _, data = _call(server, "POST", "/api/pipelines/runs/pl-adj-a1/discard",
+                    {"step": "ks", "indices": [1], "confirm": True})
+    assert data["changed"] == 0  # 已 discarded 再 discard → 幂等零改
+
+
+def test_adjudicate_ks_edited_file_preferred(server, _isolate_home: Path) -> None:
+    """E-4 编辑版在场 → 裁决落编辑版（生效文档），原始 outputs.json 保留
+    对照不覆盖；GET segments 读面（编辑版优先）回裁决后的态——徽章数据源
+    与裁决写面同源。"""
+    home = _isolate_home
+    _make_adjudication_run(home, "pl-adj-e1", with_edited=True)
+    status, data = _call(server, "POST", "/api/pipelines/runs/pl-adj-e1/adopt",
+                         {"step": "ks", "confirm": True})
+    assert status == 200 and data["changed"] == 1 and data["total"] == 1  # 编辑版仅 1 项
+    ks = home / "pipeline_runs" / "pl-adj-e1" / "workspace" / "ks"
+    edited = json.loads((ks / "ranges.edited.json").read_text(encoding="utf-8"))
+    assert edited[0]["status"] == "adopted" and edited[0]["label"] == "后段（改）"
+    assert all(r["status"] == "draft" for r in _ks_outputs(home, "pl-adj-e1"))  # 原始对照
+    status, seg = _call(server, "GET", "/api/pipelines/runs/pl-adj-e1/segments")
+    assert status == 200 and seg["ranges"][0]["status"] == "adopted"
+
+
+def test_adjudicate_aw_article_and_status_mirror(server, _isolate_home: Path) -> None:
+    """aw 成稿裁决：单产物整稿翻态，article.status 与顶层 article_status
+    直判面同步（下游免解包判态）。"""
+    home = _isolate_home
+    _make_adjudication_run(home, "pl-adj-w1")
+    status, data = _call(server, "POST", "/api/pipelines/runs/pl-adj-w1/discard",
+                         {"step": "aw", "confirm": True})
+    assert status == 200 and data["status"] == "discarded"
+    assert data["changed"] == 1 and data["total"] == 1
+    doc = json.loads((home / "pipeline_runs" / "pl-adj-w1" / "workspace" / "aw"
+                      / "outputs.json").read_text(encoding="utf-8"))
+    assert doc["inline"]["article"]["status"] == "discarded"
+    assert doc["inline"]["article_status"] == "discarded"
+    status, data = _call(server, "POST", "/api/pipelines/runs/pl-adj-w1/adopt",
+                         {"step": "aw", "confirm": True})
+    assert status == 200 and data["changed"] == 1  # discarded → adopted 可逆
+
+
+def test_adjudicate_rejections(server, _isolate_home: Path) -> None:
+    """裁决批硬要求 18（非法参数可读拒绝）：step 枚举外/缺 step/indices 非数
+    组/空数组/非整数/布尔/负数/越界/aw+indices 全 400 且文案可读；confirm
+    闸门 400；run 不存在与穿越 404；无产物节点 400；GET 该动态路径 404。"""
+    home = _isolate_home
+    _make_adjudication_run(home, "pl-adj-b1")
+    adopt = "/api/pipelines/runs/pl-adj-b1/adopt"
+    discard = "/api/pipelines/runs/pl-adj-b1/discard"
+    cases = [
+        (adopt, {"step": "fg", "confirm": True}),       # step 枚举外
+        (adopt, {"confirm": True}),                      # 缺 step
+        (adopt, {"step": "ks", "indices": "0", "confirm": True}),    # 非数组
+        (adopt, {"step": "ks", "indices": [], "confirm": True}),     # 空数组
+        (adopt, {"step": "ks", "indices": [0, "x"], "confirm": True}),  # 非整数
+        (adopt, {"step": "ks", "indices": [True], "confirm": True}),    # 布尔拒
+        (adopt, {"step": "ks", "indices": [-1], "confirm": True}),      # 负数
+        (adopt, {"step": "ks", "indices": [5], "confirm": True}),       # 越界
+        (discard, {"step": "aw", "indices": [0], "confirm": True}),     # aw 不接受 indices
+    ]
+    for path, body in cases:
+        code, err = _call(server, "POST", path, body)
+        assert code == 400, (path, body, code, err)
+        assert err["ok"] is False and isinstance(err["error"], str) and err["error"]
+    # 落盘未被动过（拒绝路径零副作用）
+    assert all(r["status"] == "draft" for r in _ks_outputs(home, "pl-adj-b1"))
+    # confirm 闸门（全局纪律）
+    assert _call(server, "POST", adopt, {"step": "ks"})[0] == 400
+    assert _call(server, "POST", discard, {"step": "aw"})[0] == 400
+    # 404 面：run 不存在 / 穿越形态（run_id 白名单回验——两段形 ../adopt 进
+    # 裁决分派后 _RUN_ID_RE 拒 → 404 fail-closed；多段形 ..​/evil/adopt 不合
+    # 裁决路径形 → 落 GET 族守卫 405，与 POST 打 GET 动态路径既有语义一致）
+    assert _call(server, "POST", "/api/pipelines/runs/no-such-run/adopt",
+                 {"step": "ks", "confirm": True})[0] == 404
+    assert _call(server, "POST", "/api/pipelines/runs/../adopt",
+                 {"step": "ks", "confirm": True})[0] == 404
+    assert _call(server, "POST", "/api/pipelines/runs/../evil/adopt",
+                 {"step": "ks", "confirm": True})[0] == 405
+    # 无产物节点 → 400 可读（无处裁决）
+    _make_adjudication_run(home, "pl-adj-b2", with_ranges=False, with_article=False)
+    code, err = _call(server, "POST", "/api/pipelines/runs/pl-adj-b2/adopt",
+                      {"step": "ks", "confirm": True})
+    assert code == 400 and "ranges" in err["error"]
+    code, err = _call(server, "POST", "/api/pipelines/runs/pl-adj-b2/discard",
+                      {"step": "aw", "confirm": True})
+    assert code == 400 and "article" in err["error"]
+    # 方法面：GET 裁决路径走 runs 读面（run_id 段含 /adopt 不合白名单）→ 404
+    assert _call(server, "GET", "/api/pipelines/runs/pl-adj-b1/adopt")[0] == 404
+
+
+# ── g) ai_verdicts 读面（AI-1 批 2026-11-21，④ 前端徽章的数据前提）──────
+# GET /api/pipelines/runs/<run_id> 新增 ai_verdicts={节点id:{端口:态}}：只放
+# 标量裁决态（零正文，与「计数无正文」纪律一致）。ranges 走**编辑版优先**
+# 的整组态（与 GET segments 同源——只读 outputs.json 会把已裁决的 run 读回
+# draft）；article 取 inline.article.status。老 run（本批前的产物无 status
+# 字段）该端口键**不存在**（不是 null）——前端据此不渲染徽章。
+
+
+def test_ai_verdicts_draft_then_adopted(server, _isolate_home: Path) -> None:
+    """硬要求：真跑一条 auto_adopt=false 的链 → ai_verdicts 报 draft；
+    调 adopt 后 → 报 adopted（读面与裁决写面同源）。"""
+    home = _isolate_home
+    _make_adjudication_run(home, "pl-av-0001")
+    status, run = _call(server, "GET", "/api/pipelines/runs/pl-av-0001")
+    assert status == 200
+    assert run["ai_verdicts"]["ks"]["ranges"] == "draft"
+    assert run["ai_verdicts"]["aw"]["article"] == "draft"
+
+    _call(server, "POST", "/api/pipelines/runs/pl-av-0001/adopt",
+          {"step": "ks", "confirm": True})
+    _call(server, "POST", "/api/pipelines/runs/pl-av-0001/adopt",
+          {"step": "aw", "confirm": True})
+    _, run = _call(server, "GET", "/api/pipelines/runs/pl-av-0001")
+    assert run["ai_verdicts"]["ks"]["ranges"] == "adopted"
+    assert run["ai_verdicts"]["aw"]["article"] == "adopted"
+
+
+def test_ai_verdicts_old_run_absent_not_null(server, _isolate_home: Path) -> None:
+    """硬要求（老 run 兼容）：产物无 status 字段 → ai_verdicts 里该键**不存在**
+    （不是 null/空串）——前端据缺席判「无状态可显示」不渲染徽章，零回归。"""
+    home = _isolate_home
+    run_dir = home / "pipeline_runs" / "pl-av-old1"
+    ks = run_dir / "workspace" / "ks"
+    ks.mkdir(parents=True)
+    (ks / "outputs.json").write_text(json.dumps({
+        "inline": {"ranges": [{"start": 0.0, "end": 2.0, "label": "开头"}]},
+        "refs": {}}), encoding="utf-8")
+    aw = run_dir / "workspace" / "aw"
+    aw.mkdir(parents=True)
+    (aw / "outputs.json").write_text(json.dumps({
+        "inline": {"article": {"path": "/tmp/a.md"}, "anchor_map": {}},
+        "refs": {}}), encoding="utf-8")
+    (run_dir / "meta.json").write_text(
+        json.dumps({"status": "done", "steps": [], "plugins": []}), encoding="utf-8")
+    status, run = _call(server, "GET", "/api/pipelines/runs/pl-av-old1")
+    assert status == 200
+    assert run["ai_verdicts"] == {}, run["ai_verdicts"]
+
+
+def test_ai_verdicts_ranges_group_mixed_and_edited_first(server, _isolate_home: Path) -> None:
+    """ranges 整组态：全同→该态；混态→mixed；编辑版在场→读编辑版（不是原始
+    outputs.json，否则已裁决的 run 会被读回 draft）。"""
+    home = _isolate_home
+    run_dir = home / "pipeline_runs" / "pl-av-mix1"
+    ks = run_dir / "workspace" / "ks"
+    ks.mkdir(parents=True)
+    # 原始 outputs.json 全 draft；编辑版两项全 adopted → 读面应报 adopted
+    (ks / "outputs.json").write_text(json.dumps({
+        "inline": {"ranges": [
+            {"start": 0.0, "end": 2.0, "status": "draft"},
+            {"start": 3.0, "end": 5.0, "status": "draft"},
+        ]}, "refs": {}}), encoding="utf-8")
+    (ks / "ranges.edited.json").write_text(json.dumps([
+        {"start": 0.0, "end": 2.0, "status": "adopted"},
+        {"start": 3.0, "end": 5.0, "status": "adopted"},
+    ]), encoding="utf-8")
+    (run_dir / "meta.json").write_text(
+        json.dumps({"status": "done", "steps": [], "plugins": []}), encoding="utf-8")
+    _, run = _call(server, "GET", "/api/pipelines/runs/pl-av-mix1")
+    assert run["ai_verdicts"]["ks"]["ranges"] == "adopted"
+
+    # 改为异态（一项 adopted 一项 discarded）→ mixed
+    (ks / "ranges.edited.json").write_text(json.dumps([
+        {"start": 0.0, "end": 2.0, "status": "adopted"},
+        {"start": 3.0, "end": 5.0, "status": "discarded"},
+    ]), encoding="utf-8")
+    _, run = _call(server, "GET", "/api/pipelines/runs/pl-av-mix1")
+    assert run["ai_verdicts"]["ks"]["ranges"] == "mixed"

@@ -498,6 +498,14 @@ CONTRACT_POST_EXACT = {
     "/api/materials/spark",
     "/api/materials/from-article",
     "/api/sources/internal/refresh",
+    # §3.19 修订 3 新增（AI-1 三态裁决 2026-11-21，正典=《mdpub-AI产物裁决机制
+    # 设计-2026-11-21》§二/§五）：裁决动作 adopt/discard——**动态段 POST**
+    # （run_id 在 URL 段内，server._handle 裁决分流先于 GET 面判定），
+    # 占位形路径入锁由 POST_DYNAMIC_SURFACE 承载（<run_id> 运行期替换，
+    # GET_DYNAMIC_PREFIXES 承载动态读面同一思路）。本批不含 regenerate
+    # （归 AI-3）。POST 69→71。
+    "/api/pipelines/runs/<run_id>/adopt",
+    "/api/pipelines/runs/<run_id>/discard",
 }
 
 
@@ -507,8 +515,11 @@ def test_route_surface_matches_api_contract() -> None:
     任何端点增删（含废弃下线）须先改契约文档再改本断言与路由表——
     「后端改动须先改本文再改代码」（契约 §一 效力条）。POST 面 = JSON
     动作表（_ACTION_ROUTES）∪ 二进制旁路表（_BINARY_POST_ROUTES，F59
-    upload——confirm 走 query 特判，契约 §3.2 修订条）。"""
+    upload——confirm 走 query 特判，契约 §3.2 修订条）∪ 动态段 POST 占位面
+    （POST_DYNAMIC_SURFACE，AI-1 三态裁决 adopt/discard——run_id 在 URL
+    段内，占位形入锁同 GET_DYNAMIC_PREFIXES 承载动态读面的思路）。"""
     from musespiral.studio.actions import _ACTION_ROUTES
+    from musespiral.studio.plugin_actions import POST_DYNAMIC_SURFACE
     from musespiral.studio.routing import _GET_ROUTES
     from musespiral.studio.server import _BINARY_POST_ROUTES
 
@@ -517,7 +528,9 @@ def test_route_surface_matches_api_contract() -> None:
         f"GET 面漂移 缺失={sorted(CONTRACT_GET_EXACT - actual_get)} "
         f"多余={sorted(actual_get - CONTRACT_GET_EXACT)}"
     )
-    actual_post = set(_ACTION_ROUTES) | set(_BINARY_POST_ROUTES)
+    actual_post = (
+        set(_ACTION_ROUTES) | set(_BINARY_POST_ROUTES) | set(POST_DYNAMIC_SURFACE)
+    )
     assert actual_post == CONTRACT_POST_EXACT, (
         f"POST 面漂移 缺失={sorted(CONTRACT_POST_EXACT - actual_post)} "
         f"多余={sorted(actual_post - CONTRACT_POST_EXACT)}"
