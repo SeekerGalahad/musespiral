@@ -17,7 +17,8 @@ assets/core.js（全部 JS）、assets/core.css（全部 CSS）——断言按�
     +触发条款）在 tests/test_build_ui.py
   - 设计系统 token 全量（色彩/状态色/字体/六级字号/间距/圆角/阴影）
   - 暗色模式变量覆写（prefers-color-scheme: dark）
-  - 36 个 monoline SVG 图标集（Phase 1 24 个 + Phase 2 docs + P1 shell 5 + D2 素材类型 6）
+  - 38 个 monoline SVG 图标集（Phase 1 24 个 + Phase 2 docs + P1 shell 5 +
+    D2 素材类型 6 + PL-3 插件 2）
   - 全局框架：顶栏 48px / 底栏 32px / 三视图结构与导航
   - 基础组件类：btn 四变体 / badge 三色 / card / modal / toast / input / tabs / chips
   - Phase 2 队列视图：卡片网格（2-4 列响应式）/ 封面区 / 印章徽章 / 产物行 /
@@ -190,8 +191,9 @@ CONTRACT_PATHS = {
     "/api/pipelines/runs/segments",
 }
 
-# 25 个 monoline 图标（Phase 1 正典 §3.4 的 24 个 + Phase 2 追加 docs 空状态插画；
-# comment 为批注场景预置）
+# 38 个 monoline 图标（Phase 1 正典 §3.4 的 24 个 + Phase 2 追加 docs 空状态插画；
+# comment 为批注场景预置。清单即唯一事实源——下方清单项数须等于
+# test_svg_icon_set_complete 的 38 断言，改动两边同批）
 ICON_NAMES = [
     "file", "edit", "eye", "check", "warning", "error", "refresh", "download",
     "upload", "publish", "star", "clock", "tag", "user", "search", "settings",
@@ -548,11 +550,11 @@ def test_native_controls_follow_color_scheme() -> None:
     assert "#edit-area::selection" in src
 
 
-# ── SVG 图标集（24 个 monoline）────────────────────────────
+# ── SVG 图标集（38 个 monoline）────────────────────────────
 
 
 def test_svg_icon_set_complete() -> None:
-    """30 个 monoline SVG 图标：ICONS 对象存 path 数据 + TAG 共享前缀包装 + icon(name)。
+    """38 个 monoline SVG 图标：ICONS 对象存 path 数据 + TAG 共享前缀包装 + icon(name)。
 
     M3 体积回收（2026-11-15）：图标的 ``<svg viewBox …stroke-width="1.7">``
     公共前缀抽成 TAG 常量、由 icon() 统一包装（每图标省 ~76B）；monoline 规格属性
@@ -627,7 +629,7 @@ def test_shell_topbar_and_statusbar() -> None:
     # 顶栏/底栏尺寸 token 与类
     assert "--topbar-h:48px" in src and "--statusbar-h:32px" in src
     assert ".topbar{" in src and ".statusbar{" in src
-    assert "musespiral v0.4.0" in src  # 底栏版本号
+    assert "musespiral v0.5.0" in src  # 底栏版本号（随 __version__ 收口同步）
     assert "root: " in src  # 底栏工作目录前缀
 
 

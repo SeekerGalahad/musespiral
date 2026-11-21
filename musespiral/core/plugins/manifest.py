@@ -11,8 +11,10 @@ parse_manifest 红绿双出口：(Plugin | None, errors)——坏 manifest 返�
 隔离在 services/plugins_service 逐个调用本函数达成）。
 
 extra="forbid" 是有意的：manifest 拼错键（permissins）静默忽略是契约
-系统的隐性坑——宁可在安装时红，不在运行时哑。v1 键集=§4.2 必需六键 +
-可选六键，恰好此集。
+系统的隐性坑——宁可在安装时红，不在运行时哑。v1 键集=§4.2.1 键集规范
+（2026-11-21 补的规范性枚举表）的必需六键 id/version/kind/inputs/outputs/
+runtime + 可选六键 name/description/requires/permissions/config_schema/
+uses_ai，恰好此 12 键（其中 uses_ai 的**语义**出自 §7.3，键位归 §4.2.1）。
 
 端口类型表（校验要求 3）= 契约 10 型（types.CONTRACT_TYPES）∪ ext/ 前缀
 ∪ 标量基元 SCALAR_PORT_TYPES。标量基元必须收录：正典 §4.2 官方示例自身
@@ -110,9 +112,9 @@ class Runtime(BaseModel):
 
 
 class Plugin(BaseModel):
-    """解析后的插件清单（§4.2 必需六键 id/version/kind/inputs/outputs/
-    runtime + 可选六键 name/description/requires/permissions/config_schema/
-    uses_ai；多余键 forbid）。"""
+    """解析后的插件清单（§4.2.1 键集规范：必需六键 id/version/kind/inputs/
+    outputs/runtime + 可选六键 name/description/requires/permissions/
+    config_schema/uses_ai；多余键 forbid）。"""
     model_config = ConfigDict(extra="forbid")
 
     id: str

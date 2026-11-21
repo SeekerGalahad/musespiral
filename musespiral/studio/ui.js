@@ -155,7 +155,7 @@ $('jobs-badge').textContent=n;$('jobs-badge').hidden=!n;
 if(!JM.hidden)renderJobs();
 }
 var JSTAT={queued:'排队',running:'运行中',done:'完成',failed:'失败'};
-var JN={adapt:'生成变体',pack:'生成物料包',publish:'创建草稿',batch_adapt:'批量生成变体',fetch:'URL 抓取',status:'标记已审',annotate_rewrite:'批注 AI 修改',sync_stats:'数据回采',compose_generate:'创作再生成',ingest:'源刷新',clip:'网页剪藏',visual_export:'导出图片',pipeline:'一键金路径',book_search:'书籍搜索',book_fetch:'取文入素材库',tts_generate:'朗读合成'};
+var JN={adapt:'生成变体',pack:'生成物料包',publish:'创建草稿',batch_adapt:'批量生成变体',fetch:'URL 抓取',status:'标记已审',annotate_rewrite:'批注 AI 修改',sync_stats:'数据回采',compose_generate:'创作再生成',ingest:'源刷新',clip:'网页剪藏',visual_export:'导出图片',pipeline:'一键金路径',book_search:'书籍搜索',book_fetch:'取文入素材库',tts_generate:'朗读合成',plugin_pipeline:'插件流水线',agent_run:'智能体编排',topic_radar:'选题雷达'};
 var jobsDismissed={};
 function jobAgo(t){var d=new Date(String(t||'').replace(' ','T')),s;
 if(isNaN(d))return String(t||'').slice(5,16);
@@ -3970,7 +3970,7 @@ return '<div class="card vcard"><div class="vcard-head"><span class="platform-co
 '<div class="vcard-ops"><button class="btn" data-vview="'+esc(rel)+'">预览全文</button>'+
 '<button class="btn" data-vadapt="'+esc(c)+'">重新生成</button>'+
 '<button class="btn" data-vpack="'+esc(c)+'" data-vrel="'+esc(rel)+'">生成物料包</button></div></div>';}).join('');
-$('variant-grid').innerHTML=html||'<div class="empty" style="grid-column:1/-1"><div class="empty-icon" data-icon="star"></div><div class="empty-title">还没有平台变体</div><div class="empty-text">一稿多态：用下方按钮生成 xhs / channels / douyin / zhihu 四平台改写稿。</div></div>';
+$('variant-grid').innerHTML=html||'<div class="empty" style="grid-column:1/-1"><div class="empty-icon" data-icon="star">'+I('star')+'</div><div class="empty-title">还没有平台变体</div><div class="empty-text">一稿多态：用下方按钮生成 xhs / channels / douyin / zhihu 四平台改写稿。</div></div>';
 }
 function openViewer(rel){
 function show(v){$('viewer-title').textContent=rel;$('viewer-body').textContent=v||'（空文件）';$('viewer').hidden=false;}

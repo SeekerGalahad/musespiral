@@ -206,9 +206,11 @@ def test_workspace_threshold_boundary(tmp_path: Path) -> None:
 def test_workspace_big_bytes_ref_never_reads_into_memory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """>1MiB 二进制产物走引用路径：get 返回 Path，不读全量进内存。"""
+    """>1MiB 二进制产物走引用路径：get 返回 Path，不读全量进内存。
+    样本 2MiB（D-2 债清偿批升级：原 INLINE_MAX_BYTES+1 已过引用线但按台账
+    要求抬到 ≥2MB，远离阈值边界防将来阈值上探时退化成内联样本）。"""
     ws = Workspace(tmp_path)
-    big = b"\x00" * (INLINE_MAX_BYTES + 1)
+    big = b"\x00" * (2 * 1024 * 1024)
     paths = ws.put("n", {"frame": big})
     assert ws.storage_kind("n", "frame") == "bytes"
     assert (tmp_path / "workspace" / "n" / "frame.bin").stat().st_size == len(big)
@@ -237,9 +239,9 @@ def test_workspace_collect_output_streams_big_refs(
     import filecmp
 
     ws = Workspace(tmp_path)
-    big = b"\x02" * (INLINE_MAX_BYTES + 1)
+    big = b"\x02" * (2 * 1024 * 1024)
     # bytes 引用（cover.bin）+ json 引用（blob.json，序列化 >1MiB）
-    ws.put("sink", {"cover": big, "blob": "x" * INLINE_MAX_BYTES})
+    ws.put("sink", {"cover": big, "blob": "x" * (2 * 1024 * 1024)})
     src_bin = tmp_path / "workspace" / "sink" / "cover.bin"
     src_json = tmp_path / "workspace" / "sink" / "blob.json"
 
