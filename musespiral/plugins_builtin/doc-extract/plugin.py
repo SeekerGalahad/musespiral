@@ -345,6 +345,74 @@ def _extract_text_file(path: Path) -> tuple[str, str, None]:
     return body, body, None
 
 
+
+
+
+def _count_pages(path: Path, suffix: str) -> int | None:
+    """按后缀快速数页/章节（不重复提取正文，只看结构元信息）。
+
+    PDF→pdfplumber 数页（已安装，数页极快）；EPUB→zipfile 数 spine xhtml；
+    其他格式无页概念→None。
+    """
+    try:
+        if suffix == ".pdf":
+            import pdfplumber  # noqa: PLC0415
+            with pdfplumber.open(path) as pdf:
+                return len(pdf.pages)
+        if suffix == ".epub":
+            import zipfile  # noqa: PLC0415
+            with zipfile.ZipFile(path) as zf:
+                container = zf.read("META-INF/container.xml").decode("utf-8", "replace")
+                import re as _re  # noqa: PLC0415
+                m = _re.search(r'full-path="([^"]+)"', container)
+                if m:
+                    from xml.etree import ElementTree as _ET  # noqa: PLC0415
+                    opf = zf.read(m.group(1)).decode("utf-8", "replace")
+                    root = _ET.fromstring(opf)
+                    ns = {"opf": "http://www.idpf.org/2007/opf"}
+                    spine = root.findall(".//opf:itemref", ns)
+                    return max(len([s for s in spine if s.get("idref")]) - 1, 1)
+    except Exception:
+        pass  # 数页失败不影响提取——pages 是尽力而为的元信息
+    return None
+
+def _try_markitdown(
+    path: Path, suffix: str, ctx: Any, title: str
+) -> tuple[str, str, int | None] | None:
+    """markitdown 后端（可选，优先后端）。
+
+    装了就用——microsoft/markitdown（MIT，★197K）格式覆盖比自研四路更全
+    （含 PPTX/XLSX/图片/音频/YouTube URL 等）。未安装或转换失败时返回
+    None，由调用方退回自研提取器——**永远不给用户一个错误的面**。
+
+    自研四路（pdfplumber/python-docx/纯标准库 EPUB/文本）仍是兜底，
+    保证 markitdown 不在时插件照常工作。
+    """
+    try:
+        from markitdown import MarkItDown  # noqa: PLC0415
+    except ImportError:
+        ctx.log("doc-extract: markitdown 未安装（可选优先后端）——退回自研提取器。"
+                "pip install markitdown 可解锁 PPTX/XLSX/图片/音频等更多格式")
+        return None
+    try:
+        m = MarkItDown()
+        result = m.convert(str(path))
+        text = (result.text_content or "").strip()
+        if not text:
+            ctx.log(f"doc-extract: markitdown 返回空文——退回自研提取器: {path.name}")
+            return None
+        # pages：markitdown 无统一页数概念——按后缀补算（快，不重复提取）
+        pages = _count_pages(path, suffix)
+        markdown = f"# {title}\n\n{text}" if title else text
+        ctx.log(f"doc-extract: markitdown 提取成功——{len(text):,} 字符"
+                f"（覆盖 {suffix} 及更多格式）")
+        return markdown, text, pages
+    except Exception as exc:  # markitdown 自身的转换异常
+        ctx.log(f"doc-extract: markitdown 转换失败（{type(exc).__name__}）"
+                f"——退回自研提取器: {path.name}")
+        return None
+
+
 def run(inputs: dict, config: dict, ctx: Any) -> dict:
     raw = inputs.get("doc_path")
     if raw is None or not str(raw).strip():
@@ -370,6 +438,17 @@ def run(inputs: dict, config: dict, ctx: Any) -> dict:
         ) from None
 
     ctx.log(f"doc-extract: {suffix} ← {path.name}（扫描版阈值 {min_chars_per_page:g} 字/页）")
+
+    # **markitdown 优先后端**（2026-11-21 集成）：装了就用——格式覆盖更全
+    # （含 PPTX/XLSX/图片/音频/YouTube 等）、微软官方维护。MIT 许可证，
+    # 依赖已过 test_license_compliance 门。未安装时优雅退回自研四路提取器。
+    if config.get("prefer_markitdown", True):
+        result = _try_markitdown(path, suffix, ctx, title)
+        if result is not None:
+            markdown, body_text, pages = result
+            ctx.progress(1, 1)
+            return {"markdown": markdown, "text": body_text, "pages": pages}
+
     if suffix == ".pdf":
         body_md, body_text, pages = _extract_pdf(path, min_chars_per_page, ctx)
     elif suffix == ".docx":

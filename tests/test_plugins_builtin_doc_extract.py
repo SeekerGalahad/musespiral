@@ -224,7 +224,7 @@ def test_python_deps_declared() -> None:
 
 def test_pdf_text_extraction(text_pdf: Path) -> None:
     ctx = _Ctx()
-    out = docx_extract.run({"doc_path": str(text_pdf)}, {}, ctx)
+    out = docx_extract.run({"doc_path": str(text_pdf)}, {"prefer_markitdown": False}, ctx)
     assert set(out) >= {"markdown", "text", "pages"}
     assert out["pages"] == 1
     # 有效字符 > 50/页阈值（fixture 四行样板句）
@@ -238,7 +238,7 @@ def test_pdf_real_sample() -> None:
     if not REAL_PDF.is_file():
         pytest.skip(f"仓内真实 PDF 样本缺席: {REAL_PDF}")
     ctx = _Ctx()
-    out = docx_extract.run({"doc_path": str(REAL_PDF), "title": "血缘专利"}, {}, ctx)
+    out = docx_extract.run({"doc_path": str(REAL_PDF), "title": "血缘专利"}, {"prefer_markitdown": False}, ctx)
     assert out["pages"] == 32
     assert len(out["text"]) > 10_000  # 真实文本量级（实测 30,265）
     assert "国家知识产权局" in out["text"]
@@ -249,7 +249,7 @@ def test_scanned_pdf_rejected_not_silent(scan_pdf: Path) -> None:
     """扫描版（0 字符/页）必须可读拒绝——含「扫描版」与「OCR」的可读
     PluginError，绝不静默返回空文。"""
     with pytest.raises(PluginError) as ei:
-        docx_extract.run({"doc_path": str(scan_pdf)}, {}, _Ctx())
+        docx_extract.run({"doc_path": str(scan_pdf)}, {"prefer_markitdown": False}, _Ctx())
     msg = str(ei.value)
     assert "扫描版" in msg and "OCR" in msg
     assert "50" in msg  # 阈值出现在消息里（可解释）
@@ -269,7 +269,7 @@ def test_scanned_threshold_zero_still_no_silent_empty(scan_pdf: Path) -> None:
 
 def test_docx_extraction_order_and_table(real_docx: Path) -> None:
     ctx = _Ctx()
-    out = docx_extract.run({"doc_path": str(real_docx), "title": "测试文档"}, {}, ctx)
+    out = docx_extract.run({"doc_path": str(real_docx), "title": "测试文档"}, {"prefer_markitdown": False}, ctx)
     assert out["pages"] is None  # DOCX 无页概念，诚实留空不伪造
     md = out["markdown"]
     # 标题样式 → #
@@ -291,7 +291,7 @@ def test_docx_extraction_order_and_table(real_docx: Path) -> None:
 
 def test_epub_extraction_chapters(real_epub: Path) -> None:
     ctx = _Ctx()
-    out = docx_extract.run({"doc_path": str(real_epub)}, {}, ctx)
+    out = docx_extract.run({"doc_path": str(real_epub)}, {"prefer_markitdown": False}, ctx)
     md = out["markdown"]
     # 封面（空文本）跳过不计章节；两章标题落 ##
     assert out["pages"] == 2
@@ -309,7 +309,7 @@ def test_epub_extraction_chapters(real_epub: Path) -> None:
 def test_md_passthrough(tmp_path: Path) -> None:
     p = tmp_path / "note.md"
     p.write_text("# 标题\n\n正文段落。", encoding="utf-8")
-    out = docx_extract.run({"doc_path": str(p)}, {}, _Ctx())
+    out = docx_extract.run({"doc_path": str(p)}, {"prefer_markitdown": False}, _Ctx())
     assert "正文段落。" in out["text"]
     assert out["pages"] is None
     # title 缺省取文件名词干
@@ -319,13 +319,13 @@ def test_md_passthrough(tmp_path: Path) -> None:
 def test_txt_bom_and_gbk_rejected(tmp_path: Path) -> None:
     bom = tmp_path / "bom.txt"
     bom.write_bytes(b"\xef\xbb\xbfBOM \xe5\x86\x85\xe5\xae\xb9")  # utf-8 BOM + 内容
-    out = docx_extract.run({"doc_path": str(bom)}, {}, _Ctx())
+    out = docx_extract.run({"doc_path": str(bom)}, {"prefer_markitdown": False}, _Ctx())
     assert "BOM" in out["text"] and "\ufeff" not in out["text"]
 
     gbk = tmp_path / "gbk.txt"
     gbk.write_bytes("中文内容测试".encode("gb18030"))
     with pytest.raises(PluginError) as ei:
-        docx_extract.run({"doc_path": str(gbk)}, {}, _Ctx())
+        docx_extract.run({"doc_path": str(gbk)}, {"prefer_markitdown": False}, _Ctx())
     assert "UTF-8" in str(ei.value)
 
 
@@ -333,23 +333,23 @@ def test_empty_and_missing_and_suffix_gates(tmp_path: Path) -> None:
     empty = tmp_path / "empty.txt"
     empty.write_text("  \n ", encoding="utf-8")
     with pytest.raises(PluginError) as ei:
-        docx_extract.run({"doc_path": str(empty)}, {}, _Ctx())
+        docx_extract.run({"doc_path": str(empty)}, {"prefer_markitdown": False}, _Ctx())
     assert "为空" in str(ei.value)
 
     with pytest.raises(PluginError) as ei:
-        docx_extract.run({"doc_path": str(tmp_path / "nope.pdf")}, {}, _Ctx())
+        docx_extract.run({"doc_path": str(tmp_path / "nope.pdf")}, {"prefer_markitdown": False}, _Ctx())
     assert "不存在" in str(ei.value)
 
     bad = tmp_path / "x.xyz"
     bad.write_text("x", encoding="utf-8")
     with pytest.raises(PluginError) as ei:
-        docx_extract.run({"doc_path": str(bad)}, {}, _Ctx())
+        docx_extract.run({"doc_path": str(bad)}, {"prefer_markitdown": False}, _Ctx())
     assert "白名单" in str(ei.value)
 
     # 大小写不敏感：.PDF 合法
     up = tmp_path / "up.PDF"
     up.write_bytes(_text_pdf_bytes())
-    out = docx_extract.run({"doc_path": str(up)}, {}, _Ctx())
+    out = docx_extract.run({"doc_path": str(up)}, {"prefer_markitdown": False}, _Ctx())
     assert out["pages"] == 1
 
 
@@ -368,14 +368,14 @@ def test_missing_deps_readable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
         p = tmp_path / "t.pdf"
         p.write_bytes(_text_pdf_bytes())
         with pytest.raises(PluginError) as ei:
-            mod.run({"doc_path": str(p)}, {}, _Ctx())
+            mod.run({"doc_path": str(p)}, {"prefer_markitdown": False}, _Ctx())
         assert "pdfplumber 未安装" in str(ei.value)
         assert "pip install pdfplumber" in str(ei.value)
         # DOCX / EPUB 同族可读指引
         d = tmp_path / "t.docx"
         d.write_bytes(b"PK\x03\x04")
         with pytest.raises(PluginError) as ei:
-            mod.run({"doc_path": str(d)}, {}, _Ctx())
+            mod.run({"doc_path": str(d)}, {"prefer_markitdown": False}, _Ctx())
         assert "python-docx 未安装" in str(ei.value)
         # EPUB：2026-11-21 许可证审查后改为**纯标准库解析**（零依赖）——
         # 缺 pdfplumber/docx 不影响 EPUB。此处用坏包验证「可读拒绝不崩」，
@@ -383,12 +383,12 @@ def test_missing_deps_readable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
         e = tmp_path / "t.epub"
         e.write_bytes(b"PK\x03\x04not-a-real-zip")
         with pytest.raises(PluginError) as ei:
-            mod.run({"doc_path": str(e)}, {}, _Ctx())
+            mod.run({"doc_path": str(e)}, {"prefer_markitdown": False}, _Ctx())
         assert "EPUB" in str(ei.value)  # 可读拒绝，不静默、不抛裸 zipfile 异常
         # MD/TXT 标准库路径不受缺依赖影响
         m = tmp_path / "t.md"
         m.write_text("# 标题\n\n正文足够长不触发空门。", encoding="utf-8")
-        out = mod.run({"doc_path": str(m)}, {}, _Ctx())
+        out = mod.run({"doc_path": str(m)}, {"prefer_markitdown": False}, _Ctx())
         assert "正文足够长" in out["text"]
     finally:
         for name, v in saved.items():
@@ -403,12 +403,12 @@ def test_missing_deps_readable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
 
 def test_cancel_checkpoint(text_pdf: Path) -> None:
     with pytest.raises(PluginCancelled):
-        docx_extract.run({"doc_path": str(text_pdf)}, {}, _Ctx(cancelled=True))
+        docx_extract.run({"doc_path": str(text_pdf)}, {"prefer_markitdown": False}, _Ctx(cancelled=True))
 
 
 def test_outputs_json_serializable(text_pdf: Path, real_docx: Path) -> None:
     for path in (text_pdf, real_docx):
-        out = docx_extract.run({"doc_path": str(path)}, {}, _Ctx())
+        out = docx_extract.run({"doc_path": str(path)}, {"prefer_markitdown": False}, _Ctx())
         json.dumps(out, ensure_ascii=False)  # 引擎 inline 路径要求
 
 
@@ -418,7 +418,7 @@ def test_outputs_json_serializable(text_pdf: Path, real_docx: Path) -> None:
 def test_downstream_refine_material_body(text_pdf: Path) -> None:
     from musespiral.services import material_body
 
-    out = docx_extract.run({"doc_path": str(text_pdf), "title": "样本"}, {}, _Ctx())
+    out = docx_extract.run({"doc_path": str(text_pdf), "title": "样本"}, {"prefer_markitdown": False}, _Ctx())
     material = {
         "id": "test-doc-extract",
         "type": "text",
