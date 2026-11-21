@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>musespiral Studio</title>
+<!--BUILD:CSS-->
+</head>
+<body>
+<div id="toast" class="toast" hidden><span id="toast-text"></span><button id="toast-action" class="btn btn-ghost" hidden></button></div>
+<div id="modal" class="modal-overlay" hidden>
+<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+<h3 class="modal-title" id="modal-title">确认操作</h3>
+<p class="modal-message" id="modal-message"></p>
+<div class="modal-actions">
+<button class="btn btn-secondary" id="modal-cancel">取消</button>
+<button class="btn btn-primary" id="modal-confirm">确认</button>
+</div>
+</div>
+</div>
+<div class="modal-overlay" id="clip-form" hidden>
+<div class="modal">
+<h3 class="modal-title" id="clip-title">剪藏 URL</h3>
+<div style="display:flex;flex-direction:column;gap:8px">
+<input id="clip-url" class="input" placeholder="URL（http(s) 开头；SSRF/robots 门生效）">
+<input id="clip-sub" class="input" placeholder="标题（选填，缺省取 URL 尾段）" hidden>
+<textarea id="clip-note" class="set-area" rows="2" placeholder="描述（选填 ≤200 字）" hidden></textarea>
+<p class="reg-line"><span class="reg-err" id="clip-err"></span></p>
+</div>
+<div class="modal-actions"><button class="btn btn-secondary" id="clip-cancel">取消</button><button class="btn btn-primary" id="clip-ok">抓取预览</button></div>
+</div>
+</div>
+<div class="modal-overlay" id="viewer" hidden>
+<div class="modal viewer-box" role="dialog" aria-modal="true" aria-labelledby="viewer-title">
+<div class="modal-actions viewer-head" style="justify-content:space-between;margin:0"><span id="viewer-title" style="font-weight:600"></span><button class="btn btn-ghost btn-icon" id="viewer-close" type="button" aria-label="关闭"><span data-icon="close"></span></button></div>
+<pre id="viewer-body"></pre>
+</div>
+</div>
+<div class="modal-overlay cp-overlay" id="cp" hidden>
+<div class="cp" role="dialog" aria-modal="true" aria-label="命令面板">
+<div class="cp-head"><span data-icon="search"></span><input id="cp-input" class="input" placeholder="检索：> 命令 · @ 文章 · # 素材（缺省混合）…" aria-label="命令面板搜索"><kbd>Esc</kbd></div>
+<div class="cp-list" id="cp-list" role="listbox"></div>
+<div class="cp-foot"><span>↑↓ 选择</span><span>Enter 执行</span><span>⌘K 开关</span></div>
+</div>
+</div>
+<div class="cp" id="ctx" hidden></div>
+<div class="app-shell" id="app-shell">
+<aside class="rail" id="rail" aria-label="全局导航">
+<div class="rail-head">
+<a class="brand" href="#publish"><span class="brand-mark" data-icon="publish"></span><span class="brand-name">musespiral Studio</span></a>
+<button class="btn btn-ghost btn-icon" id="rail-fold" title="折叠导航轨" aria-label="折叠导航轨"><span data-icon="panel-left"></span></button>
+</div>
+<nav class="rail-nav" id="rail-nav" aria-label="视图导航">
+<div class="rail-group">
+<div class="rail-group-title">供给</div>
+<a class="nav-item" data-nav="sources" href="#sources"><span data-icon="settings"></span><span class="nav-label">源中枢</span><span class="nav-badge" id="nav-badge-sources" hidden>0</span></a>
+<a class="nav-item" data-nav="material" href="#material"><span data-icon="search"></span><span class="nav-label">素材库</span><span class="nav-badge" id="nav-badge-material" hidden>0</span></a>
+<a class="nav-item" data-nav="books" href="#books"><span data-icon="docs"></span><span class="nav-label">书籍</span></a>
+</div>
+<div class="rail-group">
+<div class="rail-group-title">转化</div>
+<a class="nav-item" data-nav="design" href="#design"><span data-icon="image"></span><span class="nav-label">视觉编辑</span></a>
+<a class="nav-item" data-nav="compose" href="#compose"><span data-icon="edit"></span><span class="nav-label">创作工坊</span><span class="nav-badge" id="nav-badge-compose" hidden>0</span></a>
+</div>
+<div class="rail-group">
+<div class="rail-group-title">出口</div>
+<a class="nav-item" data-nav="publish" href="#publish"><span data-icon="file"></span><span class="nav-label">发布中心</span><span class="nav-badge" id="nav-badge-publish" hidden>0</span></a>
+</div>
+<div class="rail-group">
+<div class="rail-group-title">回看</div>
+<a class="nav-item" data-nav="insight" href="#insight"><span data-icon="star"></span><span class="nav-label">洞察</span></a>
+</div>
+<div class="rail-group">
+<div class="rail-group-title">工具</div>
+<a class="nav-item" data-nav="plugins" href="#plugins"><span data-icon="command"></span><span class="nav-label">插件</span></a>
+<a class="nav-item" data-nav="plugin-run" href="#plugin-run"><span data-icon="flow"></span><span class="nav-label">流水线</span></a>
+</div>
+</nav>
+<div class="rail-foot">
+<a class="nav-item" id="settings-btn" data-nav="settings" href="#settings"><span data-icon="settings"></span><span class="nav-label">设置</span></a>
+</div>
+</aside>
+<div class="shell-main">
+<header class="topbar">
+<div class="topbar-inner">
+<div class="crumb"><span class="crumb-title" id="crumb-title">发布中心</span></div>
+<div class="topbar-actions">
+<button class="btn btn-ghost btn-icon" id="cp-btn" title="命令面板（⌘K）" aria-label="命令面板"><span data-icon="command"></span></button>
+<button class="btn btn-ghost btn-icon" id="theme-toggle" title="主题：跟随系统（点击切换）" aria-label="切换主题"><span id="theme-icon" data-icon="monitor"></span></button>
+<div class="sys-badge" id="sys-badge" hidden></div>
+<div class="jobs-wrap" id="jobs-wrap">
+<button class="btn btn-ghost btn-icon" id="jobs-btn" title="后台任务" aria-label="后台任务"><span data-icon="bell"></span></button>
+<span class="jobs-badge" id="jobs-badge" hidden>0</span>
+<div class="jobs-menu" id="jobs-menu" hidden></div>
+</div>
+<button class="btn btn-ghost btn-icon" id="refresh-btn" title="刷新" aria-label="刷新"><span data-icon="refresh"></span></button>
+</div>
+</div>
+</header>
+<main class="container">
+<!--BUILD:VIEW:sources-->
+<!--BUILD:VIEW:material-->
+<!--BUILD:VIEW:books-->
+<!--BUILD:VIEW:design-->
+<section id="view-article" data-view="article" class="view" hidden>
+<a class="back-link" href="#publish" id="back-link"><span data-icon="arrow-left"></span>返回发布中心</a>
+<div class="detail-head">
+<h1 class="detail-title" id="detail-title">加载中…</h1>
+<div class="detail-meta" id="detail-meta"></div>
+<button class="btn" id="mark-reviewed-btn" hidden><span data-icon="check"></span>标记已审</button>
+<button class="btn" id="tts-btn" title="把正文朗读成 MP3（edge-tts 微软免费端点，零 API key）">🔊 朗读</button>
+</div>
+<div class="tts-bar" id="tts-bar" hidden>
+<audio id="tts-audio" controls preload="none" aria-label="文章朗读音频"></audio>
+<span class="tts-note" id="tts-note"></span>
+<button class="btn btn-ghost" id="tts-close" type="button" aria-label="收起朗读栏">✕</button>
+</div>
+<div class="tabs" id="detail-tabs" role="tablist">
+<button class="tab is-active" data-tab="edit" role="tab"><span data-icon="edit"></span>编辑</button>
+<button class="tab" data-tab="variants" role="tab"><span data-icon="star"></span>变体</button>
+<button class="tab" data-tab="checks" role="tab"><span data-icon="check"></span>检查</button>
+<button class="tab" data-tab="preview" role="tab"><span data-icon="eye"></span>预览</button>
+<button class="tab" data-tab="review" role="tab"><span data-icon="file"></span>对照</button>
+<button class="tab" data-tab="versions" role="tab"><span data-icon="clock"></span>版本历史</button>
+<button class="tab" data-tab="actions" role="tab"><span data-icon="settings"></span>操作<span class="tab-gap" id="actions-gap" hidden>0</span></button>
+</div>
+<div class="tab-panel" id="panel-edit" data-panel="edit">
+<div class="edit-layout">
+<div class="ed-col">
+<div class="edit-stage">
+<pre id="edit-gutter"></pre>
+<div class="ed-stack" id="ed-stack">
+<pre id="edit-hl" aria-hidden="true"></pre>
+<textarea id="edit-area" wrap="off" spellcheck="false" aria-label="Markdown 正文编辑器"></textarea>
+<div class="annot-bubble" id="annot-bubble" hidden>
+<div class="ab-title"><span data-icon="comment"></span>添加批注 <span class="muted" id="ab-lines"></span></div>
+<input id="annot-input" class="input" placeholder="批注意见…" aria-label="批注内容">
+<div class="ab-row"><button class="btn" id="annot-cancel" type="button">取消</button><button class="btn btn-primary" id="annot-ok" type="button">添加批注</button></div>
+</div>
+</div>
+</div>
+<div class="ed-status">
+<span>字数 <b id="ed-chars">0</b></span>
+<span id="ed-saved">未保存</span>
+<span class="st-ai">AI 档案 <b id="ed-ai">…</b></span>
+<button class="btn btn-primary" id="edit-save-btn" style="margin-left:auto" title="⌘S / Ctrl+S"><span data-icon="check"></span>保存正文</button>
+</div>
+</div>
+<div class="pv-stage"><iframe id="live-frame" title="实时预览" sandbox="allow-same-origin"></iframe></div>
+<div class="annot-side" id="annot-side">
+<p class="action-title" id="annot-title">批注（0）</p>
+<div class="action-row" style="margin-bottom:10px">
+<button class="btn" id="edit-annotate-toggle">批注栏：开</button>
+<button class="btn" id="edit-annotate-ai"><span data-icon="edit"></span>按批注 AI 修改</button>
+</div>
+<div id="annot-list"></div>
+</div>
+</div>
+</div>
+<div class="tab-panel" id="panel-variants" data-panel="variants" hidden>
+<div class="vgrid" id="variant-grid"></div>
+<div style="margin-top:var(--space-md)"><button class="btn btn-primary" id="variants-batch-btn"><span data-icon="arrow-right"></span>四平台一键生成变体</button></div>
+</div>
+<div class="tab-panel" id="panel-checks" data-panel="checks" hidden>
+<div class="check-summary" id="check-summary"></div>
+<div class="check-list" id="check-list"></div>
+</div>
+<div class="tab-panel" id="panel-preview" data-panel="preview" hidden>
+<div class="preview-stage" id="preview-stage">
+<iframe class="preview-frame" id="preview-frame" title="渲染预览"></iframe>
+</div>
+<div class="empty" id="preview-empty" hidden>
+<div class="empty-icon" data-icon="eye"></div>
+<div class="empty-title">暂不可渲染</div>
+<div class="empty-text">解析或渲染失败，先运行 musespiral check 排查。</div>
+</div>
+</div>
+<div class="tab-panel" id="panel-review" data-panel="review" hidden>
+<div id="review-stage"></div>
+<div class="empty" id="review-empty" hidden>
+<div class="empty-icon" data-icon="file"></div>
+<div class="empty-title">无配对笔记</div>
+<div class="empty-text">没有配对原笔记。用 musespiral review 生成对照后刷新。</div>
+</div>
+</div>
+<div class="tab-panel" id="panel-versions" data-panel="versions" hidden>
+<div class="ver-bar">
+<label class="field">旧版 <select class="input" id="ver-a" aria-label="对比旧版"></select></label>
+<label class="field">新版 <select class="input" id="ver-b" aria-label="对比新版"></select></label>
+<button class="btn btn-primary" id="ver-diff-btn">对比</button>
+</div>
+<p class="action-hint" id="ver-note">版本池由每次保存自动留档（滚动保留 5 份，MUSESPIRAL_BAK_KEEP 可调）。选两版对比；diff 底部可按版恢复（恢复可再恢复）。</p>
+<div id="ver-stage"></div>
+</div>
+<div class="tab-panel" id="panel-actions" data-panel="actions" hidden>
+<div class="action-group"><h3 class="action-title">一键到物料</h3><button class="btn btn-primary" id="pipe-run">一键到物料</button><div id="pipe-progress"></div></div>
+<div class="action-group">
+<h3 class="action-title">生成平台变体</h3>
+<p class="action-hint">adapt · 同目录生成 &lt;stem&gt;.&lt;平台&gt;.md 变体；同名已存在拒绝覆盖。</p>
+<div class="action-buttons" id="adapt-buttons"></div>
+<button class="btn" id="batch-btn"><span data-icon="arrow-right"></span>四平台一键生成变体</button>
+</div>
+<div class="action-group">
+<h3 class="action-title">生成物料包</h3>
+<p class="action-hint">pack · 生成 README / payload / checks / cover 四件套。</p>
+<div class="action-row">
+<label class="field">平台 <select id="pack-platform"></select></label>
+<label class="field">变体 <select id="pack-variant"></select></label>
+<button class="btn" id="pack-btn">生成物料包</button>
+</div>
+</div>
+<div class="action-group">
+<h3 class="action-title">创建草稿</h3>
+<p class="action-hint">publish · 仅创建草稿，绝不提交发表；需已配置凭证与封面。</p>
+<button class="btn btn-primary" id="publish-btn"><span data-icon="plus"></span>创建草稿</button>
+</div>
+</div>
+</section>
+<!--BUILD:VIEW:compose-->
+<!--BUILD:VIEW:publish-->
+<!--BUILD:VIEW:insight-->
+<!--BUILD:VIEW:settings-->
+<!--BUILD:VIEW:plugins-->
+<!--BUILD:VIEW:plugin-run-->
+</main>
+<footer class="statusbar">
+<div class="statusbar-inner">
+<span class="status-item">musespiral v0.4.0</span>
+<span class="status-sep">·</span>
+<span class="status-item" id="server-addr">127.0.0.1:8766</span>
+<span class="status-sep">·</span>
+<span class="status-item status-root">root: <span id="root-path">默认（服务 --root）</span></span>
+</div>
+</footer>
+</div>
+</div>
+<!--BUILD:JS1-->
+<!--BUILD:JS2-->
+</body>
+</html>

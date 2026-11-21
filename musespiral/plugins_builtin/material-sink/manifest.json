@@ -1,0 +1,26 @@
+{
+  "id": "material-sink",
+  "version": "1.0.0",
+  "kind": "sink",
+  "name": { "zh": "素材落库", "en": "Material Sink" },
+  "description": {
+    "zh": "把 article-writer 的图文稿落进既有素材库（流水线终点，kind=sink）。三条既有纪律：① preview 态——AI 产物一律 triage.enabled=false（不进推荐），人工采纳（triage 面 enabled=true）才正式，config.triage 初值也改不了这条红线（tags 初值走素材库 tags 唯一契约：规范化+限额 ≤12 个/单标签 ≤24 字符）；② 不新增 MATERIAL_TYPES——type=text + payload.meta.sub_type=video_article（沿 E-5 人物卡/N-2 同一条 sub_type 纪律）；③ 血统可溯——provenance.chain 记 {from_id: <pipeline run_id>, op: plugin_pipeline}，图文稿永远能指回产生它的那次流水线运行。稿件+帧图随稿持久化到素材仓 durable 区（~/.musespiral/materials/pipeline/<run_id>/，payload.meta.images 记 durable 副本路径——run workspace 归 LRU 保留策略管辖，不随 run 剪除变死引用）；正式采纳时可走图片上传面从 durable 副本转正式图片素材。同 run 重落幂等（同 id 同稿返回既有行），同 id 异稿拒（immutable 红线）。"
+  },
+  "inputs": {
+    "article": { "type": "article", "required": true },
+    "images": { "type": "images", "required": false, "default": [] }
+  },
+  "outputs": {
+    "material": { "type": "material" }
+  },
+  "runtime": { "type": "python", "entry": "plugin.py:run", "timeout_s": 120 },
+  "requires": [],
+  "permissions": ["fs:read"],
+  "config_schema": {
+    "triage": {
+      "type": "object",
+      "default": {},
+      "description": "初始分诊值（read/starred/tags 三键可设；enabled 恒 false——preview 红线，人工采纳才翻 true）"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "fake-key-segment",
+  "version": "0.1.0",
+  "kind": "process",
+  "name": {"zh": "假·关键段识别", "en": "Fake Key Segment"},
+  "description": {"zh": "夹具插件：按关键词命中选关键段（真实实现走 AI，本夹具为规则切片降级形态）"},
+  "inputs": {
+    "segments": {"type": "segments", "required": true}
+  },
+  "outputs": {
+    "ranges": {"type": "ranges"},
+    "score": {"type": "number"}
+  },
+  "runtime": {"type": "python", "entry": "plugin.py:run", "timeout_s": 30},
+  "permissions": ["fs:read", "fs:write:output"],
+  "config_schema": {
+    "keywords": {"type": "string[]", "default": ["关键", "重点", "总结"]}
+  }
+}

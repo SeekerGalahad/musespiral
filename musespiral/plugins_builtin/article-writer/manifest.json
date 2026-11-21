@@ -1,0 +1,32 @@
+{
+  "id": "article-writer",
+  "version": "1.0.0",
+  "kind": "process",
+  "name": { "zh": "图文稿成稿", "en": "Article Writer" },
+  "description": {
+    "zh": "把转写段落组织成带时间戳锚点的结构化图文稿（正典 §9.3：不是纯 markdown——每个关键段以 [00:04:12](#t=252) 锚定，读者能从文字跳回视频原处）。双组织模式（评审 §3.2）：chronological=按视频时间顺序保留叙事流；thematic=AI 按主题重组，同一概念在不同时间出现合并成一段、每段可带多个锚点。双路径：AI 已配置 → chat_policed(task=plugin_article_writer) 返结构化段落 JSON（锚点强制收敛到段落时间戳网格）；未配置或失败 → 模板化拼装（按 ranges 顺序引原文，降级只支持 chronological）。关键帧按 ts 插入对应段落之后（图注含时间戳）；产物落本节点 artifacts 目录（<slug>.md + images/），frontmatter 带 source_video/video_duration/anchor_map/organize_mode。"
+  },
+  "inputs": {
+    "transcript": { "type": "segments", "required": true },
+    "images": { "type": "images", "required": false, "default": [] },
+    "ranges": { "type": "ranges", "required": false, "default": [] },
+    "title": { "type": "string", "required": false, "default": "" },
+    "media_path": { "type": "file/path", "required": false, "default": "" },
+    "duration_s": { "type": "number", "required": false, "default": 0 }
+  },
+  "outputs": {
+    "article": { "type": "article" },
+    "anchor_map": { "type": "ext/anchor_map" }
+  },
+  "runtime": { "type": "python", "entry": "plugin.py:run", "timeout_s": 600 },
+  "requires": [],
+  "permissions": ["fs:read", "fs:write:output"],
+  "uses_ai": true,
+  "config_schema": {
+    "mode": {
+      "type": "string",
+      "default": "chronological",
+      "description": "chronological=按视频时间顺序组织（叙事流）；thematic=AI 按主题重组（概念跨时间合并，一段多锚）——AI 不可用时自动降级 chronological 模板拼装"
+    }
+  }
+}

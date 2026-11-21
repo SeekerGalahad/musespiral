@@ -1,0 +1,24 @@
+{
+  "id": "local-scan",
+  "version": "1.0.0",
+  "kind": "source",
+  "name": { "zh": "本地媒体扫描", "en": "Local Media Scan" },
+  "description": {
+    "zh": "在用户显式给出的 roots 白名单目录里发现音视频文件，产出 markdown 清单（路径|大小|时长|格式，按大小降序），用户从清单点选一个进入 local-file——只产清单不产批量文件（v1 契约 file/path 是单值，不改）。安全边界：拒绝空 roots 与 / 根、硬编码排除 node_modules/.git/Library/Caches/Library Application Support/Library Containers（微信/QQ 隐私）、符号链接不跟随、权限拒绝静默计数、遍历限额 5 万条目防全盘扫描卡死；ffprobe 时长仅对发现的文件并发 ≤4 探测、单文件 3s 超时、失败留空不失败。"
+  },
+  "inputs": {
+    "roots":       { "type": "string", "required": true },
+    "max_depth":   { "type": "number", "required": false, "default": 3 },
+    "min_size_mb": { "type": "number", "required": false, "default": 1 },
+    "pattern":     { "type": "string", "required": false, "default": "mp4,mov,mkv,avi,webm,wav,mp3,m4a,flac" }
+  },
+  "outputs": {
+    "files":    { "type": "text/markdown" },
+    "count":    { "type": "number" },
+    "manifest": { "type": "text/markdown" }
+  },
+  "runtime": { "type": "python", "entry": "plugin.py:run", "timeout_s": 300 },
+  "requires": ["ffprobe"],
+  "permissions": ["fs:read"],
+  "config_schema": {}
+}

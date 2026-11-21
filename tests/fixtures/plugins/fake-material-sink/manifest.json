@@ -1,0 +1,15 @@
+{
+  "id": "fake-material-sink",
+  "version": "0.1.0",
+  "kind": "sink",
+  "name": {"zh": "假·素材落库", "en": "Fake Material Sink"},
+  "description": {"zh": "夹具插件：把成稿写入 output 目录并回写字数摘要（真实实现走 materials preview 落库）"},
+  "inputs": {
+    "article": {"type": "text/markdown", "required": true}
+  },
+  "outputs": {
+    "material": {"type": "material"}
+  },
+  "runtime": {"type": "python", "entry": "plugin.py:run", "timeout_s": 30},
+  "permissions": ["fs:write:output"]
+}

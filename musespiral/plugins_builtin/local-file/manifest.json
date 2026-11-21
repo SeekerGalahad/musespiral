@@ -1,0 +1,22 @@
+{
+  "id": "local-file",
+  "version": "1.0.0",
+  "kind": "source",
+  "name": { "zh": "本地媒体文件", "en": "Local Media File" },
+  "description": {
+    "zh": "校验并接住一个本地音视频文件，作为流水线输入源：存在/可读/常规文件/后缀白名单四道门，时长经 ffprobe 尽力探测（不可用时留空不失败）。"
+  },
+  "inputs": {
+    "path": { "type": "file/path", "required": true },
+    "media_kind": { "type": "string", "required": false, "default": "" }
+  },
+  "outputs": {
+    "file": { "type": "file/path" },
+    "size": { "type": "number" },
+    "duration_s": { "type": "number" }
+  },
+  "runtime": { "type": "python", "entry": "plugin.py:run", "timeout_s": 60 },
+  "requires": ["ffprobe"],
+  "permissions": ["fs:read"],
+  "config_schema": {}
+}

@@ -1,0 +1,39 @@
+{
+  "id": "subtitle",
+  "version": "1.0.0",
+  "kind": "process",
+  "name": {
+    "zh": "字幕解析",
+    "en": "Subtitle Parser"
+  },
+  "description": {
+    "zh": "把已有的 .srt/.vtt 字幕文件解析为 segments（时间戳+文本）——**跳过语音识别**。若视频本身带人工校对过的字幕，这条路比 transcribe 快约 100 倍且准确率更高（人工字幕没有同音字误识）。输出与 transcribe 完全同构，下游 key-segment/frame-grab/article-writer 零改动即可用。"
+  },
+  "inputs": {
+    "subtitle_path": { "type": "file/path", "required": true },
+    "media_path": { "type": "file/path", "required": false }
+  },
+  "outputs": {
+    "transcript": { "type": "segments" },
+    "duration_s": { "type": "number" },
+    "source_kind": { "type": "string" },
+    "media_path": { "type": "file/path" }
+  },
+  "runtime": { "type": "python", "entry": "plugin.py:run", "timeout_s": 60 },
+  "requires": [],
+  "permissions": ["fs:read"],
+  "config_schema": {
+    "merge_short_ms": {
+      "type": "number",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 5000,
+      "description": "合并间隔小于此值的相邻段（毫秒）；0=不合并"
+    },
+    "strip_tags": {
+      "type": "boolean",
+      "default": true,
+      "description": "剥除字幕里的 <i>/<b>/<font> 等标记"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<!-- 构造的公众号文章 fixture（F18 theme learn 测试与冒烟共用）。
+     已知内联样式频次（供断言；theme_learn 只统计 section/p/span）：
+       color:      #333333 ×3（正文）> #c2410c ×2（强调）> #999999 ×1（署名）
+       font-size:  15px ×3 > 17px ×1
+       line-height: 1.75 ×3 > 1.5 ×1
+     期望 learn 产物：colors.text=#333333 / colors.primary=#c2410c /
+     typography.font_size=15px / typography.line_height=1.75。 -->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="author" content="musespiral fixture">
+  <title>缓存优化三步走</title>
+</head>
+<body>
+<div id="img-content" class="rich_media_global">
+  <h1 class="rich_media_title">缓存优化三步走</h1>
+  <div class="rich_media_meta">musespiral fixture</div>
+  <div id="js_content" class="rich_media_content">
+    <section style="color: #333333; font-size: 15px; line-height: 1.75;">
+      <p style="color: #333333; font-size: 15px; line-height: 1.75;">第一步，先量再调：用现有监控拿到命中率与慢查询清单，别凭感觉下结论。</p>
+      <p style="color: #333333; font-size: 15px; line-height: 1.75;">第二步，收窄键：大对象拆字段、长键做摘要，缓存的是「取得最多的那部分」。</p>
+      <p>第三步，给失效留退路：<span style="color: #c2410c;">同一份数据只留一个失效口径</span>，回源加合并，雪崩就少了大半。</p>
+      <p style="color: #c2410c; font-size: 17px;">检查清单：命中率、回源峰值、失效口径，三个数字对齐再谈收益。</p>
+      <p style="color: #999999; line-height: 1.5;">——musespiral fixture 构造样例，供 theme learn 频次断言。</p>
+    </section>
+  </div>
+</div>
+</body>
+</html>

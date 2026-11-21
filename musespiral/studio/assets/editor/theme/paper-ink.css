@@ -1,0 +1,42 @@
+/* paper-ink — musespiral Studio 纸墨主题（本地定制，cdnjs 无此 theme）。
+ * 依赖 core.css 的 :root 变量（--paper-*/--ink-*/--line-*/--wash/--tint/--font-mono），
+ * 亮/暗双色随 html[data-theme] 与 prefers-color-scheme 自动切换。
+ * 加载顺序：必须在 codemirror.min.css 之后（同特异性靠后者胜出）。
+ */
+.CodeMirror{background:var(--paper-1);color:var(--ink-1);font-family:var(--font-mono);font-size:var(--fs-caption);line-height:1.7;border:1px solid var(--line-1);border-radius:var(--radius-btn)}
+.CodeMirror-gutters{background:var(--paper-0);border-right:1px solid var(--line-1)}
+.CodeMirror-linenumber{color:var(--ink-3);padding:0 6px 0 8px}
+.CodeMirror-cursor{border-left:1.5px solid var(--ink-1)}
+.CodeMirror-selected{background:var(--wash)}
+.CodeMirror-focused .CodeMirror-selected{background:color-mix(in srgb,var(--ink-1) 13%,transparent)}
+.CodeMirror-activeline-background{background:var(--tint)}
+.CodeMirror-matchingbracket{color:var(--vermilion) !important;text-decoration:underline}
+.CodeMirror-matchingtag{background:var(--tint)}
+.CodeMirror-scrollbar-filler,.CodeMirror-gutter-filler{background:var(--paper-1)}
+/* markdown mode token 映射（纸墨：正文墨色为主， Sparse accent 用工作台五色） */
+.cm-header{color:var(--ink-1);font-weight:700}
+.cm-header-1{color:var(--ink-1)}
+.cm-header-2{color:var(--ink-1)}
+.cm-header-3,.cm-header-4,.cm-header-5,.cm-header-6{color:var(--ink-2);font-weight:600}
+.cm-link{color:var(--indigo)}
+.cm-url{color:var(--indigo)}
+.cm-string{color:var(--jade)}
+.cm-comment{color:var(--ink-2);background:var(--tint)}
+.cm-quote{color:var(--ink-2)}
+.cm-hr{color:var(--ink-3)}
+.cm-em{font-style:italic}
+.cm-strong{font-weight:700}
+.cm-strikethrough{text-decoration:line-through}
+.cm-formatting{color:var(--ink-3)}
+.cm-formatting-header{color:var(--vermilion);font-weight:400}
+.cm-variable-2,.cm-variable-3,.cm-keyword{color:var(--ink-1)}
+.cm-tag,.cm-attribute{color:var(--indigo)}
+.cm-image{color:var(--jade)}
+.cm-error{color:var(--crimson)}
+/* addon/search 对话框与跳转提示适配纸墨 */
+.CodeMirror-dialog{background:var(--paper-1);color:var(--ink-1);border-bottom:1px solid var(--line-1);font-family:var(--font-body);font-size:var(--fs-caption)}
+.CodeMirror-dialog input{font-family:var(--font-mono);color:var(--ink-1);background:var(--paper-1);border:1px solid var(--line-1);border-radius:var(--radius-btn);padding:3px 8px;outline:none}
+.CodeMirror-dialog input:focus{border-color:var(--vermilion)}
+.CodeMirror-search-hint{color:var(--ink-3)}
+.CodeMirror-search-hint{color:var(--ink-3)}
+.cm-searching{background:var(--wash);border-top:1px solid var(--line-2);border-bottom:1px solid var(--line-2)}

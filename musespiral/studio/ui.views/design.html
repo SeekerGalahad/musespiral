@@ -1,0 +1,30 @@
+<section id="view-design" data-view="design" class="view" hidden>
+<div class="amb amb-design"></div>
+<div class="view-head"><div>
+<h1 class="view-title">视觉编辑</h1>
+</div>
+<div class="action-row">
+<select id="dv-art" class="input" aria-label="选择文章"></select>
+<button class="btn" id="dv-load-btn">载入</button>
+<span class="dv-dirty" id="dv-dirty" hidden>●</span>
+<button class="btn" id="dv-save-btn" disabled>存稿</button>
+<button class="btn btn-primary" id="dv-export-btn" disabled>导出 PNG</button>
+</div></div>
+<div class="dv-layout">
+<aside class="dv-side">
+<div class="dv-grp"><div class="chips" id="dv-specs"><button class="chip" data-dspec="xhs-3x4">3:4</button><button class="chip" data-dspec="xhs-4x5">4:5</button><button class="chip" data-dspec="square">1:1</button></div></div>
+<div class="dv-grp"><div class="dv-cap">背景色</div><div class="chips dv-colors" id="dv-colors"></div><p class="dv-hint">仅主题色槽，禁任意色值（F72-T2）</p></div>
+<div class="dv-grp"><div class="dv-cap">排版</div><div class="chips" id="dv-fs"><button class="chip" data-dfs="S">S</button><button class="chip" data-dfs="M">M</button><button class="chip" data-dfs="L">L</button></div><div class="chips" id="dv-al"><button class="chip" data-dal="left">左</button><button class="chip" data-dal="center">中</button><button class="chip" data-dal="right">右</button></div></div>
+<div class="dv-grp"><div class="action-row"><button class="btn" id="dv-fwd" disabled>前移</button><button class="btn" id="dv-bwd" disabled>后移</button></div></div>
+<span class="undo-hud" id="dv-undo" hidden></span>
+</aside>
+<div class="dv-stage-wrap" id="dv-wrap">
+<div class="dv-skel" id="dv-skel" hidden></div>
+<div class="empty" id="dv-empty" hidden><div class="empty-icon" data-icon="image"></div><div class="empty-title">未载入设计稿</div><div class="empty-text">选文章点「载入」；无稿生成 xhs-card 缺省稿。</div></div>
+<div class="dv-stage" id="dv-stage" hidden></div>
+<input id="dv-tin" class="dv-tin" hidden aria-label="行内编辑文本">
+</div>
+</div>
+<div class="modal-overlay" id="dv-sw" hidden><div class="modal"><h3 class="modal-title">切换规格</h3><p class="modal-message">有未存修改：先存稿保留，或丢弃后切换。</p><div class="modal-actions"><button class="btn btn-secondary" id="dv-sw-cancel">取消</button><button class="btn btn-danger" id="dv-sw-drop">丢弃</button><button class="btn btn-primary" id="dv-sw-save">先存稿</button></div></div></div>
+<div class="modal-overlay" id="dv-ex" hidden><div class="modal"><h3 class="modal-title">导出 PNG</h3><div class="chips" id="dv-ex-specs"><button class="chip is-active" data-exspec="cur">当前</button><button class="chip" data-exspec="all">全部三规格</button></div><div class="chips" id="dv-ex-route"><button class="chip is-active" data-exroute="a">A 前端即存</button><button class="chip" data-exroute="b">B 后端任务</button></div><div class="modal-actions"><button class="btn btn-secondary" id="dv-ex-cancel">取消</button><button class="btn btn-primary" id="dv-ex-go">开始导出</button></div></div></div>
+</section>

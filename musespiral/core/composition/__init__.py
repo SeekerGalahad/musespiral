@@ -1,0 +1,123 @@
+"""创作台领域包（第十八期 §二 创作台重构正典）——一等公民，非 service 附庸。
+
+四模块（L2 Domain 纯逻辑零 I/O，架构门锁定）：
+  blocks.py    Block/锚协议 draft.md 双向映射（§2.2）
+  protocol.py  AI 输出定界解析 + 无锚回退匹配（锚→hash→相似度→新块；
+               歧义恒新块——铁律）
+  session.py   CompositionSession 聚合 + Decision 三态校验 + 素材节选预算
+               + 轮次 diff 摘要（K=2 窗口）
+  merge.py     三态合并（keep/adopt_edited/discard；幂等）+ habits 训练对
+  outline.py   G-T2 大纲模式纯数据面（OutlineSection+校验+序列化；零 I/O）
+  novel.py     E-5 小说模式纯数据面（人物卡校验/章节切分/前情提要输入/
+               说话风格冲突检测；零 I/O）
+"""
+from .blocks import (
+    ANCHOR_RE,
+    KINDS,
+    ORIGIN_AI,
+    ORIGIN_HUMAN,
+    ORIGIN_SOURCE,
+    Block,
+    blocks_from_markdown,
+    markdown_from_blocks,
+)
+from .merge import apply_decisions, habits_pairs
+from .outline import (
+    SECTION_STATUSES,
+    STATUS_APPROVED,
+    STATUS_EXPANDED,
+    STATUS_PENDING,
+    OutlineSection,
+    from_json as outline_from_json,
+    to_json as outline_to_json,
+    validate_sections,
+)
+from .protocol import ParsedBlock, match_round, parse_ai_output
+from .novel import (
+    CHARACTER_FIELDS,
+    DEFAULT_CONFLICT_RULES,
+    SUB_TYPE_CHARACTER,
+    Chapter,
+    character_from_meta,
+    detect_conflicts,
+    is_dialogue_line,
+    normalize_character,
+    prior_chapters_text,
+    render_character,
+    split_chapters,
+    validate_character,
+    validate_rules,
+)
+from .session import (
+    ACTIONS,
+    KIND_ARTICLE,
+    KIND_NOVEL,
+    PER_SOURCE_BUDGET,
+    ROLLING_SUMMARY_STEP,  # G-T4（并行线；session.py 已定义，补导出解导入阻塞）
+    ROUND_CONTEXT_K,
+    SESSION_BUDGET,
+    SESSION_KINDS,
+    STATUS_ADOPTED,
+    STATUS_COMPOSING,
+    CompositionSession,
+    Round,
+    SourceRef,
+    excerpt_sources,
+    round_diff_summary,
+    select_sections,
+    validate_decision,
+)
+
+__all__ = [
+    "ANCHOR_RE",
+    "KINDS",
+    "ORIGIN_AI",
+    "ORIGIN_HUMAN",
+    "ORIGIN_SOURCE",
+    "ACTIONS",
+    "CHARACTER_FIELDS",
+    "DEFAULT_CONFLICT_RULES",
+    "KIND_ARTICLE",
+    "KIND_NOVEL",
+    "PER_SOURCE_BUDGET",
+    "ROLLING_SUMMARY_STEP",  # G-T4（并行线）
+    "ROUND_CONTEXT_K",
+    "SESSION_BUDGET",
+    "SESSION_KINDS",
+    "SUB_TYPE_CHARACTER",
+    "STATUS_ADOPTED",
+    "STATUS_COMPOSING",
+    "STATUS_PENDING",
+    "STATUS_APPROVED",
+    "STATUS_EXPANDED",
+    "SECTION_STATUSES",
+    "Block",
+    "Chapter",
+    "ParsedBlock",
+    "OutlineSection",
+    "CompositionSession",
+    "Round",
+    "SourceRef",
+    "apply_decisions",
+    "character_from_meta",
+    "detect_conflicts",
+    "is_dialogue_line",
+    "normalize_character",
+    "outline_from_json",
+    "outline_to_json",
+    "prior_chapters_text",
+    "render_character",
+    "split_chapters",
+    "validate_character",
+    "validate_rules",
+    "validate_sections",
+    "blocks_from_markdown",
+    "excerpt_sources",
+    "habits_pairs",
+    "markdown_from_blocks",
+    "match_round",
+    "parse_ai_output",
+    "round_diff_summary",
+    "select_sections",
+    "validate_decision",
+]

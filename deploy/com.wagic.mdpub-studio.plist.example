@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- musespiral Studio 常驻模板（可选）：登录自启 + 崩溃自动拉起
+     用法：
+       1. bash scripts/setup.sh 先建好 .venv
+       2. 把下方两个 ABSOLUTE 路径替换为你的实际路径（musespiral 可执行文件 / 文章工作目录）
+       3. 存为 ~/Library/LaunchAgents/com.wagic.musespiral-studio.plist
+       4. launchctl load ~/Library/LaunchAgents/com.wagic.musespiral-studio.plist
+     卸载：launchctl unload + 删除 plist
+     注意：--no-open 必带（launchd 环境弹浏览器无意义且报错落 err 日志）；
+           日志在 /tmp/musespiral-studio.{log,err}，排查先看 err。 -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.wagic.musespiral-studio</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/ABSOLUTE/PATH/to/researchEverything/modules/musespiral/.venv/bin/musespiral</string>
+        <string>studio</string>
+        <string>--root</string>
+        <string>/ABSOLUTE/PATH/to/your/articles</string>
+        <string>--port</string>
+        <string>8766</string>
+        <string>--no-open</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/musespiral-studio.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/musespiral-studio.err</string>
+</dict>
+</plist>

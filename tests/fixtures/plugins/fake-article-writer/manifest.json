@@ -1,0 +1,19 @@
+{
+  "id": "fake-article-writer",
+  "version": "0.1.0",
+  "kind": "process",
+  "name": {"zh": "假·成稿", "en": "Fake Article Writer"},
+  "description": {"zh": "夹具插件：按 ranges 组织带时间戳锚的 markdown（真实实现走 AI 成稿）"},
+  "inputs": {
+    "segments": {"type": "segments", "required": true},
+    "ranges": {"type": "ranges", "required": true}
+  },
+  "outputs": {
+    "article": {"type": "text/markdown"}
+  },
+  "runtime": {"type": "python", "entry": "plugin.py:run", "timeout_s": 30},
+  "permissions": ["fs:read", "fs:write:output"],
+  "config_schema": {
+    "title": {"type": "string", "default": "转写稿"}
+  }
+}

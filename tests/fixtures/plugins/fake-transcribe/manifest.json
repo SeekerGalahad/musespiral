@@ -1,0 +1,20 @@
+{
+  "id": "fake-transcribe",
+  "version": "0.1.0",
+  "kind": "process",
+  "name": {"zh": "假·语音转写", "en": "Fake Transcribe"},
+  "description": {"zh": "夹具插件：把文本文件逐行切成分段时间戳（真实实现=whisper，本夹具零外部依赖）"},
+  "inputs": {
+    "media_path": {"type": "file/path", "required": true},
+    "language": {"type": "string", "required": false, "default": "auto"}
+  },
+  "outputs": {
+    "transcript": {"type": "segments"},
+    "duration_s": {"type": "number"}
+  },
+  "runtime": {"type": "python", "entry": "plugin.py:run", "timeout_s": 60},
+  "permissions": ["fs:read", "fs:write:output"],
+  "config_schema": {
+    "seg_seconds": {"type": "number", "default": 2.5}
+  }
+}

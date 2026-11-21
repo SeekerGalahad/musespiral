@@ -1,0 +1,15 @@
+{
+  "id": "fake-local-file",
+  "version": "0.1.0",
+  "kind": "source",
+  "name": {"zh": "假·本地文件源", "en": "Fake Local File"},
+  "description": {"zh": "夹具插件：校验路径存在与后缀白名单，输出 file/path 引用（不复制）"},
+  "inputs": {
+    "path": {"type": "string", "required": true}
+  },
+  "outputs": {
+    "media": {"type": "file/path"}
+  },
+  "runtime": {"type": "python", "entry": "plugin.py:run", "timeout_s": 10},
+  "permissions": ["fs:read"]
+}

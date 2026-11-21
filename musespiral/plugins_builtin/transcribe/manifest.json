@@ -1,0 +1,33 @@
+{
+  "id": "transcribe",
+  "version": "1.0.0",
+  "kind": "process",
+  "name": { "zh": "语音转写", "en": "Transcribe" },
+  "description": {
+    "zh": "faster-whisper 把音轨转成带时间戳与质量信号的文字：每段携带 avg_logprob/no_speech_prob（G-1 低质量信号，行业通行口径：<-1.0 低置信、>0.6 疑似非语音）。ffmpeg 先抽 16kHz 单声道音轨；VAD 默认开启（防配乐幻听）、condition_on_previous_text 恒关（防长视频复读）。faster-whisper 为可选依赖，模型权重不自动下载。"
+  },
+  "inputs": {
+    "media_path": { "type": "file/path", "required": true },
+    "language": { "type": "string", "required": false, "default": "zh" },
+    "hotwords": { "type": "string[]", "required": false }
+  },
+  "outputs": {
+    "transcript": { "type": "segments" },
+    "duration_s": { "type": "number" }
+  },
+  "runtime": { "type": "python", "entry": "plugin.py:run", "timeout_s": 7200 },
+  "requires": ["ffmpeg"],
+  "permissions": ["fs:read", "fs:write:tmp", "exec:subprocess"],
+  "config_schema": {
+    "model": {
+      "type": "string",
+      "default": "large-v3-turbo",
+      "description": "模型档位名（large-v3-turbo/large-v3/small）或已下载模型的本地目录路径"
+    },
+    "vad_filter": {
+      "type": "boolean",
+      "default": true,
+      "description": "silero VAD 过滤静音/背景音乐——视频必开（防幻听，精度手册 §5.3）"
+    }
+  }
+}

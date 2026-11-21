@@ -1,0 +1,31 @@
+{
+  "id": "key-segment",
+  "version": "1.0.0",
+  "kind": "process",
+  "name": { "zh": "关键片段切片", "en": "Key Segment" },
+  "description": {
+    "zh": "从转写段落里挑出最有信息量的关键片段（ranges），供 frame-grab 抽帧/裁剪。双路径：AI 已配置 → chat_policed(task=plugin_key_segment) 一次调用返 JSON（可经 ai.json routing/prompts.d 独立调优）；AI 未配置或调用失败 → 降级规则切片（段落密度/标题词/停顿长度打分），绝不因 AI 不可用卡死流水线。置信度低于 min_confidence 的片段标 ⚠️ 但不丢弃（提示不拦截）。若 workspace 里存在上游编辑落盘的 segments.edited.json 则优先读编辑版。"
+  },
+  "inputs": {
+    "transcript": { "type": "segments", "required": true }
+  },
+  "outputs": {
+    "ranges": { "type": "ranges" }
+  },
+  "runtime": { "type": "python", "entry": "plugin.py:run", "timeout_s": 300 },
+  "requires": [],
+  "permissions": ["fs:read"],
+  "uses_ai": true,
+  "config_schema": {
+    "max_segments": {
+      "type": "number",
+      "default": 8,
+      "description": "最多选出多少个关键片段（1-50，超出裁断）"
+    },
+    "min_confidence": {
+      "type": "number",
+      "default": 0.4,
+      "description": "置信度低于此值的片段在 label 前标 ⚠️（不丢弃，提示不拦截）"
+    }
+  }
+}

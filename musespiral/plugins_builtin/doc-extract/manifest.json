@@ -1,0 +1,28 @@
+{
+  "id": "doc-extract",
+  "version": "1.0.0",
+  "kind": "process",
+  "name": { "zh": "文档提取", "en": "Doc Extract" },
+  "description": {
+    "zh": "把 PDF（文字版）/DOCX/EPUB/Markdown/TXT 提取成 text/markdown，接进既有素材→提炼流水线。轻量组合选型（2026-11-20 裁决，不用 docling）：pdfplumber（表格强）+python-docx（段落+表格保序）+ebooklib/bs4（按 spine 章节拼接）+标准库。扫描版 PDF 可读拒绝：全文可提取字符/页数均值低于 min_chars_per_page 即判「疑似扫描版，需 OCR（v2 提供）」，绝不静默返回空文（真素材判例：静默空文会被下游当成「文档无内容」）。四个解析库全部可选依赖：未装时插件加载正常、/check 报 MISSING_DEP、运行给可读安装指引，不让整包 import 失败。"
+  },
+  "inputs": {
+    "doc_path": { "type": "file/path", "required": true },
+    "title": { "type": "string", "required": false, "default": "" }
+  },
+  "outputs": {
+    "markdown": { "type": "text/markdown" },
+    "text": { "type": "text/markdown" },
+    "pages": { "type": "number" }
+  },
+  "runtime": { "type": "python", "entry": "plugin.py:run", "timeout_s": 600 },
+  "requires": [],
+  "permissions": ["fs:read"],
+  "config_schema": {
+    "min_chars_per_page": {
+      "type": "number",
+      "default": 50,
+      "description": "扫描版 PDF 拒绝阈值：全文可提取字符数 ÷ 页数 的均值低于此值 → 判疑似扫描版，可读拒绝（不静默返回空文）"
+    }
+  }
+}

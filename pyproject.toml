@@ -1,0 +1,53 @@
+[project]
+name = "musespiral"
+version = "0.4.0"
+license = "MIT"
+license-files = ["LICENSE"]
+description = "Markdown-driven WeChat Official Account publisher — generate & publish decoupled, with local preview"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.31.0",
+    "Pillow>=10.0.0",
+    "Pygments>=2.17.0",
+    "mistune>=3.0.0",
+    "python-frontmatter>=1.0.0",
+    "PyYAML>=6.0",
+    "click>=8.1.0",
+    "pydantic>=2.0.0",
+    # B 采集扩展（第二十一期 §十 R-B2 实施修订裁决引入——B 设计正典回写条目）
+    "feedparser>=6.0",
+    "readability-lxml>=0.9",
+    # G-T5 TTS 朗读（调研吸收 §六，2026-11-19；设计 §6.2 原文的 `pip install
+    # edge-tts` 收编进依赖表）：微软免费 TTS、零 API key。**出口性质**=包内打
+    # speech.platform.bing.com 一族——外部服务而非 LLM，**不经 musespiral 的 LLM
+    # gateway**、不进 ai.json 档案/TASKS/routing。服务层仍保留调用期探测
+    # （源码目录未 pip install -e 时给可读安装引导，不让整个包 import 失败）。
+    "edge-tts>=7.0",
+    # doc-extract 插件 EPUB 提取的 HTML 解析（2026-11-20 格式生态线：任务书
+    # 误记「bs4 已在依赖表」，实测不在——补正为正式依赖；PDF/DOCX/EPUB 三路
+    # 解析库（pdfplumber/python-docx/ebooklib）保持可选依赖，未装时插件
+    # /check 报 MISSING_DEP、运行给可读指引，不随主包强制）
+    "beautifulsoup4>=4.12",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+browser = ["playwright>=1.40"]
+
+[project.scripts]
+musespiral = "musespiral.cli:cli"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["musespiral*"]
+
+[tool.setuptools.package-data]
+# M1 双层产物（2026-11-18 前端多文件化）：壳 ui.html + assets/core.js|css 随包发布
+# `studio/assets/**` 取递归——M3 按视图拆分后 assets/views/*.js 落在子目录，单层
+# glob `studio/assets/*` 实测只收一层（嵌套层漏装，wheel 解包探针验证过）
+# `plugins_builtin/**`（首插件族 2026-11-20）：官方内置插件随包分发（非 Python
+# 包目录，loader 按文件路径加载；递归 glob 收 manifest.json + plugin.py）
+musespiral = ["core/content/themes_data/*.yaml", "studio/ui.html", "studio/assets/**", "browser/selectors/*.yaml", "plugins_builtin/**"]

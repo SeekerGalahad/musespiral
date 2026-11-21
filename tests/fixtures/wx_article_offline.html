@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<!-- R6 url_fetch 离线 fixture：og:title 标题 + div#js_content 正文
+     （两段正文 + h2 小标题 + strong 强调 + 一图 data-src + 一引用 blockquote）。
+     内联样式仿公众号 rich_media_content 风格；断言锚点见 tests/test_sources.py。
+     script 占位仿真实页面的内嵌 verify 检测代码（V2）——转换时应被跳过。 -->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta property="og:title" content="缓存一致性实战笔记">
+  <meta name="author" content="musespiral offline fixture">
+  <title>缓存一致性实战笔记</title>
+</head>
+<body>
+<div id="img-content" class="rich_media_global">
+  <h1 class="rich_media_title">缓存一致性实战笔记</h1>
+  <div class="rich_media_meta">musespiral offline fixture</div>
+  <div id="js_content" class="rich_media_content" style="color: #333333; font-size: 15px; line-height: 1.75;">
+    <p style="color: #333333; font-size: 15px; line-height: 1.75;">先说结论：缓存一致性不追求强一致，追求<strong>失效口径唯一</strong>——谁写谁失效，别让第二套口径偷偷补刀。</p>
+    <h2 style="color: #333333; font-size: 17px;">三步收敛方案</h2>
+    <p style="color: #333333; font-size: 15px; line-height: 1.75;">第一步先量再调，用命中率与慢查询清单定位；第二步收窄键，大对象拆字段；第三步给失效留退路，回源加合并。</p>
+    <p style="text-align: center;"><img src="" data-src="https://mmbiz.qpic.cn/mmbiz_png/offline_fixture/diagram_640.png" style="width: 640px;" alt="三步收敛示意图"></p>
+    <blockquote style="color: #888888; border-left: 3px solid #dddddd; padding-left: 10px;">
+      <p style="color: #888888;">示例数据来自本地压测环境，读者可按文末清单复现。</p>
+    </blockquote>
+  </div>
+</div>
+<script type="application/javascript">window.__verify = function(){ /* 占位：页面内嵌 verify 检测代码（V2），转换时应被跳过 */ };</script>
+</body>
+</html>

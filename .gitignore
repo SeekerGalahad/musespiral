@@ -1,0 +1,46 @@
+# 运行态与本地数据（.gitignore）
+# mdpub 自身状态目录
+.mdpub/
+*.md.bak
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+env/
+
+# 测试与缓存
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# 发布产物（本地生成，不入库）
+*.pack/
+*.poster.html
+.cards/
+
+# IDE / 系统
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*~
+
+# 本地配置与凭据（永不入库）
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+ai.json
+imagehost.json
+sources.json

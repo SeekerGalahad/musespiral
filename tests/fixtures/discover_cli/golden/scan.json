@@ -1,0 +1,18 @@
+[
+  {
+    "path": "<FIXTURES>/kb/13-source-analysis/snap-repo.md",
+    "title": "快照测试仓库 SnapRepo 源码分析",
+    "score": 75,
+    "score_breakdown": {
+      "depth": 40,
+      "uniqueness": 15,
+      "readability": 10,
+      "adaptability": 10
+    },
+    "series": "开源项目深度解读",
+    "series_no": 1,
+    "reason": "217 行深度内容，含设计思维提炼章节，含端到端数据流，可追溯 snap/repo，tags 4 项",
+    "skeleton_hint": "为什么 快照测试仓库 SnapRepo 源码分析 这么流行？——架构总览 深度解析",
+    "drafted": false
+  }
+]

@@ -1,0 +1,27 @@
+{
+  "id": "frame-grab",
+  "version": "1.0.0",
+  "kind": "process",
+  "name": { "zh": "关键帧抽取", "en": "Frame Grab" },
+  "description": {
+    "zh": "按 key-segment 的 ranges 从原视频抽帧（frame 模式：-ss 起点后移 0.3s 避开转场，-frames:v 1 单帧 jpg）或裁剪片段（clip 模式：-ss/-t -c copy 快切，切点落在关键帧）。产物全部落 workspace 本节点 artifacts 目录，不污染用户目录；输出携带 ts 与 source_range 保时间戳锚（images[k].ts → ranges[j].start → segments[i].start 三级可回溯）。若 workspace 存在编辑落盘的 ranges.edited.json 则优先读编辑版（删段/勾选加段生效）。"
+  },
+  "inputs": {
+    "ranges": { "type": "ranges", "required": true },
+    "media_path": { "type": "file/path", "required": true }
+  },
+  "outputs": {
+    "images": { "type": "images" },
+    "clips": { "type": "clips" }
+  },
+  "runtime": { "type": "python", "entry": "plugin.py:run", "timeout_s": 900 },
+  "requires": ["ffmpeg"],
+  "permissions": ["fs:read", "fs:write:output", "exec:subprocess"],
+  "config_schema": {
+    "mode": {
+      "type": "string",
+      "default": "frame",
+      "description": "frame=每个 range 抽一帧 jpg；clip=每个 range 裁一段 mp4（-c copy 快但切点在关键帧）"
+    }
+  }
+}

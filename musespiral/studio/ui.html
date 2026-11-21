@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>musespiral Studio</title>
+<link rel="stylesheet" href="assets/core.css">
+</head>
+<body>
+<div id="toast" class="toast" hidden><span id="toast-text"></span><button id="toast-action" class="btn btn-ghost" hidden></button></div>
+<div id="modal" class="modal-overlay" hidden>
+<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+<h3 class="modal-title" id="modal-title">确认操作</h3>
+<p class="modal-message" id="modal-message"></p>
+<div class="modal-actions">
+<button class="btn btn-secondary" id="modal-cancel">取消</button>
+<button class="btn btn-primary" id="modal-confirm">确认</button>
+</div>
+</div>
+</div>
+<div class="modal-overlay" id="clip-form" hidden>
+<div class="modal">
+<h3 class="modal-title" id="clip-title">剪藏 URL</h3>
+<div style="display:flex;flex-direction:column;gap:8px">
+<input id="clip-url" class="input" placeholder="URL（http(s) 开头；SSRF/robots 门生效）">
+<input id="clip-sub" class="input" placeholder="标题（选填，缺省取 URL 尾段）" hidden>
+<textarea id="clip-note" class="set-area" rows="2" placeholder="描述（选填 ≤200 字）" hidden></textarea>
+<p class="reg-line"><span class="reg-err" id="clip-err"></span></p>
+</div>
+<div class="modal-actions"><button class="btn btn-secondary" id="clip-cancel">取消</button><button class="btn btn-primary" id="clip-ok">抓取预览</button></div>
+</div>
+</div>
+<div class="modal-overlay" id="viewer" hidden>
+<div class="modal viewer-box" role="dialog" aria-modal="true" aria-labelledby="viewer-title">
+<div class="modal-actions viewer-head" style="justify-content:space-between;margin:0"><span id="viewer-title" style="font-weight:600"></span><button class="btn btn-ghost btn-icon" id="viewer-close" type="button" aria-label="关闭"><span data-icon="close"></span></button></div>
+<pre id="viewer-body"></pre>
+</div>
+</div>
+<div class="modal-overlay cp-overlay" id="cp" hidden>
+<div class="cp" role="dialog" aria-modal="true" aria-label="命令面板">
+<div class="cp-head"><span data-icon="search"></span><input id="cp-input" class="input" placeholder="检索：> 命令 · @ 文章 · # 素材（缺省混合）…" aria-label="命令面板搜索"><kbd>Esc</kbd></div>
+<div class="cp-list" id="cp-list" role="listbox"></div>
+<div class="cp-foot"><span>↑↓ 选择</span><span>Enter 执行</span><span>⌘K 开关</span></div>
+</div>
+</div>
+<div class="cp" id="ctx" hidden></div>
+<div class="app-shell" id="app-shell">
+<aside class="rail" id="rail" aria-label="全局导航">
+<div class="rail-head">
+<a class="brand" href="#publish"><span class="brand-mark" data-icon="publish"></span><span class="brand-name">musespiral Studio</span></a>
+<button class="btn btn-ghost btn-icon" id="rail-fold" title="折叠导航轨" aria-label="折叠导航轨"><span data-icon="panel-left"></span></button>
+</div>
+<nav class="rail-nav" id="rail-nav" aria-label="视图导航">
+<div class="rail-group">
+<div class="rail-group-title">供给</div>
+<a class="nav-item" data-nav="sources" href="#sources"><span data-icon="settings"></span><span class="nav-label">源中枢</span><span class="nav-badge" id="nav-badge-sources" hidden>0</span></a>
+<a class="nav-item" data-nav="material" href="#material"><span data-icon="search"></span><span class="nav-label">素材库</span><span class="nav-badge" id="nav-badge-material" hidden>0</span></a>
+<a class="nav-item" data-nav="books" href="#books"><span data-icon="docs"></span><span class="nav-label">书籍</span></a>
+</div>
+<div class="rail-group">
+<div class="rail-group-title">转化</div>
+<a class="nav-item" data-nav="design" href="#design"><span data-icon="image"></span><span class="nav-label">视觉编辑</span></a>
+<a class="nav-item" data-nav="compose" href="#compose"><span data-icon="edit"></span><span class="nav-label">创作工坊</span><span class="nav-badge" id="nav-badge-compose" hidden>0</span></a>
+</div>
+<div class="rail-group">
+<div class="rail-group-title">出口</div>
+<a class="nav-item" data-nav="publish" href="#publish"><span data-icon="file"></span><span class="nav-label">发布中心</span><span class="nav-badge" id="nav-badge-publish" hidden>0</span></a>
+</div>
+<div class="rail-group">
+<div class="rail-group-title">回看</div>
+<a class="nav-item" data-nav="insight" href="#insight"><span data-icon="star"></span><span class="nav-label">洞察</span></a>
+</div>
+<div class="rail-group">
+<div class="rail-group-title">工具</div>
+<a class="nav-item" data-nav="plugins" href="#plugins"><span data-icon="command"></span><span class="nav-label">插件</span></a>
+<a class="nav-item" data-nav="plugin-run" href="#plugin-run"><span data-icon="flow"></span><span class="nav-label">流水线</span></a>
+</div>
+</nav>
+<div class="rail-foot">
+<a class="nav-item" id="settings-btn" data-nav="settings" href="#settings"><span data-icon="settings"></span><span class="nav-label">设置</span></a>
+</div>
+</aside>
+<div class="shell-main">
+<header class="topbar">
+<div class="topbar-inner">
+<div class="crumb"><span class="crumb-title" id="crumb-title">发布中心</span></div>
+<div class="topbar-actions">
+<button class="btn btn-ghost btn-icon" id="cp-btn" title="命令面板（⌘K）" aria-label="命令面板"><span data-icon="command"></span></button>
+<button class="btn btn-ghost btn-icon" id="theme-toggle" title="主题：跟随系统（点击切换）" aria-label="切换主题"><span id="theme-icon" data-icon="monitor"></span></button>
+<div class="sys-badge" id="sys-badge" hidden></div>
+<div class="jobs-wrap" id="jobs-wrap">
+<button class="btn btn-ghost btn-icon" id="jobs-btn" title="后台任务" aria-label="后台任务"><span data-icon="bell"></span></button>
+<span class="jobs-badge" id="jobs-badge" hidden>0</span>
+<div class="jobs-menu" id="jobs-menu" hidden></div>
+</div>
+<button class="btn btn-ghost btn-icon" id="refresh-btn" title="刷新" aria-label="刷新"><span data-icon="refresh"></span></button>
+</div>
+</div>
+</header>
+<main class="container">
+<section id="view-sources" data-view="sources" class="view" hidden>
+<div class="amb amb-sources" aria-hidden="true"></div>
+<div class="view-head">
+<div>
+<h1 class="view-title">源中枢</h1>
+<p class="view-sub" id="sources-sub">加载中…</p>
+</div>
+<div class="action-row">
+<button class="btn" id="src-add-btn"><span data-icon="plus"></span>注册源</button>
+<button class="btn" id="src-clip-btn" title="URL→预览→人工确认入库（零落盘预览）">剪藏 URL</button>
+<button class="btn" id="src-crawl-btn" title="单页→待决区（无自动抓取，确认闸绝对）">手动爬取</button>
+<button class="btn" id="src-verify-all-btn" title="逐源手动探测健康（无自动轮询）">验证全部</button>
+<button class="btn btn-primary" id="src-ingest-all-btn" title="刷新全部源（ingest 任务，进度见任务中心）"><span data-icon="refresh"></span>刷新全部</button>
+</div>
+</div>
+<div class="eco-tiles" id="eco-tiles"></div>
+<div class="pub-toolbar">
+<div class="chips" id="src-filters" aria-label="类型筛选">
+<button class="chip is-active" data-srctype="">全部类型</button>
+<button class="chip" data-srctype="radar_hub">雷达</button>
+<button class="chip" data-srctype="kb">知识库</button>
+<button class="chip" data-srctype="dir">目录</button>
+<button class="chip" data-srctype="rss">RSS</button>
+</div>
+<span class="action-hint">健康灯只在手动验证或刷新时回写，无自动轮询；进入本页自动拉一次全部源状态。</span>
+</div>
+<table class="set-table src-table"><thead><tr><th>健康</th><th>源</th><th>类型</th><th>订阅</th><th>素材（未读）</th><th>上次正常</th><th>近 7 次失败</th><th>启停</th><th></th></tr></thead><tbody id="src-rows"></tbody></table>
+<div class="empty" id="src-empty" hidden>
+<div class="empty-icon" data-icon="settings"></div>
+<div class="empty-title">暂无源</div>
+<div class="empty-text">源在 settings.json / POST /api/sources 注册（radar_hub / kb / dir / rss 四型）。</div>
+</div>
+<aside class="drawer" id="src-drawer" hidden aria-label="源详情">
+<div class="drawer-head"><b id="src-drawer-title">源</b><button class="btn btn-ghost btn-icon" id="src-drawer-close" type="button" aria-label="关闭"><span data-icon="close"></span></button></div>
+<div class="drawer-body" id="src-drawer-body"></div>
+</aside>
+<div class="modal-overlay" id="src-form" hidden>
+<div class="modal" role="dialog" aria-modal="true">
+<h3 class="modal-title">注册源（POST /api/sources）</h3>
+<div style="display:flex;flex-direction:column;gap:8px">
+<select id="sf-type" class="input"><option value="radar_hub">radar_hub</option><option value="kb">kb</option><option value="dir">dir</option><option value="rss">rss</option></select>
+<input id="sf-id" class="input" placeholder="id（kebab-case）">
+<input id="sf-base" class="input" placeholder="base：radar-hub 回环 URL（host=127.0.0.1）">
+<textarea id="sf-subs" class="set-area" rows="3" placeholder="订阅（每行一条，仅 radar_hub）"></textarea>
+<input id="sf-root" class="input" placeholder="kb 根绝对路径" hidden>
+<input id="sf-path" class="input" placeholder="目录绝对路径" hidden>
+<input id="sf-url" class="input" placeholder="url：RSS 订阅地址（http/https）" hidden>
+</div>
+<div class="modal-actions"><button class="btn btn-secondary" id="sf-cancel">取消</button><button class="btn btn-primary" id="sf-ok">注册</button></div>
+</div>
+</div>
+<div class="modal-overlay" id="src-aicfg" hidden>
+<div class="modal" role="dialog" aria-modal="true">
+<h3 class="modal-title" id="sac-sub"></h3>
+<div style="display:flex;flex-direction:column;gap:8px">
+<select id="sac-profile" class="input"></select>
+<input id="sac-model" class="input" placeholder="model">
+<input id="sac-temp" class="input" type="number" placeholder="温度 0-2">
+<textarea id="sac-prompt" class="set-area" rows="5" placeholder="prompt_override"></textarea>
+</div>
+<div class="modal-actions"><button class="btn btn-secondary" id="sac-cancel">取消</button><button class="btn btn-primary" id="sac-ok">保存</button></div>
+</div>
+</div>
+</section>
+<section id="view-material" data-view="material" class="view" hidden>
+<div class="amb amb-material" aria-hidden="true"></div>
+<div class="view-head"><div>
+<h1 class="view-title">素材库</h1>
+<p class="view-sub" id="mat-sub">加载中…</p>
+</div>
+<div class="action-row">
+<div class="chips" id="mat-dens" aria-label="密度切换">
+<button class="chip is-active" data-mdens="compact" title="一行一素材，展开见四维与动作">紧凑</button>
+<button class="chip" data-mdens="src" title="按源分组，组头带计数">各源</button>
+<button class="chip" data-mdens="full" title="全部展开，评分动作一览">沉浸</button>
+</div>
+<input type="file" id="mat-file" multiple accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.docx,.epub,.md,.markdown,.txt" hidden>
+<button class="btn" id="mat-upload-btn" title="选择/拖放/粘贴图片上传">+ 上传图片</button>
+<button class="btn gen-ai" id="mat-gen-btn">AI 生成图</button>
+<button class="btn" id="mat-reg-btn" title="登记视频 URL（零出网）">+ 登记视频</button>
+<button class="btn" id="mat-ingest-btn" title="刷新全部源（ingest 任务，进度见任务中心）">刷新全部</button></div>
+</div>
+<div class="mat-layout">
+<aside class="coll-rail" id="coll-rail" aria-label="素材集合">
+<div class="coll-group" id="coll-static"></div>
+<div id="coll-manual-sec" hidden>
+<div class="coll-cap">手工集合<button class="coll-new" id="coll-new-btn" type="button">+ 新建</button></div>
+<div class="coll-group" id="coll-manual"></div>
+</div>
+<div class="coll-cap">智能集合</div>
+<div class="coll-group" id="coll-smart"></div>
+<div id="coll-tags-sec" hidden>
+<div class="coll-cap">按标签</div>
+<div class="coll-group" id="coll-tags"></div>
+</div>
+<div class="coll-cap">源集合</div>
+<div class="coll-group" id="coll-srcs"></div>
+</aside>
+<div class="mat-main">
+<div class="chips" id="mat-tabs" aria-label="素材分诊">
+<button class="chip is-active" data-mtab="all">全部</button>
+<button class="chip" data-mtab="starred">收藏<span class="chip-count" id="mt-starred">0</span></button>
+<button class="chip" data-mtab="unread">未读<span class="chip-count" id="mt-unread">0</span></button>
+<button class="chip" id="mat-coll-exit" data-mcoll="" hidden>✕ 退出集合</button>
+</div>
+<div class="pub-toolbar">
+<input id="mat-search" class="input" placeholder="全库搜索：标题/正文/标签/meta…"><button id="mat-search-x" type="button" class="coll-new" aria-label="清空搜索" hidden>✕ 清空</button>
+<select id="mat-type" class="input" aria-label="类型筛选"><option value="">全部类型</option></select>
+<select id="mat-sort" class="input" aria-label="排序"><option value="score">评分降序</option><option value="time">时间降序</option><option value="title">标题</option></select>
+</div>
+<div class="sel-bar" id="sel-bar" hidden><span>已选 <b id="sel-n">0</b> 篇</span><button class="btn btn-primary" id="syn-btn" disabled>AI 综合</button><button class="btn btn-ghost" id="sel-clear">取消选择</button></div>
+<div class="drop-overlay" id="mat-drop" hidden>松开上传图片</div>
+<div id="mat-tray" hidden></div>
+<div id="mat-list" class="mat-list d-compact"></div>
+<div class="empty" id="mat-empty" hidden>
+<div class="empty-icon" data-icon="search"></div>
+<div class="empty-title" id="mat-empty-title">暂无素材</div>
+<div class="empty-text" id="mat-empty-text">在源中枢验证源后点「刷新」，或点右上「刷新全部」采集；采集只新增不改写。</div>
+<button class="btn empty-action" id="mat-empty-action" hidden>清除筛选</button>
+</div>
+</div>
+<aside class="drawer" id="mat-drawer" hidden aria-label="素材详情">
+<div class="drawer-head"><b id="mat-drawer-title">素材</b><button class="btn btn-ghost btn-icon" id="mat-drawer-close" type="button" aria-label="关闭详情"><span data-icon="close"></span></button></div>
+<div class="drawer-body" id="mat-drawer-body"><p class="action-hint">加载中…</p></div>
+</aside>
+<aside class="drawer" id="syn-panel" hidden aria-label="跨素材综合"><div class="drawer-head"><b>跨素材综合</b><span class="badge" id="syn-n"></span><button class="btn btn-ghost btn-icon" id="syn-close" aria-label="关闭综合面板"><span data-icon="close"></span></button></div><div class="drawer-body" id="syn-body"></div></aside>
+<aside class="drawer" id="gen-panel" hidden><div class="drawer-head"><b>AI 生成图</b><button class="btn btn-ghost btn-icon" id="gen-close"><span data-icon="close"></span></button></div><div class="drawer-body"><textarea id="gen-prompt" class="set-area" rows="3" placeholder="画面描述"></textarea><div class="chips gen-cfg"><button class="chip is-active" data-size="1024x1024">1:1</button><button class="chip" data-size="1536x1024">3:2</button><button class="chip is-active" data-model="">FLUX-schnell</button><button class="chip" data-model="Qwen-Image">Qwen-Image</button></div><button class="btn btn-primary" id="gen-run">生成</button> <button class="btn" id="gen-cancel" hidden>取消</button><div id="gen-result"></div></div></aside>
+</div>
+<div class="lightbox" id="lightbox" hidden title="Esc 关闭 · ←→ 切换">
+<img id="lb-img" alt="原图">
+<div class="lb-bar" id="lb-bar"></div>
+</div>
+<div class="modal-overlay" id="coll-form" hidden>
+<div class="modal">
+<h3 class="modal-title" id="cf-title">新建集合</h3>
+<div style="display:flex;flex-direction:column;gap:8px">
+<input id="cf-name" class="input" maxlength="24" placeholder="名称 ≤24 字符">
+<div class="chips" id="cf-dots"></div>
+</div>
+<div class="modal-actions"><button class="btn btn-secondary" id="cf-cancel">取消</button><button class="btn btn-primary" id="cf-ok">创建</button></div>
+</div>
+</div>
+<datalist id="tag-dl"></datalist>
+</section>
+<section id="view-books" data-view="books" class="view" hidden>
+<div class="view-head"><div>
+<h1 class="view-title">书籍</h1>
+<p class="view-sub" id="bk-sub">订阅书源 → 搜索书籍 → 选章入素材库（引擎取文，人工选章触发）。</p>
+</div><div class="action-row">
+<span class="bk-lamp" id="bk-lamp"><span class="health-dot unknown"></span>…</span>
+<button class="btn btn-ghost" id="bk-subs-btn">订阅管理</button>
+</div></div>
+<div id="bk-search">
+<input id="bk-search-box" class="input bk-search-input" placeholder="搜索书名 / 作者 / 关键词…">
+<div class="empty" id="bk-guide">
+<div class="empty-icon" data-icon="docs"></div>
+<div class="empty-title" id="bk-guide-t">搜索结果渲染 · R4 批</div>
+<div class="empty-text" id="bk-guide-x">四桶搜索与多源换源 R4 批开放；详情可从素材行《书名》深链进入。</div>
+</div>
+</div>
+<div id="bk-detail" hidden>
+<a class="back-link" href="#books">返回书籍</a>
+<div class="empty" id="bk-absent" hidden>
+<div class="empty-title">bookengine 未就绪</div>
+<div class="empty-text">详情与取文暂不可用（R1-R2 建设中）；订阅与书源管理不受影响。</div>
+</div>
+<div class="skel" id="bk-skel" hidden><div class="skel-line w90"></div><div class="skel-line w70"></div></div>
+<div id="bk-body" hidden>
+<div class="bk-grid">
+<div class="bk-cover" id="bk-cover">书</div>
+<div><h2 class="bk-h" id="bk-name">…</h2><p class="bk-meta" id="bk-meta"></p><p class="bk-meta" id="bk-intro"></p></div>
+<aside class="bk-side"><b>来源</b><div class="bk-src" id="bk-src-now"></div><div>目录 <b id="bk-toc-n">—</b> 章</div>
+<label>换源 <select id="bk-src-sel" class="input"></select></label>
+<p class="action-hint">换源后已勾选章节清空。</p></aside>
+</div>
+<div class="toc-card">
+<div class="toc-tools"><b>目录</b> <span>已选 <b id="bk-seln" class="bk-count">0</b> 章</span>
+<input id="bk-filter" class="input" placeholder="标题过滤（不影响勾选）">
+<span class="chips" id="bk-specs"><button class="chip is-active" data-bkspec="all">全部</button><button class="chip" data-bkspec="l5">最新 5 章</button><button class="chip" data-bkspec="l10">最新 10 章</button><button class="chip" data-bkspec="custom">自定义</button></span>
+<span id="bk-range" hidden><input id="bk-from" class="input bk-num" type="number"><input id="bk-to" class="input bk-num" type="number"><button class="btn" id="bk-range-apply">设选</button></span>
+</div>
+<div id="bk-toc"></div>
+</div>
+<div class="op-bar" id="bk-opbar" hidden>
+<span>已选 <b id="bk-seln2" class="bk-count">0</b> 章 · 合计约 <b id="bk-wc">0</b> 字</span>
+<span><label><input type="radio" name="bk-mode" checked>分章（推荐）</label> <label title="R4 后端批"><input type="radio" name="bk-mode" disabled>合并单条</label></span>
+<label class="switch" title="提炼卡形式入库（关=原始文本直入）"><input type="checkbox" id="bk-digest"><i></i>AI 提炼</label>
+<span class="bk-digest-off" id="bk-digest-off" hidden>原始文本直入（不做 AI 提炼）</span>
+<button class="btn btn-primary" id="bk-import-btn">↓ 入素材库</button>
+</div>
+<div id="bk-prog" hidden></div>
+</div>
+</div>
+<div id="bk-subs" hidden>
+<div class="empty">
+<div class="empty-title">订阅与书源库</div>
+<div class="empty-text">两步导入：解析预览 → 勾选落库（3906 行虚拟滚动 + 多轴过滤）；订阅表 R4 批落地，当前经弹窗与 CLI「musespiral booksource」族管理。</div>
+<div class="action-row"><button class="btn btn-primary" id="im-open">导入书源</button><button class="btn" id="bk-subs-back">回搜索</button></div>
+</div>
+</div>
+<div class="modal-overlay" id="im" hidden>
+<div class="modal im-modal" role="dialog" aria-modal="true" aria-labelledby="im-title">
+<div class="im-head"><h3 class="modal-title" id="im-title">导入书源</h3><span class="muted im-total" id="im-total"></span><button class="btn btn-ghost btn-icon" id="im-close" type="button" aria-label="关闭"><span data-icon="close"></span></button></div>
+<p class="im-warn" id="im-warn" hidden></p>
+<div class="tabs im-tabs" id="im-tabs">
+<button class="tab is-active" data-imtab="paste" type="button">粘贴文本</button>
+<button class="tab" data-imtab="url" type="button">从 URL</button>
+<button class="tab" data-imtab="file" type="button">选择文件</button>
+</div>
+<div id="im-src">
+<div id="im-paste"><textarea id="im-text" class="input im-area" rows="4" placeholder="粘贴书源 JSON（数组或单对象均可）"></textarea><div class="action-row"><button class="btn btn-primary" id="im-parse" type="button">解析预览</button></div></div>
+<div id="im-url" hidden><input id="im-url-in" class="input" placeholder="订阅 URL（http(s) 开头，服务端 64MB 门内拉取）"><div class="action-row"><button class="btn btn-primary" id="im-parse-url" type="button">拉取并解析</button></div></div>
+<div id="im-file" hidden><input id="im-file-in" type="file" accept=".json,application/json"><div class="action-row"><button class="btn btn-primary" id="im-parse-file" type="button">读取并解析</button></div></div>
+<p class="action-hint" id="im-prog" hidden>解析中…（大包约 1-2s）</p>
+</div>
+<div id="im-filters" hidden>
+<input id="im-kw" class="input im-kw" placeholder="过滤：名称 / 分组 / URL 关键词">
+<div class="chips im-chips" id="im-stat"></div>
+<div class="chips im-chips" id="im-groups"></div>
+<div class="im-selrow"><label class="im-selall"><input type="checkbox" id="im-selall"><b id="im-selall-t">全选</b></label><span class="muted" id="im-shown"></span></div>
+<div class="im-list" id="im-list"><div class="im-canvas" id="im-canvas"></div></div>
+</div>
+<div class="im-foot">
+<span class="im-keeps">
+<label class="switch" title="同名时保留本地书源名称"><input type="checkbox" id="im-keep-name"><i></i>保留本地名称</label>
+<label class="switch" title="同名时保留本地分组"><input type="checkbox" id="im-keep-group"><i></i>保留本地分组</label>
+<label class="switch" title="同名时保留本地启用位"><input type="checkbox" id="im-keep-enable"><i></i>保留本地启用位</label>
+</span>
+<span class="im-sum" id="im-sum">已选 0 条 · 新增 0 · 更新 0</span>
+<span class="im-foot-btns"><button class="btn btn-secondary" id="im-cancel" type="button">取消</button><button class="btn btn-primary" id="im-apply" type="button" disabled>导入</button></span>
+</div>
+</div>
+</div>
+</section>
+<section id="view-design" data-view="design" class="view" hidden>
+<div class="amb amb-design"></div>
+<div class="view-head"><div>
+<h1 class="view-title">视觉编辑</h1>
+</div>
+<div class="action-row">
+<select id="dv-art" class="input" aria-label="选择文章"></select>
+<button class="btn" id="dv-load-btn">载入</button>
+<span class="dv-dirty" id="dv-dirty" hidden>●</span>
+<button class="btn" id="dv-save-btn" disabled>存稿</button>
+<button class="btn btn-primary" id="dv-export-btn" disabled>导出 PNG</button>
+</div></div>
+<div class="dv-layout">
+<aside class="dv-side">
+<div class="dv-grp"><div class="chips" id="dv-specs"><button class="chip" data-dspec="xhs-3x4">3:4</button><button class="chip" data-dspec="xhs-4x5">4:5</button><button class="chip" data-dspec="square">1:1</button></div></div>
+<div class="dv-grp"><div class="dv-cap">背景色</div><div class="chips dv-colors" id="dv-colors"></div><p class="dv-hint">仅主题色槽，禁任意色值（F72-T2）</p></div>
+<div class="dv-grp"><div class="dv-cap">排版</div><div class="chips" id="dv-fs"><button class="chip" data-dfs="S">S</button><button class="chip" data-dfs="M">M</button><button class="chip" data-dfs="L">L</button></div><div class="chips" id="dv-al"><button class="chip" data-dal="left">左</button><button class="chip" data-dal="center">中</button><button class="chip" data-dal="right">右</button></div></div>
+<div class="dv-grp"><div class="action-row"><button class="btn" id="dv-fwd" disabled>前移</button><button class="btn" id="dv-bwd" disabled>后移</button></div></div>
+<span class="undo-hud" id="dv-undo" hidden></span>
+</aside>
+<div class="dv-stage-wrap" id="dv-wrap">
+<div class="dv-skel" id="dv-skel" hidden></div>
+<div class="empty" id="dv-empty" hidden><div class="empty-icon" data-icon="image"></div><div class="empty-title">未载入设计稿</div><div class="empty-text">选文章点「载入」；无稿生成 xhs-card 缺省稿。</div></div>
+<div class="dv-stage" id="dv-stage" hidden></div>
+<input id="dv-tin" class="dv-tin" hidden aria-label="行内编辑文本">
+</div>
+</div>
+<div class="modal-overlay" id="dv-sw" hidden><div class="modal"><h3 class="modal-title">切换规格</h3><p class="modal-message">有未存修改：先存稿保留，或丢弃后切换。</p><div class="modal-actions"><button class="btn btn-secondary" id="dv-sw-cancel">取消</button><button class="btn btn-danger" id="dv-sw-drop">丢弃</button><button class="btn btn-primary" id="dv-sw-save">先存稿</button></div></div></div>
+<div class="modal-overlay" id="dv-ex" hidden><div class="modal"><h3 class="modal-title">导出 PNG</h3><div class="chips" id="dv-ex-specs"><button class="chip is-active" data-exspec="cur">当前</button><button class="chip" data-exspec="all">全部三规格</button></div><div class="chips" id="dv-ex-route"><button class="chip is-active" data-exroute="a">A 前端即存</button><button class="chip" data-exroute="b">B 后端任务</button></div><div class="modal-actions"><button class="btn btn-secondary" id="dv-ex-cancel">取消</button><button class="btn btn-primary" id="dv-ex-go">开始导出</button></div></div></div>
+</section>
+<section id="view-article" data-view="article" class="view" hidden>
+<a class="back-link" href="#publish" id="back-link"><span data-icon="arrow-left"></span>返回发布中心</a>
+<div class="detail-head">
+<h1 class="detail-title" id="detail-title">加载中…</h1>
+<div class="detail-meta" id="detail-meta"></div>
+<button class="btn" id="mark-reviewed-btn" hidden><span data-icon="check"></span>标记已审</button>
+<button class="btn" id="tts-btn" title="把正文朗读成 MP3（edge-tts 微软免费端点，零 API key）">🔊 朗读</button>
+</div>
+<div class="tts-bar" id="tts-bar" hidden>
+<audio id="tts-audio" controls preload="none" aria-label="文章朗读音频"></audio>
+<span class="tts-note" id="tts-note"></span>
+<button class="btn btn-ghost" id="tts-close" type="button" aria-label="收起朗读栏">✕</button>
+</div>
+<div class="tabs" id="detail-tabs" role="tablist">
+<button class="tab is-active" data-tab="edit" role="tab"><span data-icon="edit"></span>编辑</button>
+<button class="tab" data-tab="variants" role="tab"><span data-icon="star"></span>变体</button>
+<button class="tab" data-tab="checks" role="tab"><span data-icon="check"></span>检查</button>
+<button class="tab" data-tab="preview" role="tab"><span data-icon="eye"></span>预览</button>
+<button class="tab" data-tab="review" role="tab"><span data-icon="file"></span>对照</button>
+<button class="tab" data-tab="versions" role="tab"><span data-icon="clock"></span>版本历史</button>
+<button class="tab" data-tab="actions" role="tab"><span data-icon="settings"></span>操作<span class="tab-gap" id="actions-gap" hidden>0</span></button>
+</div>
+<div class="tab-panel" id="panel-edit" data-panel="edit">
+<div class="edit-layout">
+<div class="ed-col">
+<div class="edit-stage">
+<pre id="edit-gutter"></pre>
+<div class="ed-stack" id="ed-stack">
+<pre id="edit-hl" aria-hidden="true"></pre>
+<textarea id="edit-area" wrap="off" spellcheck="false" aria-label="Markdown 正文编辑器"></textarea>
+<div class="annot-bubble" id="annot-bubble" hidden>
+<div class="ab-title"><span data-icon="comment"></span>添加批注 <span class="muted" id="ab-lines"></span></div>
+<input id="annot-input" class="input" placeholder="批注意见…" aria-label="批注内容">
+<div class="ab-row"><button class="btn" id="annot-cancel" type="button">取消</button><button class="btn btn-primary" id="annot-ok" type="button">添加批注</button></div>
+</div>
+</div>
+</div>
+<div class="ed-status">
+<span>字数 <b id="ed-chars">0</b></span>
+<span id="ed-saved">未保存</span>
+<span class="st-ai">AI 档案 <b id="ed-ai">…</b></span>
+<button class="btn btn-primary" id="edit-save-btn" style="margin-left:auto" title="⌘S / Ctrl+S"><span data-icon="check"></span>保存正文</button>
+</div>
+</div>
+<div class="pv-stage"><iframe id="live-frame" title="实时预览" sandbox="allow-same-origin"></iframe></div>
+<div class="annot-side" id="annot-side">
+<p class="action-title" id="annot-title">批注（0）</p>
+<div class="action-row" style="margin-bottom:10px">
+<button class="btn" id="edit-annotate-toggle">批注栏：开</button>
+<button class="btn" id="edit-annotate-ai"><span data-icon="edit"></span>按批注 AI 修改</button>
+</div>
+<div id="annot-list"></div>
+</div>
+</div>
+</div>
+<div class="tab-panel" id="panel-variants" data-panel="variants" hidden>
+<div class="vgrid" id="variant-grid"></div>
+<div style="margin-top:var(--space-md)"><button class="btn btn-primary" id="variants-batch-btn"><span data-icon="arrow-right"></span>四平台一键生成变体</button></div>
+</div>
+<div class="tab-panel" id="panel-checks" data-panel="checks" hidden>
+<div class="check-summary" id="check-summary"></div>
+<div class="check-list" id="check-list"></div>
+</div>
+<div class="tab-panel" id="panel-preview" data-panel="preview" hidden>
+<div class="preview-stage" id="preview-stage">
+<iframe class="preview-frame" id="preview-frame" title="渲染预览"></iframe>
+</div>
+<div class="empty" id="preview-empty" hidden>
+<div class="empty-icon" data-icon="eye"></div>
+<div class="empty-title">暂不可渲染</div>
+<div class="empty-text">解析或渲染失败，先运行 musespiral check 排查。</div>
+</div>
+</div>
+<div class="tab-panel" id="panel-review" data-panel="review" hidden>
+<div id="review-stage"></div>
+<div class="empty" id="review-empty" hidden>
+<div class="empty-icon" data-icon="file"></div>
+<div class="empty-title">无配对笔记</div>
+<div class="empty-text">没有配对原笔记。用 musespiral review 生成对照后刷新。</div>
+</div>
+</div>
+<div class="tab-panel" id="panel-versions" data-panel="versions" hidden>
+<div class="ver-bar">
+<label class="field">旧版 <select class="input" id="ver-a" aria-label="对比旧版"></select></label>
+<label class="field">新版 <select class="input" id="ver-b" aria-label="对比新版"></select></label>
+<button class="btn btn-primary" id="ver-diff-btn">对比</button>
+</div>
+<p class="action-hint" id="ver-note">版本池由每次保存自动留档（滚动保留 5 份，MUSESPIRAL_BAK_KEEP 可调）。选两版对比；diff 底部可按版恢复（恢复可再恢复）。</p>
+<div id="ver-stage"></div>
+</div>
+<div class="tab-panel" id="panel-actions" data-panel="actions" hidden>
+<div class="action-group"><h3 class="action-title">一键到物料</h3><button class="btn btn-primary" id="pipe-run">一键到物料</button><div id="pipe-progress"></div></div>
+<div class="action-group">
+<h3 class="action-title">生成平台变体</h3>
+<p class="action-hint">adapt · 同目录生成 &lt;stem&gt;.&lt;平台&gt;.md 变体；同名已存在拒绝覆盖。</p>
+<div class="action-buttons" id="adapt-buttons"></div>
+<button class="btn" id="batch-btn"><span data-icon="arrow-right"></span>四平台一键生成变体</button>
+</div>
+<div class="action-group">
+<h3 class="action-title">生成物料包</h3>
+<p class="action-hint">pack · 生成 README / payload / checks / cover 四件套。</p>
+<div class="action-row">
+<label class="field">平台 <select id="pack-platform"></select></label>
+<label class="field">变体 <select id="pack-variant"></select></label>
+<button class="btn" id="pack-btn">生成物料包</button>
+</div>
+</div>
+<div class="action-group">
+<h3 class="action-title">创建草稿</h3>
+<p class="action-hint">publish · 仅创建草稿，绝不提交发表；需已配置凭证与封面。</p>
+<button class="btn btn-primary" id="publish-btn"><span data-icon="plus"></span>创建草稿</button>
+</div>
+</div>
+</section>
+<section id="view-compose" data-view="compose" class="view" hidden>
+<div class="amb amb-compose" aria-hidden="true"></div>
+<div class="view-head">
+<div><h1 class="view-title">创作工坊</h1><p class="view-sub" id="compose-sub">加载中…</p></div>
+<div class="action-row"><input id="cm-new-slug" class="input" placeholder="slug（英文短名）"><input id="cm-new-title" class="input" placeholder="标题（可空）"><button class="btn btn-primary" id="cm-new-btn"><span data-icon="plus"></span>建会话</button></div>
+</div>
+<div class="chips" id="cm-sessions" style="margin-bottom:var(--space-md)"></div>
+<div class="empty" id="cm-empty" hidden>
+<div class="empty-icon" data-icon="edit"></div>
+<div class="empty-title">暂无创作会话</div>
+<div class="empty-text">多素材 + 分块三态裁决 + 轮次迭代：填 slug 建会话，从左侧素材池（发现页高分候选）或手动路径加入素材。</div>
+</div>
+<div class="cm-grid" id="cm-grid" hidden>
+<div class="cm-col action-group">
+<h3 class="action-title">素材池</h3>
+<a class="btn" href="#material" id="cm-browse-link">浏览素材库 ⟶</a>
+<p class="action-hint">发现页高分候选（分数 ≥80）</p>
+<div id="cm-pool"></div>
+<div class="action-row"><input id="cm-add-path" class="input" style="flex:1;min-width:140px" placeholder="手动添加：素材路径（KB 内相对或绝对）"><button class="btn" id="cm-add-btn">加入</button></div>
+<div id="cm-sources"></div>
+<div id="cm-budget"></div>
+</div>
+<div class="cm-col cm-mid">
+<div class="cm-round-head"><b id="cm-round-title">尚未生成</b><span class="muted" id="cm-round-meta"></span></div>
+<div id="cm-blocks" tabindex="-1"></div>
+<div class="empty" id="cm-blocks-empty" hidden>
+<div class="empty-icon" data-icon="edit"></div>
+<div class="empty-title">尚无 AI 草稿</div>
+<div class="empty-text">素材就绪后点右侧「按反馈再生成」（长任务进任务面板）。</div>
+</div>
+</div>
+<div class="cm-col action-group">
+<div id="cm-novel"></div>
+<h3 class="action-title">轮次</h3>
+<div class="chips" id="cm-rounds" style="margin-bottom:10px"></div>
+<div id="cm-diff"></div>
+<div class="action-row" style="margin-top:12px">
+<button class="btn" id="cm-generate-btn"><span data-icon="refresh"></span>按反馈再生成</button>
+<button class="btn btn-primary" id="cm-adopt-btn"><span data-icon="check"></span>采纳入稿</button>
+</div>
+<details class="action-group" id="cm-outline">
+<summary class="health-sum">📋 大纲 · 逐节裁决再展开</summary>
+<div class="action-row"><button class="btn" id="cm-outline-gen">🔄 AI 生成大纲</button></div>
+<div id="cm-outline-list"></div>
+<p class="action-hint" id="cm-outline-note">无大纲——点「AI 生成大纲」先出骨架，再逐节勾选裁决后展开。</p>
+<div class="action-row"><button class="btn btn-primary" id="cm-outline-expand">🚀 展开已裁决节</button></div>
+</details>
+<details class="action-group" id="cm-dual">
+<summary class="health-sum">⚖️ 对比模式 · 同 prompt 双档案并行</summary>
+<div class="action-row"><label class="field">档案 A <select id="cm-dual-a" class="input"></select></label><label class="field">档案 B <select id="cm-dual-b" class="input"></select></label></div>
+<div class="action-row"><button class="btn btn-primary" id="cm-dual-gen">⚖️ 并行生成</button></div>
+<p class="action-hint" id="cm-dual-note">选两个已配置档案，用相同素材+指令并行出两版——对照选优后进正常裁决流。</p>
+<div class="cm-dual-grid" id="cm-dual-result" hidden>
+<div class="cm-dual-col"><div class="cm-dual-h" id="cm-dual-ha">A</div><pre class="cm-dual-body" id="cm-dual-ta"></pre><div class="cm-dual-use" id="cm-dual-ua"></div></div>
+<div class="cm-dual-col"><div class="cm-dual-h" id="cm-dual-hb">B</div><pre class="cm-dual-body" id="cm-dual-tb"></pre><div class="cm-dual-use" id="cm-dual-ub"></div></div>
+</div>
+<div class="action-row" id="cm-dual-acts" hidden><button class="btn" id="cm-dual-pick-a">⬅ 选 A</button><button class="btn" id="cm-dual-keep">🔄 保留双版</button><button class="btn" id="cm-dual-pick-b">选 B ➡</button></div>
+</details>
+<details class="action-group" id="cm-rolling">
+<summary class="health-sum">📖 滚动摘要 · AI 记住写了什么</summary>
+<div id="cm-rolling-view"><p class="action-hint" id="cm-rolling-text">暂无摘要——正稿字数跨过 1500 字后自动生成（入稿即触发），也可点刷新手动生成。</p></div>
+<div class="action-row"><button class="btn" id="cm-rolling-refresh">🔄 刷新</button><button class="btn" id="cm-rolling-edit">✏️ 编辑</button></div>
+<p class="action-hint" id="cm-rolling-note"></p>
+</details>
+<details class="action-group" id="cm-visual">
+<summary class="health-sum">视觉设计 · 封面工坊</summary>
+<div class="chips" id="cv-tpl"></div>
+<div class="action-row"><input class="input" id="cv-title" style="flex:1;min-width:160px" placeholder="主标题（缺省取文章）"><input class="input" id="cv-hook" style="flex:1;min-width:160px" placeholder="副题 hook（选填）"></div>
+<div class="action-row">
+<label class="field">字号 <select id="cv-fs"><option>S</option><option selected>M</option><option>L</option></select></label>
+<label class="field">对齐 <select id="cv-al"><option value="left" selected>左</option><option value="center">中</option><option value="right">右</option></select></label>
+<button class="btn btn-primary" id="cv-x">导出 PNG</button>
+<button class="btn" id="cv-pt">存为我的模板</button>
+</div>
+<div class="cv-prev" id="cv-prev"></div>
+</details>
+</div>
+</div>
+<div class="modal-overlay" id="cv-pm" hidden><div class="modal"><h3 class="modal-title">存为我的模板</h3><div class="cv-col"><input class="input" id="cv-pid" placeholder="模板 id（kebab，如 my-cover）"><input class="input" id="cv-pl" placeholder="显示名（选填）"></div><div class="modal-actions"><button class="btn" id="cv-pm-x">取消</button><button class="btn btn-primary" id="cv-pm-ok">保存</button></div></div></div>
+</section>
+<section id="view-publish" data-view="publish" class="view">
+<div class="amb amb-publish" aria-hidden="true"></div>
+<div class="view-head">
+<div>
+<h1 class="view-title">发布中心</h1>
+<p class="view-sub" id="queue-sub">加载中…</p>
+</div>
+<div class="fetch-col">
+<div class="fetch-bar">
+<input id="fetch-url" class="input" placeholder="mp.weixin.qq.com/s/…" aria-label="微信文章链接">
+<button class="btn btn-primary" id="fetch-btn"><span data-icon="download"></span>从 URL 抓取</button>
+</div>
+<p class="action-hint fetch-hint" id="fetch-hint">微信有频控；批量建议浏览器另存 HTML 走 CLI --html。</p>
+</div>
+</div>
+<div class="funnel-band" id="funnel-band" aria-label="发布漏斗"></div>
+<div class="pub-toolbar">
+<div class="chips queue-chips" id="queue-filters" aria-label="状态筛选">
+<button class="chip is-active" data-filter="all">全部 <span class="chip-count" id="count-all">0</span></button>
+<button class="chip" data-filter="draft">草稿 <span class="chip-count" id="count-draft">0</span></button>
+<button class="chip" data-filter="pending">待审 <span class="chip-count" id="count-pending">0</span></button>
+<button class="chip" data-filter="reviewed">已审 <span class="chip-count" id="count-reviewed">0</span></button>
+<button class="chip" data-filter="published">已发布 <span class="chip-count" id="count-published">0</span></button>
+<button class="chip" data-filter="fail">有问题 <span class="chip-count" id="count-fail">0</span></button>
+</div>
+<div class="chips" id="pub-view" aria-label="视图切换">
+<button class="chip is-active" data-pview="grid" title="卡片墙">网格</button>
+<button class="chip" data-pview="list" title="单行列表">列表</button>
+</div>
+<button class="btn" id="plan-btn" title="排期周历：计划 / 已交付 / 已发布 三态口径">排期周历</button>
+</div>
+<div class="queue-drop" id="queue-drop">
+<div class="card-grid" id="article-list"></div>
+<div id="pub-rows" class="pub-rows" hidden></div>
+<div class="empty" id="queue-empty" hidden>
+<div class="empty-icon" data-icon="docs"></div>
+<div class="empty-title" id="queue-empty-title">暂无文章</div>
+<div class="empty-text" id="queue-empty-text">工作目录下还没有文章。拖入 .md 文件自动创建，或用 musespiral notes draft 生成待审文章。</div>
+<button class="btn btn-primary empty-action" id="queue-empty-action">刷新队列</button>
+</div>
+<div class="drop-overlay" id="drop-overlay" hidden>
+<span data-icon="upload"></span>
+<div class="drop-title">松开鼠标，创建文章</div>
+<div class="drop-sub">支持拖入一个或多个 .md 文件</div>
+</div>
+</div>
+</section>
+<section id="view-insight" data-view="insight" class="view" hidden>
+<div class="amb amb-insight" aria-hidden="true"></div>
+<div class="view-head">
+<div>
+<h1 class="view-title">洞察</h1>
+<p class="view-sub">什么在变好：创意漏斗 · 源贡献 · 创作节奏 · AI 用量</p>
+</div>
+<div class="chips" id="insight-range" aria-label="时间范围">
+<button class="chip is-active" data-irange="30">30 天</button>
+<button class="chip" data-irange="90">90 天</button>
+</div>
+</div>
+<div class="action-group" id="radar-card"><div class="action-row"><h3 class="action-title">选题雷达</h3><button class="btn btn-ghost" id="radar-refresh" style="margin-left:auto">重新生成</button></div><div id="radar-body"></div></div>
+<div class="tiles" id="stat-tiles"></div>
+<div class="action-group">
+<h3 class="action-title">创意漏斗</h3>
+<div class="funnel-band idea" id="idea-funnel" aria-label="创意漏斗"></div>
+</div>
+<div class="dash-grid">
+<div class="dash-col">
+<div class="action-group"><h3 class="action-title" id="trend-title">发布趋势（近 30 天）</h3><div class="trend" id="trend-chart" aria-label="近 30 天发布趋势"></div><div class="trend-x"><span id="trend-from">30 天前</span><span>今天</span></div></div>
+<div class="action-group"><h3 class="action-title">源贡献</h3><div id="contrib-bars"></div></div>
+<div class="action-group"><h3 class="action-title">按平台分布</h3><div id="platform-bars"></div></div>
+</div>
+<div class="dash-col">
+<div class="action-group"><h3 class="action-title">创作节奏</h3><div id="compose-act" class="act-dots"></div><p class="action-hint" id="compose-act-note"></p></div>
+<div class="action-group"><h3 class="action-title">评分分布</h3><div id="score-dist" class="score-dist"></div><p class="action-hint" id="score-dist-note"></p></div>
+<div class="action-group"><h3 class="action-title">AI 用量</h3><div id="ai-usage" class="ai-usage"></div></div>
+</div>
+</div>
+<details class="action-group" id="health-card">
+<summary class="health-sum">环境健康（运维前提，默认收起）</summary>
+<div id="health-grid" class="hcards muted">加载中…</div>
+</details>
+</section>
+<section id="view-settings" data-view="settings" class="view" hidden>
+<div class="amb amb-settings" aria-hidden="true"></div>
+<div class="view-head"><div><h1 class="view-title">设置</h1><p class="view-sub" id="settings-sub">身份与存储 + AI 双柱 + 风格底座（写 ~/.musespiral/，均需确认）</p></div><button class="btn" id="cred-verify-btn" title="手动重新探测凭证/AI/图床/磁盘状态">验证状态</button></div>
+<div class="set-grid">
+<div class="action-group"><h3 class="action-title">身份与存储（KB 源）</h3>
+<p class="action-hint" id="kb-origin"></p>
+<div class="action-row"><input id="kb-root-input" class="input" style="flex:1;min-width:200px" placeholder="/abs/kb-root"><button class="btn btn-primary" id="kb-save-btn">保存</button></div>
+<table class="set-table"><thead><tr><th>key</th><th>标签</th><th>路径</th><th>态</th><th></th></tr></thead><tbody id="kb-sources-body"></tbody></table>
+<div class="action-row"><input id="kb-add-key" class="input" placeholder="key"><input id="kb-add-label" class="input" placeholder="标签"><input id="kb-add-rel" class="input" placeholder="根内相对路径"><button class="btn" id="kb-add-btn">加</button></div>
+<p class="action-hint">信息源连接与采集已迁「源中枢」（#sources）；此处 KB 子源仅供发现页筛选。</p>
+</div>
+<div class="action-group"><h3 class="action-title">AI 档案与路由</h3>
+<table class="set-table"><thead><tr><th>档案</th><th>base_url</th><th>模型</th><th>key</th><th></th></tr></thead><tbody id="ai-profiles-body"></tbody></table>
+<div class="action-row"><input id="ai-p-name" class="input" placeholder="名"><input id="ai-p-url" class="input" placeholder="base_url"><input id="ai-p-model" class="input" placeholder="模型"><input id="ai-p-key" class="input" placeholder="API Key（本地可空）"><button class="btn" id="ai-p-save">存</button></div>
+<div class="action-row"><label class="field">默认 <select id="ai-default-select"></select></label><button class="btn" id="ai-default-save">设默认</button><label class="field">路由 <select id="ai-route-task"></select>→<select id="ai-route-profile"></select></label><button class="btn" id="ai-route-save">设路由</button></div>
+<p class="action-hint">key 永不回显：表格只显三态（已配置 / 未配置 / 免凭据·本地）。</p>
+<span class="health-dot unknown" id="media-dot"></span><span class="action-hint" id="media-txt">文生图：未探测</span><button class="btn" id="media-verify-btn">验证</button><p class="action-hint">近 7 日用量</p><div id="ai-meter"></div>
+</div>
+<div class="action-group"><h3 class="action-title">风格与底座</h3>
+<p class="action-hint" id="style-habits"></p>
+<textarea id="style-area" class="set-area" rows="6"></textarea>
+<div class="action-row"><button class="btn btn-primary" id="style-save">保存风格资产</button></div>
+<div class="action-row"><label class="field">底座任务 <select id="prompt-task-select"></select></label><span class="action-hint" id="prompt-state"></span></div>
+<textarea id="prompt-area" class="set-area" rows="8"></textarea>
+<div class="action-row"><button class="btn btn-primary" id="prompt-save">保存覆盖</button></div>
+</div>
+</div>
+</section>
+<section id="view-plugins" data-view="plugins" class="view" hidden>
+<div class="view-head"><div>
+<h1 class="view-title">插件</h1>
+<p class="view-sub" id="pg-sub">加载中…</p>
+</div>
+<div class="action-row">
+<button class="btn" id="pg-refresh-btn" title="重扫插件目录（扫描即事实真相）"><span data-icon="refresh"></span>重扫</button>
+<button class="btn btn-primary" id="pg-new-btn" title="输入 → 处理 → 输出，保存前契约校验"><span data-icon="plus"></span>新建流水线</button>
+</div>
+</div>
+<div id="pg-list-wrap">
+<div class="chips" id="pg-kinds" aria-label="按类型筛选"></div>
+<div class="pg-grid" id="pg-grid"></div>
+<div class="empty" id="pg-empty" hidden>
+<div class="empty-icon" data-icon="settings"></div>
+<div class="empty-title">暂无插件</div>
+<div class="empty-text" id="pg-empty-text">把插件目录放进插件区后点「重扫」。</div>
+</div>
+</div>
+<div id="pg-detail-wrap" hidden></div>
+<div id="pg-build-wrap" hidden></div>
+</section>
+<section id="view-plugin-run" data-view="plugin-run" class="view" hidden>
+<div class="view-head"><div>
+<h1 class="view-title" id="pr-title">流水线</h1>
+<p class="view-sub" id="pr-sub"></p>
+</div>
+<div class="action-row">
+<button class="btn" id="pr-back-btn" hidden><span data-icon="arrow-left"></span>返回清单</button>
+<button class="btn" id="pr-reset-btn" hidden title="清空本次运行状态"><span data-icon="refresh"></span>重置</button>
+<button class="btn btn-primary" id="pr-run-btn" hidden title="运行这条流水线（进度见日志与任务中心）"><span data-icon="play"></span>运行</button>
+</div>
+</div>
+<div id="pr-pick"></div>
+<div class="pr-flow" id="pr-flow" hidden></div>
+<div class="pr-rungrid" id="pr-panels" hidden>
+<div class="card pr-panel">
+<div class="pr-phead"><h3 class="pr-ptitle">运行日志</h3><span class="badge queued" id="pr-badge">待运行</span></div>
+<div class="pr-pbody"><div class="pr-logs" id="pr-logs"></div></div>
+</div>
+<div class="card pr-panel">
+<div class="pr-phead"><h3 class="pr-ptitle">产出物</h3><span class="badge queued" id="pr-out-badge">未生成</span></div>
+<div class="pr-pbody" id="pr-out"></div>
+</div>
+</div>
+<div id="pr-segs-wrap" hidden></div>
+<audio id="pr-audio" preload="none" hidden></audio>
+</section>
+</main>
+<footer class="statusbar">
+<div class="statusbar-inner">
+<span class="status-item">musespiral v0.4.0</span>
+<span class="status-sep">·</span>
+<span class="status-item" id="server-addr">127.0.0.1:8766</span>
+<span class="status-sep">·</span>
+<span class="status-item status-root">root: <span id="root-path">默认（服务 --root）</span></span>
+</div>
+</footer>
+</div>
+</div>
+<script defer src="assets/core.js"></script>
+</body>
+</html>

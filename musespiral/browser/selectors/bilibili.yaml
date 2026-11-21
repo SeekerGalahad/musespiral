@@ -1,0 +1,10 @@
+# B站专栏 — 浏览器上传器选择器（F42 骨架，待真机④校准）
+# 真机校准前为占位值；CSS 选择器易碎，失效时直接改本文件、不改代码（外置可更新）。
+# desc_input 即专栏正文编辑器（正文即内容）；publish_button 仅高亮提示，代码永不点击（红线①）。
+name: B站专栏
+entry_url: https://member.bilibili.com/platform/upload/text/edit
+title_input: 'input[placeholder*="标题"], textarea[placeholder*="标题"]'
+desc_input: '.ql-editor, [contenteditable="true"], textarea'
+topic_input: 'input[placeholder*="标签"], input[placeholder*="添加标签"]'
+cover_input: 'input[type="file"]'
+publish_button: 'button:has-text("发布"), .submit-btn'
