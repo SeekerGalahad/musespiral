@@ -23,7 +23,9 @@ gateway 只是在它外面套一层判定与记账。
 """
 from __future__ import annotations
 
-from typing import Any, Callable
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any, Callable, Iterator
 
 from . import budget as budget_mod
 from . import cache as cache_mod
@@ -33,6 +35,23 @@ from .profiles import AIError, resolve_profile_name
 from .prompts import load_override
 
 ChatFn = Callable[..., str]
+
+# AI-3 复核 fix-5（2026-11-21）：重生成要「AI 再来一版」——prompt 不变时
+# key-segment 的 chat_policed(cache=True) 会命中旧缓存（零 LLM 调用、稿子逐字
+# 相同），造成假重生成。ContextVar 让 services 层（不写插件、不改 cache 参数）
+# 在 regenerate_node 作用域内一次性旁路缓存读取；仍照常记账/写缓存（新稿入
+# 缓存覆盖旧条目）。ContextVar 而非全局：单人 Studio 多线程，作用域隔离不串味。
+_bypass_cache: ContextVar[bool] = ContextVar("musespiral_ai_bypass_cache", default=False)
+
+
+@contextmanager
+def bypass_cache() -> Iterator[None]:
+    """作用域内强制 chat_policed 不读缓存（重生成专用；退出即恢复）。"""
+    token = _bypass_cache.set(True)
+    try:
+        yield
+    finally:
+        _bypass_cache.reset(token)
 
 
 class BudgetExceeded(AIError):
@@ -118,7 +137,8 @@ def chat_policed(
     chars_in = _chars_in(messages)
 
     # ① 查缓存（cache 在 budget 之前：命中即免计费复跑）
-    if cache:
+    # 重生成作用域（bypass_cache）强制 miss——「再来一版」必须真调 LLM。
+    if cache and not _bypass_cache.get():
         hit_text = cache_mod.read_text(key)
         if hit_text is not None:
             usage_mod.append(

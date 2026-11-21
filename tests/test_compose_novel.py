@@ -659,13 +659,14 @@ def test_contract_lock_membership() -> None:
     """契约锁：novel-summary 在 POST 面；GET 面零新增（详情复用 compose/session）。
     面计数随 §3.19 PL-3 接驳批 POST 62→65 / GET 42→44；N-2 批 POST 66→69；
     AI-1 三态裁决批 POST 69→71（动态段占位 runs/<run_id>/adopt|discard，
-    对拍锁语义不变）。"""
+    对拍锁语义不变）；AI-3 节点重生成批 POST 71→72（动态段占位
+    runs/<run_id>/regenerate，§3.19 修订 4）。"""
     from musespiral.studio.actions import _ACTION_ROUTES
     from tests.test_architecture import CONTRACT_GET_EXACT, CONTRACT_POST_EXACT
 
     assert "/api/compose/novel-summary" in CONTRACT_POST_EXACT
     assert "/api/compose/novel-summary" in _ACTION_ROUTES
-    assert len(CONTRACT_POST_EXACT) == 71
+    assert len(CONTRACT_POST_EXACT) == 72
     assert len(CONTRACT_GET_EXACT) == 46  # §3.20 P2 迭代链两读面入锁（44→46；POST 零新增）
 
 

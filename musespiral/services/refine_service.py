@@ -20,6 +20,13 @@ model.META_ITERATION_KEYS 三键（iteration/iteration_root/iteration_of），
 不破）；list_iterations/diff_iterations 提供版本列表与两版对比（diff 复用
 core/version/diff.diff_result，不另写 diff 算法）。
 
+AI-3 重生成（2026-11-21，正典=《mdpub-AI产物裁决机制设计-2026-11-21》§2.3/
+§三.3——裁决三件套 adopt/regenerate/discard 的中间件）：regenerate
+(material_id, feedback=None) = 带 feedback 再 preview 一次 + adopt——
+feedback 拼进 prompt 尾部（「用户改进要求：{feedback}」），旧版不动、新版
+追加进同一条 REFINE-ITER 版本链；preview 相应增 feedback 参数（regenerate
+透传用）。零新落库路径：版本链三键仍由 adopt 自算。
+
 素材正文提取（M0 口径）：
   - payload.text（crawled/derived 等自带正文）；
   - payload.local_path（kb 类引用不复制红线——正文在 KB 根下原文，读时
@@ -86,24 +93,37 @@ def _material_text(material: dict[str, Any]) -> str:
         raise RefineError(str(exc)) from None
 
 
-def _build_prompt(material: dict[str, Any], body: str, template: str | None = None) -> str:
+def _build_prompt(
+    material: dict[str, Any],
+    body: str,
+    template: str | None = None,
+    feedback: str | None = None,
+) -> str:
     """组装预览 prompt：源级 prompt_override > 覆盖文件（prompts.d/refine.txt）
     > 内置缺省；{{material}} 插槽存在则原位注入，否则正文追加在末尾。
 
     template 非空时即接管底座（N-3 源级 prompt_override 优先级最高——「这个
     源的内容特性需要特定处理」比全局覆盖更贴切）。
+
+    feedback 非空（去空白后）时拼在**最终 prompt 尾部**（形如
+    「用户改进要求：{feedback}」）——AI-3 重生成的自然语言改进要求，插槽/
+    覆盖文件/源级 override 均不影响其落位（指令永远在素材正文之后）。
     """
     base = template if template else (load_override("refine") or DEFAULT_PROMPT)
     block = f"【素材正文】（title: {material.get('origin', {}).get('title') or material['id']}）\n{body}"
     if _MATERIAL_SLOT in base:
-        return base.replace(_MATERIAL_SLOT, block)
-    return f"{base}\n\n{block}"
+        prompt = base.replace(_MATERIAL_SLOT, block)
+    else:
+        prompt = f"{base}\n\n{block}"
+    if feedback and feedback.strip():
+        prompt = f"{prompt}\n\n用户改进要求：{feedback.strip()}"
+    return prompt
 
 
 # ── 预览（零落盘）────────────────────────────────────────────────────
 
 
-def preview(material_id: str) -> dict[str, Any]:
+def preview(material_id: str, *, feedback: str | None = None) -> dict[str, Any]:
     """AI 摘要预览：chat(task="refine") 同步起草，绝不落盘。
 
     返回 {"id", "title", "op", "text"}——text 即 AI 草稿（采纳时原样回传，
@@ -113,6 +133,9 @@ def preview(material_id: str) -> dict[str, Any]:
     **N-3 读侧覆盖**：素材 origin.source_id 命中源级 ai_config 时，四键
     （profile/model/temperature/prompt_override）覆盖全局——只作用于本加工
     路径，文章生成（compose generate）不读源配置（裁决见《总体方案》N-3）。
+
+    feedback（AI-3，可选）：自然语言改进要求（如「更简洁」「保留原话更多」），
+    拼在 prompt 尾部——regenerate 透传用，手动 preview 亦可带。
     """
     material = materials_service.get_material(material_id)
     if material is None:
@@ -129,7 +152,9 @@ def preview(material_id: str) -> dict[str, Any]:
             "AI 未配置。请先运行: musespiral ai config --profile <名> --base-url <URL> --api-key <KEY> --model <MODEL>"
         )
     text = _chat(
-        [{"role": "user", "content": _build_prompt(material, body, ai_cfg.get("prompt_override"))}],
+        [{"role": "user", "content": _build_prompt(
+            material, body, ai_cfg.get("prompt_override"), feedback=feedback,
+        )}],
         task="refine",
         **sources_service.override_kwargs(ai_cfg),
     )
@@ -263,6 +288,29 @@ def adopt(
     )
     saved = materials_service.add_material(row)
     return {"ok": True, "id": saved["id"], "material": saved}
+
+
+def regenerate(material_id: str, *, feedback: str | None = None) -> dict[str, Any]:
+    """重生成（AI-3，裁决三件套最后一件）：AI 重新起草一版并直接采纳落库——
+    **旧版不动作**（追加式进链，随时 diff_iterations 对比）。
+
+    实现即「带 feedback 再 preview 一次 + adopt」（正典 §三.3——preview/adopt
+    是既有能力，regenerate 不另起草/落库路径）：
+
+      - preview(material_id, feedback=feedback)：feedback 非空时拼进 prompt
+        尾部（「用户改进要求：{feedback}」——这是重生成相对手动改的价值）；
+      - adopt(material_id, draft)：版本链三键（iteration/iteration_root/
+        iteration_of）由 adopt 自算——material_id 是链上任一成员（原始源或
+        某版 derived）时新行都落在同一条 REFINE-ITER 链上（iteration=链上
+        最大版本号+1，provenance.chain 指本次传入的直接源）。
+
+    错误面同 preview/adopt 原样透传：素材不存在/已删 → RefineError；AI 未
+    配置/调用失败 → AIError（此时零落库——旧版原样保留）。
+
+    返回即 adopt 返回：{"ok", "id", "material"}。
+    """
+    draft = preview(material_id, feedback=feedback)
+    return adopt(material_id, draft["text"])
 
 
 # ── 迭代链读面（P2：版本列表 + 两版对比）────────────────────────────

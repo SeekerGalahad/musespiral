@@ -207,7 +207,7 @@ var blocks=(j.result&&j.result.blocks)||[];
 var round=(j.result&&j.result.round)||1;
 if(QS.streamed){qPaintPartial(blocks);qSetProgress(100,'骨架就绪');}
 else await qReveal(blocks);
-var ready=qGet('qs-ready');if(ready){ready.disabled=false;ready.textContent='✅ 骨架就绪 → 开始写作';
+var ready=qGet('qs-ready');if(ready){ready.disabled=false;ready.textContent='骨架就绪 → 开始写作';
 ready.addEventListener('click',function(){qWrite(slug,round,blocks);});}
 }catch(err){
 var st=qGet('qs-stream');if(st)st.insertAdjacentHTML('beforeend',

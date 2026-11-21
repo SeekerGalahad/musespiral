@@ -33,6 +33,7 @@ from .plugin_actions import (  # PL-3 接驳批（2026-11-20 复核修复）：�
     _pipeline_run_payload,
     _pipeline_run_audio_response,  # E-4（PL-6 批）：裁段音频 wav 字节流
     _pipeline_run_segments_payload,  # E-4（PL-6 批）：转写段落+ranges（编辑版优先）
+    _pipeline_run_versions_payload,  # AI-3 复核 fix-4：run 域版本链清单+两版 diff
     _pipelines_payload,
     _plugin_check_payload,
     _plugins_payload,
@@ -309,6 +310,15 @@ def _get_response(
         if not run_id or "/" in run_id:
             raise _HttpError(404, f"未知路由: {path}")
         return _pipeline_run_audio_response(ctx, run_id, query)
+    # AI-3 复核 fix-4：run 域版本链读面（归档 outputs.vN 的清单+两版 diff）——
+    # 动态段 runs/<id>/versions，须先于通用 runs/<id> 分支（同 segments/audio）。
+    if path.startswith("/api/pipelines/runs/") and path.endswith("/versions"):
+        run_id = path[len("/api/pipelines/runs/"):-len("/versions")]
+        if not run_id or "/" in run_id:
+            raise _HttpError(404, f"未知路由: {path}")
+        return 200, _JSON_CTYPE, _json_bytes(
+            _pipeline_run_versions_payload(ctx, run_id, query)
+        )
     if path.startswith("/api/pipelines/runs/"):
         run_id = path[len("/api/pipelines/runs/"):]
         return 200, _JSON_CTYPE, _json_bytes(_pipeline_run_payload(ctx, run_id))

@@ -211,9 +211,14 @@ def _seg_span(transcript: list[dict[str, Any]], start: float) -> tuple[float, fl
 
 def _build_prompt(
     transcript: list[dict[str, Any]], ranges: list[dict[str, Any]],
-    mode: str, title: str,
+    mode: str, title: str, feedback: str | None = None,
 ) -> list[dict[str, str]] | None:
-    """组装消息；转写过长（> _AI_MAX_PROMPT_CHARS）返回 None → 降级模板。"""
+    """组装消息；转写过长（> _AI_MAX_PROMPT_CHARS）返回 None → 降级模板。
+
+    feedback（AI-3 重生成批 2026-11-21，可选）：自然语言改进要求拼在
+    **user 消息尾部**（「用户改进要求：{feedback}」——refine_service 与
+    key-segment 同款落位：指令永远在素材正文之后）。
+    """
     lines: list[str] = []
     for i, seg in enumerate(transcript):
         text = str(seg.get("text") or "").strip()[:_SEGMENT_TEXT_CAP]
@@ -249,6 +254,8 @@ def _build_prompt(
         f"{head}{organization}{range_note}\n"
         f"转写段落（序号|起始秒-结束秒|文本）：\n" + "\n".join(lines)
     )
+    if feedback and feedback.strip():
+        user = f"{user}\n\n用户改进要求：{feedback.strip()}"
     system = _SYSTEM_PROMPT  # 无占位符（字面 JSON 示例含花括号，不走 str.format）
     if len(system) + len(user) > _AI_MAX_PROMPT_CHARS:
         return None
@@ -275,10 +282,10 @@ def _extract_json_array(text: str) -> list[Any]:
 
 def _ai_paragraphs(
     transcript: list[dict[str, Any]], ranges: list[dict[str, Any]],
-    mode: str, title: str, ctx: Any,
+    mode: str, title: str, ctx: Any, feedback: str | None = None,
 ) -> list[dict[str, Any]]:
     """AI 成稿：一次调用返段落 JSON → 锚点收敛到段落起点网格。"""
-    messages = _build_prompt(transcript, ranges, mode, title)
+    messages = _build_prompt(transcript, ranges, mode, title, feedback)
     if messages is None:
         ctx.log("article-writer: 转写过长超 AI 提示词上限，降级模板拼装")
         raise _AIArticleError("prompt 超限")
@@ -504,6 +511,11 @@ def run(inputs: dict, config: dict, ctx: Any) -> dict:
     auto_adopt = config.get("auto_adopt", _DEFAULT_AUTO_ADOPT)
     if not isinstance(auto_adopt, bool):
         raise PluginError(f"config.auto_adopt 须为布尔: {auto_adopt!r}")
+    # feedback（AI-3 重生成批）：引擎 regenerate_node 注入的自然语言改进
+    # 要求——只进 AI 路径的 prompt 尾部；非字符串拒（宁失败不静默丢弃）
+    feedback = config.get("feedback")
+    if feedback is not None and not isinstance(feedback, str):
+        raise PluginError(f"config.feedback 须为字符串: {feedback!r}")
 
     actual_mode = mode
     paragraphs: list[dict[str, Any]]
@@ -514,7 +526,7 @@ def run(inputs: dict, config: dict, ctx: Any) -> dict:
         paragraphs = []
     elif _ai_profiles.ai_configured(TASK):
         try:
-            paragraphs = _ai_paragraphs(transcript, ranges, mode, title, ctx)
+            paragraphs = _ai_paragraphs(transcript, ranges, mode, title, ctx, feedback=feedback)
             ctx.log(
                 f"article-writer: AI 成稿 {len(paragraphs)} 段（task={TASK}, mode={mode}）"
             )
@@ -523,6 +535,8 @@ def run(inputs: dict, config: dict, ctx: Any) -> dict:
             # 两者皆降级模板——AI 是增强不是依赖。降级只支持 chronological。
             actual_mode = "chronological"
             ctx.log(f"article-writer: AI 成稿不可用（{exc}），降级模板拼装（chronological）")
+            if feedback:
+                ctx.log("article-writer: 改进要求只在 AI 路径生效，本次降级模板未消费")
             paragraphs = _degrade_paragraphs(transcript, ranges, ctx)
     else:
         if mode == "thematic":
@@ -530,6 +544,8 @@ def run(inputs: dict, config: dict, ctx: Any) -> dict:
             ctx.log("article-writer: AI 未配置，thematic 降级为 chronological 模板拼装")
         else:
             ctx.log("article-writer: AI 未配置，走模板拼装（ranges 顺序引原文）")
+        if feedback:
+            ctx.log("article-writer: 改进要求只在 AI 路径生效，本次模板拼装未消费")
         paragraphs = _degrade_paragraphs(transcript, ranges, ctx)
 
     # 图片复制进受管 artifacts（产物目录自包含）+ 引用相对路径表

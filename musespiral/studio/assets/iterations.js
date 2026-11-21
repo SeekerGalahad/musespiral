@@ -2,7 +2,9 @@
  * E-6 versions.js 同款独立产物（material.js 贴单 view 40KiB 锚，同 quickstart/tts 判例）：
  * 素材抽屉「打磨历史」tab——版本列表（v1/v2/…+时间+字数）+ 两版对比（服务端
  * /api/materials/iterations/diff 的 diff.html 红删绿增，复用 .ver-*、.dl-del、.dl-add）
- * + 回退（把旧版正文 POST /api/action/refine adopt 重新采纳为新版，原版保留）。
+ * + 回退（把旧版正文 POST /api/action/refine adopt 重新采纳为新版，原版保留）
+ * + 重新生成（AI-3 批 2026-11-21：POST /api/action/refine regenerate——AI 以该版
+ * 为源重起草一版直接进链，feedback 可选改进要求；旧版不动可 diff）。
  * 自管理 DOM 与状态，零 ui.js 闭包依赖；入口=window.__mdpubMatIter.{tab,repaint}，
  * 由 @view:material 的 matActsClick 委托（data-miit）与 paintMatDrawer 重绘钩子驱动。
  */
@@ -11,7 +13,7 @@
 function E(id){return document.getElementById(id);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function req(p,o){return fetch(p,o).then(function(r){return r.json().then(function(d){if(!r.ok||(d&&d.ok===false))throw new Error((d&&(d.error||d.message))||('HTTP '+r.status));return d;});});}
-var V={id:'',root:'',vs:[],sel:[],tab:0,st:'',diff:'',busy:0};
+var V={id:'',root:'',vs:[],sel:[],tab:0,st:'',diff:'',busy:0,regenVid:'',regeneration:''};
 function paint(){
  var b=E('mi-body'),mv=E('mi-view'),t=E('mi-t1');
  if(!b)return;
@@ -22,17 +24,26 @@ function paint(){
  if(V.st==='load'){b.innerHTML='<div class="skel"><div class="skel-line w90"></div><div class="skel-line w70"></div></div>';return;}
  if(V.st==='err'){b.innerHTML='<p class="action-hint" style="color:var(--crimson)">读取打磨历史失败：'+esc(V.err||'')+'</p>';return;}
  if(!(V.vs||[]).length){b.innerHTML='<p class="action-hint">尚无打磨版本——在详情点「AI 摘要」提炼并采纳后，各版本自动记录在此。</p>';return;}
- var h='<p class="action-hint">链根 <code>'+esc(V.root)+'</code> · '+V.vs.length+' 版 · 勾两版对比 · [回退]=该版正文重新采纳为新版（原版保留）</p>';
+ var h='<p class="action-hint">链根 <code>'+esc(V.root)+'</code> · '+V.vs.length+' 版 · 勾两版对比 · [回退]=该版正文重新采纳为新版（原版保留） · [🔄]=AI 重新生成一版（可填改进要求）</p>';
  h+=V.vs.map(function(v){
   return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line-1)">'+
   '<button class="chip-tag syn-chip'+(V.sel.indexOf(v.id)>=0?' on':'')+'" data-misel="'+esc(v.id)+'" title="勾选两版对比">v'+v.iteration+'</button>'+
   '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(v.title)+' · '+v.chars+' 字 · '+esc(String(v.ts||'').replace('T',' ').slice(0,16))+'</span>'+
+  '<button class="btn btn-ghost" data-miregen="'+esc(v.id)+'" style="font-size:var(--fs-caption)"'+(V.busy?' disabled':'')+' title="AI 重新起草一版（以该版正文为源，自动进版本链可对比）">🔄</button>'+
   '<button class="btn btn-ghost" data-mirev="'+esc(v.id)+'" style="font-size:var(--fs-caption)"'+(V.busy?' disabled':'')+'>回退</button></div>';
  }).join('');
  h+='<div class="action-row"><button class="btn btn-primary" data-midiff="1"'+(V.sel.length===2&&!V.busy?'':' disabled title="先勾选两版"')+'>对比</button>'+
  (V.diff?'<button class="btn btn-ghost" data-midifx="1">收起对比</button>':'')+'</div>';
+ // AI-3 复核 fix-6：改进要求收集走行内输入条（不弹系统输入对话框——自定义
+ // 弹层/行内交互红线），点每版 [🔄] 在本行展开，可留空。
+ if(V.regenVid)h+='<div class="action-row" style="flex-wrap:wrap;gap:6px">'+
+  '<span class="badge warn">🔄 重生成 v'+esc(String((V.vs.filter(function(x){return x.id===V.regenVid;})[0]||{}).iteration||'?'))+'</span>'+
+  '<input class="input" id="mi-regen-in" style="flex:1;min-width:180px" placeholder="改进要求（可留空，如「更简洁」「保留原话更多」）" data-miregenin'+(!V.busy?'':' disabled')+'>'+
+  '<button class="btn btn-primary" data-miregengo'+(V.busy?' disabled':'')+'>重生成</button>'+
+  '<button class="btn btn-ghost" data-miregencancel>取消</button></div>';
  h+='<div>'+V.diff+'</div>';
  b.innerHTML=h;
+ if(V.regenVid&&!V.busy){var rin=E('mi-regen-in');if(rin)rin.focus();}
 }
 function pick(id){
  var i=V.sel.indexOf(id);
@@ -62,7 +73,9 @@ async function diff(btn){
 async function revert(vid,btn){
  var v=null;V.vs.forEach(function(x){if(x.id===vid)v=x;});
  if(!v||V.busy)return;
- if(!window.confirm('回退到 v'+v.iteration+'？\n把该版正文重新采纳为新版 v'+(v.iteration+1)+'——链上追加，原版保留。'))return;
+ // fix-6：系统确认框退役，走应用内 askConfirm 弹层（自定义弹层红线）。
+ var okRe=await askConfirm({title:'回退到 v'+v.iteration,message:'把该版正文重新采纳为新版 v'+(v.iteration+1)+'——链上追加，原版保留。',confirmText:'回退'});
+ if(!okRe)return;
  V.busy=1;if(btn)btn.disabled=true;
  try{
   var d=await req('/api/materials/detail?id='+encodeURIComponent(vid));
@@ -77,14 +90,43 @@ async function revert(vid,btn){
   if(b)b.insertAdjacentHTML('afterbegin','<p class="action-hint" style="color:var(--crimson)">回退失败：'+esc(e.message)+'</p>');
  }
 }
+function regenOpen(vid){
+ if(V.busy)return;
+ V.regenVid=vid;V.regeneration='';paint();
+ var inp=E('mi-regen-in');if(inp)inp.focus();
+}
+async function regenGo(){
+ var vid=V.regenVid;
+ if(!vid||V.busy)return;
+ var inp=E('mi-regen-in');
+ var fb=inp?String(inp.value).trim():'';
+ V.busy=1;V.regenVid='';paint();
+ try{
+  await req('/api/action/refine',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'regenerate',id:vid,feedback:fb,confirm:true})});
+  await load(vid);
+  window.dispatchEvent(new Event('hashchange'));
+ }catch(e){
+  V.busy=0;paint();
+  var b=E('mi-body');
+  if(b)b.insertAdjacentHTML('afterbegin','<p class="action-hint" style="color:var(--crimson)">重生成失败：'+esc(e.message)+'</p>');
+ }
+}
 document.addEventListener('click',function(e){
  if(!E('mi-body'))return;
- var el=e.target.closest('[data-misel],[data-midiff],[data-midifx],[data-mirev]');
+ var el=e.target.closest('[data-misel],[data-midiff],[data-midifx],[data-mirev],[data-miregen],[data-miregengo],[data-miregencancel]');
  if(!el)return;
  if(el.hasAttribute('data-misel'))return pick(el.getAttribute('data-misel'));
  if(el.hasAttribute('data-midiff'))return diff(el);
  if(el.hasAttribute('data-midifx')){V.diff='';return paint();}
  if(el.hasAttribute('data-mirev'))return revert(el.getAttribute('data-mirev'),el);
+ if(el.hasAttribute('data-miregen'))return regenOpen(el.getAttribute('data-miregen'));
+ if(el.hasAttribute('data-miregengo'))return regenGo();
+ if(el.hasAttribute('data-miregencancel')){V.regenVid='';return paint();}
+});
+// IME 选词时 Enter 不得误触重生成提交（否向锁：内联 keydown 首行守卫）
+document.addEventListener('keydown',function(e){
+ if(e.isComposing||e.keyCode===229)return;
+ if(e.key==='Enter'&&e.target&&e.target.getAttribute&&e.target.getAttribute('data-miregenin')!=null){e.preventDefault();regenGo();}
 });
 window.__mdpubMatIter={tab:function(on,id){if(on)load(id);else{V.tab=0;paint();}},repaint:function(id){
  if(id&&id!==V.id){if(V.tab)load(id);else paint();return;}

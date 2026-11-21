@@ -1,6 +1,6 @@
 /*! 版本历史面板（E-6，正典=《musespiral-专业创作者视角深度评审与改进-2026-11-18》§3.7）。
  * 文章详情「版本历史」tab：版本下拉×2 + 对比 → 服务端渲染的 diff（红删绿增）
- * + 按版恢复（先 window.confirm，再 POST /api/article/restore）。
+ * + 按版恢复（先应用内 askConfirm 弹层，再 POST /api/article/restore）。
  * 独立产物（core.js 已贴 M3 200KiB 线，同 quickstart/outline/rolling/dual/tts）：
  * ui.js 的 setTab 进 versions tab 时调 window.__mdpubVersions.mount()；本文件自管理
  * DOM 与状态，文章路径自取 hash（#article?path=），不依赖 ui.js 的 state 闭包。
@@ -95,7 +95,9 @@ finally{V.busy=false;if(btn)btn.disabled=false;}
 }
 async function vRestore(pick,btn){
 var path=verPath(location.hash);if(!path||!pick)return;
-if(!window.confirm('把《'+(pick.label||pick.id)+'》恢复为当前正文？\n当前版会先入版本池（撤销可再恢复）。'))return;
+// fix-6：系统确认框退役，走应用内 askConfirm 弹层（自定义弹层红线）。
+var okRestore=await askConfirm({title:'恢复版本',message:'把《'+(pick.label||pick.id)+'》恢复为当前正文？\n当前版会先入版本池（撤销可再恢复）。',confirmText:'恢复'});
+if(!okRestore)return;
 if(btn)btn.disabled=true;
 try{
 await VReq('/api/article/restore',{method:'POST',headers:{'Content-Type':'application/json'},

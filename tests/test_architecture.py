@@ -506,6 +506,10 @@ CONTRACT_POST_EXACT = {
     # （归 AI-3）。POST 69→71。
     "/api/pipelines/runs/<run_id>/adopt",
     "/api/pipelines/runs/<run_id>/discard",
+    # §3.19 修订 4 新增（AI-3 节点重生成 2026-11-21，裁决三件套最后一件；
+    # 同上动态段 POST——body {step:'ks'|'aw', feedback?}，长动作走 job
+    # kind=plugin_pipeline）。POST 71→72。
+    "/api/pipelines/runs/<run_id>/regenerate",
 }
 
 
@@ -516,8 +520,9 @@ def test_route_surface_matches_api_contract() -> None:
     「后端改动须先改本文再改代码」（契约 §一 效力条）。POST 面 = JSON
     动作表（_ACTION_ROUTES）∪ 二进制旁路表（_BINARY_POST_ROUTES，F59
     upload——confirm 走 query 特判，契约 §3.2 修订条）∪ 动态段 POST 占位面
-    （POST_DYNAMIC_SURFACE，AI-1 三态裁决 adopt/discard——run_id 在 URL
-    段内，占位形入锁同 GET_DYNAMIC_PREFIXES 承载动态读面的思路）。"""
+    （POST_DYNAMIC_SURFACE，AI-1 三态裁决 adopt/discard + AI-3 regenerate
+    ——run_id 在 URL 段内，占位形入锁同 GET_DYNAMIC_PREFIXES 承载动态读面
+    的思路）。"""
     from musespiral.studio.actions import _ACTION_ROUTES
     from musespiral.studio.plugin_actions import POST_DYNAMIC_SURFACE
     from musespiral.studio.routing import _GET_ROUTES

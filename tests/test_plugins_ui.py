@@ -510,7 +510,10 @@ console.log(JSON.stringify({
 
 def test_adjudicate_ops_hide_at_terminal_state() -> None:
     """单条/整稿裁决入口：draft 出「采纳+弃用」；adopted 只出「弃用」；
-    discarded 只出「采纳」；无 status 老稿整组不出入口（无从裁决）。"""
+    discarded 只出「采纳」；无 status 老稿整组不出入口（无从裁决）。
+    AI-3 批（2026-11-21）：每态再 +1 个 🔄 重新生成入口（data-rngregen/
+    data-awregen，busy 置位时禁用）；两函数加 busy 参保持纯函数（不读 PR
+    全局——node 直测约束）。"""
     out = _run_node(
         _pure_plugin_run(),
         "{prRngOps:prRngOps,prAwOps:prAwOps}",
@@ -520,22 +523,31 @@ console.log(JSON.stringify({
   draft:n(prRngOps({status:'draft'},0)),
   draft_has_adopt:prRngOps({status:'draft'},0).indexOf('data-rngadopt="0"')>=0,
   draft_has_discard:prRngOps({status:'draft'},0).indexOf('data-rngdiscard="0"')>=0,
+  draft_has_regen:prRngOps({status:'draft'},0).indexOf('data-rngregen')>=0,
   adopted:n(prRngOps({status:'adopted'},1)),
   discarded:n(prRngOps({status:'discarded'},2)),
   legacy:prRngOps({start:0,end:1},3),
+  rng_busy_disabled:/data-rngregen[^>]*disabled/.test(prRngOps({status:'draft'},0,true)),
+  rng_idle_not_disabled:/data-rngregen[^>]*disabled/.test(prRngOps({status:'draft'},0,false))===false,
   aw_draft:n(prAwOps({status:'draft'})),
   aw_adopted:n(prAwOps({status:'adopted'})),
   aw_discarded:n(prAwOps({status:'discarded'})),
-  aw_legacy:prAwOps({status:''})
+  aw_legacy:prAwOps({status:''}),
+  aw_regen:prAwOps({status:'draft'}).indexOf('data-awregen')>=0,
+  aw_busy:/data-awregen[^>]*disabled/.test(prAwOps({status:'draft'},true))
 }));
 """,
     )
-    assert out["draft"] == 2 and out["draft_has_adopt"] and out["draft_has_discard"]
-    assert out["adopted"] == 1      # 不出重复「采纳」
-    assert out["discarded"] == 1    # 不出重复「弃用」
-    assert out["legacy"] == ""      # 老稿无入口
-    assert out["aw_draft"] == 2 and out["aw_adopted"] == 1 and out["aw_discarded"] == 1
+    assert out["draft"] == 3 and out["draft_has_adopt"] and out["draft_has_discard"]
+    assert out["draft_has_regen"]            # AI-3：draft 态 🔄 重生成入口在场
+    assert out["rng_busy_disabled"]          # busy → 🔄 禁用（重生成进行中防重复提交）
+    assert out["rng_idle_not_disabled"]      # 非 busy → 🔄 可点
+    assert out["adopted"] == 2      # 🔄 + 弃用（不出重复「采纳」）
+    assert out["discarded"] == 2    # 🔄 + 采纳（不出重复「弃用」）
+    assert out["legacy"] == ""      # 老稿无入口（🔄 同不出——无态无从裁决）
+    assert out["aw_draft"] == 3 and out["aw_adopted"] == 2 and out["aw_discarded"] == 2
     assert out["aw_legacy"] == ""
+    assert out["aw_regen"] and out["aw_busy"]  # busy → 🔄 禁用（采纳/弃用不受影响）
 
 
 def test_verdict_aggregation_and_article_gate() -> None:

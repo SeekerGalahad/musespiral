@@ -81,6 +81,10 @@ def _action_refine(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
         调用失败，同 annotate_rewrite 降级面）。
       - {action:"adopt", id, text}：人工「存为素材」→ derived 素材落库
         （provenance.chain+license 继承，见 refine_service.adopt）。
+      - {action:"regenerate", id, feedback?}（AI-3 批 2026-11-21）：AI 重
+        新起草一版并直接采纳——旧版不动、新版追加进同一 REFINE-ITER 版本
+        链（refine_service.regenerate=preview(feedback)+adopt 两行复用）；
+        feedback 可选字符串拼进 prompt 尾部。同步形态同 preview（零 job）。
     """
     from ...infra.ai import AIError
     from ...services import refine_service
@@ -102,7 +106,17 @@ def _action_refine(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
             return refine_service.adopt(mid, text)
         except refine_service.RefineError as err:
             raise _HttpError(400, str(err)) from None
-    raise _HttpError(400, "action 必须是 preview/adopt 之一")
+    if action == "regenerate":
+        feedback = data.get("feedback")
+        if feedback is not None and not isinstance(feedback, str):
+            raise _HttpError(400, f"feedback 须为字符串（自然语言改进要求，可省略）: {feedback!r}")
+        try:
+            return refine_service.regenerate(mid, feedback=(feedback or "").strip() or None)
+        except refine_service.RefineError as err:
+            raise _HttpError(400, str(err)) from None
+        except AIError as err:
+            return _error_payload(err, ctx.root)
+    raise _HttpError(400, "action 必须是 preview/adopt/regenerate 之一")
 
 
 def _action_tags_suggest(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:

@@ -271,7 +271,8 @@ def _shell_js_css() -> str:
 
 
 def _all() -> str:
-    """全产物并集（= `_shell_js_css()` 的别名，语义名）。
+    """全产物并集——壳 + core + views/*.js + **所有懒加载 assets**（2026-11-21
+    AI-3 复核 fix-6 扩域）。
 
     **否向断言的专用域**（2026-11-18 集成接线轮修正）：M1 分域读取把 32 条
     `"X" not in src` 的检查域从「全产物」窄化成「单一产物」（如 `'已停止跟踪'
@@ -279,8 +280,21 @@ def _all() -> str:
     JS 字符串形态回流到未被读的产物就抓不到了。而「X 不得出现」这类断言的
     本意与产物归属无关，M1 之前的等价域就是整份语料。故否向断言一律用本域，
     正向断言继续用分域（`_js()`/`_css()`/`_source()`，更精确）。
+
+    **fix-6 假门修复**：此前本域=壳+core+views，漏掉 core.js:685 懒加载的
+    assets/{iterations,quickstart,versions,tts,…}.js——窗口提示这类违例落在
+    iterations.js 就永远扫不到（AI-3 批真实缺陷）。现补入 assets/ 顶层全部
+    手写 .js/.css（排除 editor/ 第三方 CodeMirror 压缩产物——那些非本仓代码，
+    且含 `prompt` 等字样会误伤）。负向断言域扩大只会更严，不放松既有约束。
     """
-    return _shell_js_css()
+    assets = STUDIO / "assets"
+    lazy = sorted(
+        p for p in assets.iterdir()
+        if p.is_file() and p.suffix in (".js", ".css")
+    )
+    return _shell_js_css() + "\n" + "\n".join(
+        p.read_text(encoding="utf-8") for p in lazy
+    )
 
 
 class _Structure(HTMLParser):
@@ -906,8 +920,12 @@ def test_detail_bidirectional_scroll_sync() -> None:
     assert "if(sLock)return;" in src
     assert "Math.abs(b.scrollTop-sEcho.p)<2" in src
     assert "Math.abs(EA.scrollTop-sEcho.e)<2" in src
-    # 像素比例公式已退役（块级映射替代）
-    assert "scrollHeight-b.clientHeight" not in all_src
+    # 像素比例公式已退役（块级映射替代）。域=material 视图 + core（该公式的
+    # 退役现场）；editor.js 是另一子系统（CodeMirror↔iframe 滚动同步），其
+    # 自己的 scrollHeight 比例公式是正当实现，不属本条「material 预览退役」
+    # 语义——fix-6 扩 all_src 域后不能拿别处的正当用法误伤本条（各锁各域）。
+    _mv = _view_js("material") if VIEWS_JS.exists() else ""
+    assert "scrollHeight-b.clientHeight" not in (src + _mv)
     # 编辑器滚动同时同步行号列与 overlay（既有行为保留）
     assert "EG.scrollTop=EA.scrollTop;HL.scrollTop=EA.scrollTop;HL.scrollLeft=EA.scrollLeft" in src
 
@@ -1528,17 +1546,20 @@ def test_ime_guards_on_all_editor_and_compose_keydown_handlers() -> None:
     首行守卫逐字同款——内联 14 处。
     N-2 素材闭环前端批（2026-11-21）+1 处：spark ⌘⇧I 浮层 textarea（IME 选词
     的 Enter 不得误触保存、Escape 不得误关）——内联 15 处。
+    AI-3 重生成批（2026-11-21）+1 处：重生成输入条 Enter 提交的 document 监听
+    （ks 条在 #pr-segs-wrap、aw 条在 #pr-out，故挂 document 级；IME 选词的
+    Enter 不得误触提交）——内联 16 处。
     """
     src = _js()
     guard = "if(e.isComposing||e.keyCode===229)return;"
     head = "addEventListener('keydown',function(e){\n"
-    assert src.count(head + guard) == 15, (
-        f"内联 keydown 处理器首行 IME 守卫应为 15 处，实为 {src.count(head + guard)}"
+    assert src.count(head + guard) == 16, (
+        f"内联 keydown 处理器首行 IME 守卫应为 16 处，实为 {src.count(head + guard)}"
     )
-    # 第 16 处：askConfirm 弹层 onKey（具名函数，removeEventListener 需具名引用）
+    # 第 17 处：askConfirm 弹层 onKey（具名函数，removeEventListener 需具名引用）
     assert "function onKey(e){ " + guard in src
-    assert src.count(guard) == 16, (
-        f"IME 守卫总数（内联 15 + onKey 1）应为 16 处，实为 {src.count(guard)}"
+    assert src.count(guard) == 17, (
+        f"IME 守卫总数（内联 16 + onKey 1）应为 17 处，实为 {src.count(guard)}"
     )
 
 
@@ -3737,3 +3758,20 @@ def test_m3_lazy_load_wiring() -> None:
     for view in ("publish", "article", "material"):
         assert re.search(r"^function \w+\(", _view_js(view), re.MULTILINE), view
         assert "import " not in _view_js(view) and "export " not in _view_js(view)
+
+
+def test_all_negative_gate_covers_lazy_assets() -> None:
+    """fix-6（AI-3 复核 2026-11-21）：否向断言域 `_all()` 必须覆盖 core.js:685
+    懒加载的 assets/*.js——否则「window.prompt 不得出现」这类全局红线在
+    iterations.js 等懒加载产物里的违例永远扫不到（真实假门判例：iterations.js
+    用系统输入框收集重生成 feedback 却全绿）。
+
+    锁法：iterations.js（懒加载）确实在 `_all()` 域内；且当前全域无
+    window.prompt / 系统确认对话框泄漏。
+    """
+    all_src = _all()
+    # iterations.js 的独有标记串确在域内（证明它被读了，不是靠猜声明生效）
+    assert "window.__mdpubMatIter" in all_src, "iterations.js 未进入 _all() 否向域"
+    # 全手写产物（含懒加载）无系统对话框泄漏
+    assert "window.prompt" not in all_src
+    assert "window.confirm" not in all_src

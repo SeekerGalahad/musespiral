@@ -17,7 +17,11 @@ from urllib.parse import parse_qs, urlparse
 
 from .actions import _ACTION_ROUTES
 from .assets import _read_ui_html, _studio_asset_response
-from .plugin_actions import resolve_adjudicate_post, run_adjudicate  # 三态裁决动态 POST（AI-1 批）
+from .plugin_actions import (  # 三态裁决动态 POST（AI-1 批）+ 节点重生成（AI-3 批）
+    resolve_adjudicate_post,
+    run_adjudicate,
+    run_regenerate,
+)
 from .routing import _GET_ROUTES, _get_response
 from .security import (
     _HTML_CTYPE,
@@ -100,18 +104,25 @@ def _make_handler(ctx: _StudioContext) -> type[BaseHTTPRequestHandler]:
                     )
                     self._send(*result)
                     return
-                # 三态裁决（AI-1 批 2026-11-21，契约 §3.19 修订 3）：动态段
-                # POST（/api/pipelines/runs/<run_id>/adopt|discard）先于 GET
-                # 面判定——该路径族在 _RouteSet 前缀覆盖内，不先分流会被下方
-                # 「GET 路径非 GET 即 405」语义吃掉（/api/discover/star 双态
-                # 先例的动态版）；confirm 闸门与 JSON body 走通用层同款。
+                # 三态裁决（AI-1 批 2026-11-21，契约 §3.19 修订 3）+ 节点重
+                # 生成（AI-3 批 2026-11-21）：动态段 POST（/api/pipelines/
+                # runs/<run_id>/adopt|discard|regenerate）先于 GET 面判定
+                # ——该路径族在 _RouteSet 前缀覆盖内，不先分流会被下方
+                # 「GET 路径非 GET 即 405」语义吃掉（/api/discover/star
+                # 双态先例的动态版）；confirm 闸门与 JSON body 走通用层
+                # 同款。regenerate 是长动作（ks/aw 是 AI 节点）→ 提交 job
+                # 返 {job_id}（前端轮询 jobs 面），与 adopt/discard 的同步
+                # 翻态分流。
                 if method == "POST":
                     hit = resolve_adjudicate_post(path)
                     if hit is not None:
                         action, rid = hit
                         data = self._read_json()
                         _require_confirm(data)
-                        self._send_json(200, run_adjudicate(ctx, data, rid, action))
+                        if action == "regenerate":
+                            self._send_json(200, run_regenerate(ctx, data, rid))
+                        else:
+                            self._send_json(200, run_adjudicate(ctx, data, rid, action))
                         return
                 if path in _GET_ROUTES:
                     # 档A /api/discover/star 为 GET/POST 双态路径：方法不符时

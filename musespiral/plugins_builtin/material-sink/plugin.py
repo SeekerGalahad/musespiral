@@ -105,7 +105,14 @@ def run(inputs: dict, config: dict, ctx: Any) -> dict:
 
     text = md_path.read_text(encoding="utf-8")
     slug = Path(md_path).stem or "article"
+    # AI-3 复核 fix-2：上游节点重生成的级联重放带 regen_version（≥1）——uri
+    # 加 /v{N} 段落**新** preview 素材（同一 run 的 v2 成稿不撞 v1 的 immutable
+    # 红线，旧素材原样保留供对比）。首轮运行 regen_version=None → uri 形状不变
+    # （存量幂等/测试零回归）。无该属性的宿主（单测假 ctx）getattr 兜底。
+    regen_version = getattr(ctx, "regen_version", None)
     uri = f"pipeline://{run_id}/{slug}.md"
+    if isinstance(regen_version, int) and not isinstance(regen_version, bool) and regen_version >= 1:
+        uri = f"pipeline://{run_id}/{slug}.v{regen_version}.md"
     mid = _mat_model.make_material_id(SOURCE_ID, "text", uri)
 
     # 幂等/immutable 先判（同 id 同稿零 IO 返回；同 id 异稿拒——durable 副本

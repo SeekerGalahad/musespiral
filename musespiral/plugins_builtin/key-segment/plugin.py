@@ -280,8 +280,15 @@ def _rule_ranges(segments: list[dict[str, Any]], max_segments: int) -> list[dict
 # ── AI 路径（chat_policed 一次调用返 JSON）─────────────────────────
 
 
-def _build_prompt(segments: list[dict[str, Any]], max_segments: int) -> list[dict[str, str]] | None:
-    """组装消息；转写过长（> _AI_MAX_PROMPT_CHARS）返回 None → 外层降级。"""
+def _build_prompt(
+    segments: list[dict[str, Any]], max_segments: int, feedback: str | None = None,
+) -> list[dict[str, str]] | None:
+    """组装消息；转写过长（> _AI_MAX_PROMPT_CHARS）返回 None → 外层降级。
+
+    feedback（AI-3 重生成批 2026-11-21，可选）：自然语言改进要求拼在
+    **user 消息尾部**（形如「用户改进要求：{feedback}」——refine_service.
+    _build_prompt 同款落位：指令永远在素材正文之后）。
+    """
     lines: list[str] = []
     for i, seg in enumerate(segments):
         text = str(seg.get("text") or "").strip()[:_SEGMENT_TEXT_CAP]
@@ -298,6 +305,8 @@ def _build_prompt(segments: list[dict[str, Any]], max_segments: int) -> list[dic
         f"至多选 {max_segments} 个关键片段。转写段落（序号|起始秒-结束秒|文本）：\n"
         + "\n".join(lines)
     )
+    if feedback and feedback.strip():
+        user = f"{user}\n\n用户改进要求：{feedback.strip()}"
     system = _SYSTEM_PROMPT  # 无占位符（字面 JSON 示例含花括号，不走 str.format）
     if len(system) + len(user) > _AI_MAX_PROMPT_CHARS:
         return None
@@ -355,9 +364,10 @@ def _snap_to_segment_grid(
 
 
 def _ai_ranges(
-    segments: list[dict[str, Any]], max_segments: int, ctx: Any
+    segments: list[dict[str, Any]], max_segments: int, ctx: Any,
+    feedback: str | None = None,
 ) -> list[dict[str, Any]]:
-    messages = _build_prompt(segments, max_segments)
+    messages = _build_prompt(segments, max_segments, feedback)
     if messages is None:
         ctx.log("key-segment: 转写过长超 AI 提示词上限，降级规则切片")
         raise _AIRangeError("prompt 超限")
@@ -448,10 +458,15 @@ def run(inputs: dict, config: dict, ctx: Any) -> dict:
         min_confidence = min(max(float(config.get("min_confidence", _DEFAULT_MIN_CONFIDENCE)), 0.0), 1.0)
     except (TypeError, ValueError):
         raise PluginError(f"config.min_confidence 须为数值: {config.get('min_confidence')!r}") from None
-    # 三态裁决开关：引擎 _merge_config 只填 default 不深校验——布尔性插件自验
+    # 三态裁决开关：引擎 _merge_config 只填 default 不做深校验——布尔性插件自验
     auto_adopt = config.get("auto_adopt", _DEFAULT_AUTO_ADOPT)
     if not isinstance(auto_adopt, bool):
         raise PluginError(f"config.auto_adopt 须为布尔: {auto_adopt!r}")
+    # feedback（AI-3 重生成批）：引擎 regenerate_node 注入的自然语言改进
+    # 要求——只进 AI 路径的 prompt 尾部；非字符串拒（宁失败不静默丢弃）
+    feedback = config.get("feedback")
+    if feedback is not None and not isinstance(feedback, str):
+        raise PluginError(f"config.feedback 须为字符串: {feedback!r}")
 
     if not transcript:
         ctx.log("key-segment: 转写为空（纯音乐/静音素材），ranges 置空")
@@ -461,7 +476,7 @@ def run(inputs: dict, config: dict, ctx: Any) -> dict:
     ranges: list[dict[str, Any]]
     if _ai_profiles.ai_configured(TASK):
         try:
-            ranges = _ai_ranges(transcript, max_segments, ctx)
+            ranges = _ai_ranges(transcript, max_segments, ctx, feedback=feedback)
             ctx.log(f"key-segment: AI 切片 {len(ranges)} 段（task={TASK}）")
         except (AIError, _AIRangeError) as exc:
             # 治理层整链失败面 = AIError（client 把网络/格式/预算全部收敛为
@@ -469,9 +484,13 @@ def run(inputs: dict, config: dict, ctx: Any) -> dict:
             # 解析失败。两者皆降级规则切片——AI 是增强不是依赖。本插件自身
             # 的 bug（TypeError 等）不在捕获面，该失败就失败（不静默吞）。
             ctx.log(f"key-segment: AI 切片不可用（{exc}），降级规则切片")
+            if feedback:
+                ctx.log("key-segment: 改进要求只在 AI 路径生效，本次降级规则切片未消费")
             ranges = _rule_ranges(transcript, max_segments)
     else:
         ctx.log("key-segment: AI 未配置，走规则切片（密度/标题词/停顿打分）")
+        if feedback:
+            ctx.log("key-segment: 改进要求只在 AI 路径生效，本次规则切片未消费")
         ranges = _rule_ranges(transcript, max_segments)
 
     marked = 0

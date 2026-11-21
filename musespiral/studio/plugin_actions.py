@@ -33,7 +33,15 @@ API 契约 §3.19）。
                                         POST 本批为 URL 形（run_id 在段内，
                                         server._handle 裁决分流先于 GET 面
                                         判定），把 run 的 draft 产物转
-                                        adopted/discarded；regenerate 归 AI-3）
+                                        adopted/discarded）
+  POST /api/pipelines/runs/<run_id>/regenerate → 节点重生成（AI-3 批
+                                        2026-11-21，正典=裁决机制设计 §2.3
+                                        三件套·重生成；body {step:'ks'|'aw',
+                                        feedback?}）——从该节点重跑（前序不
+                                        重跑），旧产物归档 outputs.v{N}.json
+                                        、新产物 status 重置 draft；长动作
+                                        （ks/aw 是 AI 节点）走 job
+                                        kind=plugin_pipeline，前端轮询 jobs 面
 
 存储：~/.musespiral/pipelines/<id>.json（设计 §六）；运行真相=~/.musespiral/pipeline_runs/
 <run_id>/meta.json（引擎终态写全——steps/artifacts/failed_at）。
@@ -474,21 +482,26 @@ def _pipeline_run_audio_response(
 # ── 三态裁决端点（AI-1 批 2026-11-21，契约 §3.19 修订 3；正典=AI 产物裁决
 # 机制设计 §二/§三）────────────────────────────────────────────────
 # draft=AI 建议（可用但 UI 标「AI 建议」徽章）/ adopted=人工确认 /
-# discarded=人工否定。本批只落 adopt/discard（regenerate 归 AI-3：接
-# REFINE-ITER 版本链 + feedback，独立一块）。落点=**生效文档**：ranges 有
-# 编辑版（ranges.edited.json，E-4）改编辑版、无编辑版改原始 outputs.json
-# inline——与 GET segments「编辑版优先」读面同源，前端徽章读到的就是裁决
-# 后的态；article 无编辑版面，直改 outputs.json inline（article.status 与
-# 顶层 article_status 直判面同步）。已终态（adopted→adopt 等）幂等零改。
+# discarded=人工否定。AI-1 落 adopt/discard；AI-3 批（2026-11-21）补
+# regenerate——从该节点重跑（前序产物不动，旧版归档 outputs.v{N}.json，
+# 新产物 draft 待重新裁决；feedback 拼进插件 AI prompt 尾部）。落点=
+# **生效文档**：ranges 有编辑版（ranges.edited.json，E-4）改编辑版、无
+# 编辑版改原始 outputs.json inline——与 GET segments「编辑版优先」读面
+# 同源，前端徽章读到的就是裁决后的态；article 无编辑版面，直改
+# outputs.json inline（article.status 与顶层 article_status 直判面同步）。
+# 已终态（adopted→adopt 等）幂等零改。
 
 _ADJUDICATE_STATUSES = {"adopt": "adopted", "discard": "discarded"}
-_ADJUDICATE_PATH_RE = re.compile(r"^/api/pipelines/runs/([^/]+)/(adopt|discard)$")
+_ADJUDICATE_PATH_RE = re.compile(
+    r"^/api/pipelines/runs/([^/]+)/(adopt|discard|regenerate)$"
+)
 
 # 动态 POST 面（占位形——契约锁 POST_EXACT 与 API 契约文档对齐用；
 # <run_id> 为运行期段，与 GET_DYNAMIC_PREFIXES 承载动态读面同一思路）
 POST_DYNAMIC_SURFACE = frozenset({
     "/api/pipelines/runs/<run_id>/adopt",
     "/api/pipelines/runs/<run_id>/discard",
+    "/api/pipelines/runs/<run_id>/regenerate",
 })
 
 
@@ -644,6 +657,196 @@ def run_adjudicate(
         "changed": outcome["changed"],
         "total": outcome["total"],
     }
+
+
+# ── 节点重生成（AI-3 批 2026-11-21；正典=裁决机制设计 §2.3/§三 3.1/3.2）──
+# POST /api/pipelines/runs/<run_id>/regenerate {step:'ks'|'aw', feedback?}：
+# 「这条切片不对，再来一次」——从该节点重跑（前序不重跑），旧版归档
+# outputs.v{N}.json 供对比，新产物 status 重置 draft（要重新裁决）。执行
+# 体=psp.regenerate_node（长动作：ks/aw 是 AI 节点，走 job 面轮询）。
+
+
+# step → (产物端口, 值型, 产物中文名)——与 run_adjudicate 的 step 枚举同表
+_REGEN_STEPS: dict[str, tuple[str, type, str]] = {
+    "ks": ("ranges", list, "切片 ranges"),
+    "aw": ("article", dict, "成稿 article"),
+}
+
+
+def run_regenerate(ctx: _StudioContext, data: dict[str, Any], run_id: str) -> dict[str, Any]:
+    """POST /api/pipelines/runs/<run_id>/regenerate（动态段 POST，confirm 闸门
+    走 server 通用层）：提交一次节点重生成 job（kind=plugin_pipeline）。
+
+    - step 校验（'ks'|'aw'，枚举外 400 可读）→ 按产物端口定位节点目录
+      （_find_output_node——与裁决端点同款定位面，无产物节点 400）；
+    - feedback 可选字符串（自然语言改进要求，如「更简洁」），空串视同
+      省略；非字符串 400；
+    - 提交期校验先行（psp.precheck_regenerate，零 job 纪律）：run 终态、
+      节点在册、旧产物在场、plan 可重建——不过即 400 可读，失败零副作用；
+    - job 体=psp.regenerate_node（归档/重跑/draft 重置/log 审计行全在引擎
+      侧）；响应 {ok, job_id, run_id, step, node}，前端轮询 /api/jobs/<id>。
+    """
+    from .actions import _submit  # 惰性导入（环导规避，_action_pipeline_run 同款）
+
+    run_dir = _run_dir_checked(run_id)
+    step = data.get("step")
+    if step not in _REGEN_STEPS:
+        raise _HttpError(
+            400, f"step 须为 'ks'（key-segment 切片 ranges）或 'aw'（article-writer 成稿）: {step!r}"
+        )
+    port, expect, label = _REGEN_STEPS[step]
+    found = _find_output_node(run_dir, port, expect=expect)
+    if found is None:
+        raise _HttpError(
+            400, f"该运行无 {label} 产物节点（链上需有该步骤）: {run_id}"
+        )
+    node_id = found[0].name
+    feedback = data.get("feedback")
+    if feedback is not None:
+        if not isinstance(feedback, str):
+            raise _HttpError(400, f"feedback 须为字符串（自然语言改进要求，可省略）: {feedback!r}")
+        feedback = feedback.strip() or None
+    try:
+        psp.precheck_regenerate(run_id, node_id)
+    except psp.RegenerateError as err:
+        raise _HttpError(400, str(err)) from None
+
+    def _body(_job_id: str) -> dict[str, Any]:
+        return psp.regenerate_node(run_id, node_id, feedback=feedback)
+
+    out = _submit(
+        ctx, "plugin_pipeline",
+        {"regenerate": run_id, "step": step, "node": node_id}, _body,
+    )
+    return {**out, "run_id": run_id, "step": step, "node": node_id}
+
+
+# ── run 域版本链读面（AI-3 复核 fix-4，2026-11-21）──────────────────
+# 归档 outputs.v{N}.json 此前只写不读——UI 文案承诺「旧版可对照」却无任何
+# 端点/前端读取。这里补两读面：版本清单 + 任意两版 diff（复用 core/version/
+# diff，与素材域 list_iterations/diff_iterations 同款产物面）。
+
+_ARCHIVED_OUTPUTS_RE = re.compile(r"^outputs\.v(\d+)\.json$")
+
+
+def _run_versions(run_dir: Path, node_id: str) -> list[dict[str, Any]]:
+    """某节点的归档版本清单（当前 outputs.json=最新版 + outputs.vN.json 历版），
+    按版本号升序。每项 {version, name, chars}——chars=正文字数（article.path 指向
+    的 md 或 outputs inline 文本），零正文进清单（「计数无正文」纪律）。"""
+    node_dir = run_dir / "workspace" / node_id
+    out: list[dict[str, Any]] = []
+    for p in node_dir.glob("outputs*.json"):
+        m = _ARCHIVED_OUTPUTS_RE.match(p.name)
+        version = int(m.group(1)) if m else (0 if p.name == "outputs.json" else -1)
+        if version < 0:
+            continue
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        inline = data.get("inline") if isinstance(data, dict) else None
+        inline = inline if isinstance(inline, dict) else {}
+        chars = 0
+        article = inline.get("article")
+        if isinstance(article, dict) and article.get("path"):
+            try:
+                chars = len(Path(str(article["path"])).read_text(encoding="utf-8"))
+            except OSError:
+                chars = 0
+        elif isinstance(article, dict) and isinstance(article.get("text"), str):
+            chars = len(article["text"])
+        else:
+            ranges = inline.get("ranges")
+            if isinstance(ranges, list):
+                chars = sum(len(str(r.get("text") or r.get("label") or ""))
+                            for r in ranges if isinstance(r, dict))
+        out.append({"version": version, "name": p.name, "chars": chars})
+    out.sort(key=lambda v: v["version"])
+    return out
+
+
+def _version_text(run_dir: Path, node_id: str, name: str) -> str:
+    """归档版本的对比正文：article.path 指向的 md（当前稿）随版归档的
+    {stem}.v{N}.md 优先；否则回退 outputs.json 的 inline 文本（article.text /
+    ranges 逐行 label+text）。"""
+    node_dir = run_dir / "workspace" / node_id
+    try:
+        data = json.loads((node_dir / name).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise _HttpError(400, f"版本产物读取失败: {name}（{exc}）") from None
+    inline = data.get("inline") if isinstance(data, dict) else None
+    inline = inline if isinstance(inline, dict) else {}
+    m = _ARCHIVED_OUTPUTS_RE.match(name)
+    version = int(m.group(1)) if m else 0  # 0=当前稿
+    article = inline.get("article")
+    if isinstance(article, dict):
+        # 当前稿 md 原文；归档版 {stem}.v{N}.md（stem 由 path 推）
+        apath = Path(str(article.get("path") or ""))
+        if version == 0 and apath.is_file():
+            return apath.read_text(encoding="utf-8")
+        if version >= 1:
+            archived = apath.with_name(f"{apath.stem}.v{version}.md")
+            if archived.is_file():
+                return archived.read_text(encoding="utf-8")
+        if isinstance(article.get("text"), str):
+            return article["text"]
+    ranges = inline.get("ranges")
+    if isinstance(ranges, list):
+        return "\n".join(
+            f"{r.get('label') or ''} {r.get('text') or ''}".strip()
+            for r in ranges if isinstance(r, dict)
+        )
+    return json.dumps(inline, ensure_ascii=False, indent=2)
+
+
+def _pipeline_run_versions_payload(
+    ctx: _StudioContext, run_id: str, query: dict[str, list[str]]
+) -> dict[str, Any]:
+    """GET /api/pipelines/runs/<id>/versions?node=<id>[&a=&b=]：run 域版本链。
+
+    无 a/b → {"ok", "node", "versions":[{version,name,chars}]}；有 a/b（归档
+    文件名，来自清单 name）→ 附 {"diff": {...}}（复用 core/version/diff，
+    红删绿增 html——与素材域 diff_iterations 同款产物面）。
+    """
+    from ..core.version.diff import diff_result, render_diff_html
+
+    run_dir = _run_dir_checked(run_id)
+    node_id = (query.get("node") or [""])[0]
+    step = (query.get("step") or [""])[0]
+    if step:
+        # 前端只知道 regen step（ks/aw），按产物端口定位节点——与 regenerate
+        # 端点同款 _find_output_node 口径，免前端记节点 id。
+        port, expect, _ = _REGEN_STEPS.get(step, (None, None, ""))
+        if port is None:
+            raise _HttpError(400, f"step 须为 ks/aw: {step!r}")
+        found = _find_output_node(run_dir, port, expect=expect)
+        if found is None:
+            raise _HttpError(400, f"该运行无 {port} 产物节点")
+        node_id = found[0].name
+    if not node_id or "/" in node_id or ".." in node_id:
+        raise _HttpError(400, "缺少或非法的 node/step 参数（版本所属节点）")
+    meta = json.loads((run_dir / "meta.json").read_text(encoding="utf-8"))
+    if node_id not in [str(n) for n in (meta.get("nodes") or [])]:
+        raise _HttpError(400, f"节点不在该运行内: {node_id!r}")
+    versions = _run_versions(run_dir, node_id)
+    result: dict[str, Any] = {"ok": True, "node": node_id, "versions": versions}
+    q = query.get("a") or []
+    b = query.get("b") or []
+    if q and b:
+        a_name, b_name = q[0], b[0]
+        valid = {v["name"] for v in versions}
+        if a_name not in valid or b_name not in valid:
+            raise _HttpError(400, "a/b 须为版本清单中的 name（outputs.json / outputs.vN.json）")
+        d = diff_result(
+            _version_text(run_dir, node_id, a_name),
+            _version_text(run_dir, node_id, b_name),
+            from_label=a_name, to_label=b_name,
+        )
+        result["diff"] = {
+            **d.to_dict(),
+            "html": render_diff_html(d, from_label=a_name, to_label=b_name),
+        }
+    return result
 
 
 # ── POST 动作（actions._ACTION_ROUTES 合并面）──────────────────

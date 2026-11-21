@@ -1,4 +1,4 @@
-var PR={mode:'',pipeId:'',def:null,runId:'',jobId:'',timer:null,t0:0,steps:[],status:'',error:'',artifacts:[],segs:null,ranges:null,edits:{},editIdx:-1,rngDel:{},rngAdd:{},pipes:[],miss:0,hasSegs:false,hasArticle:false,awStatus:'',verdicts:{}};
+var PR={mode:'',pipeId:'',def:null,runId:'',jobId:'',timer:null,t0:0,steps:[],status:'',error:'',artifacts:[],segs:null,ranges:null,edits:{},editIdx:-1,rngDel:{},rngAdd:{},pipes:[],miss:0,hasSegs:false,hasArticle:false,awStatus:'',verdicts:{},regen:0,regenOpen:''};
 function prChainHasSegs(nodes){
 return (nodes||[]).some(function(n){
 var o=((n&&n.plugin)||{}).outputs||{};
@@ -52,17 +52,19 @@ if(r.status==='draft')n++;
 if(!any)return '';
 return n>0?'<span class="badge warn">AI 建议 '+n+' 段</span>':'<span class="badge pass">已全部裁决</span>';
 }
-function prRngOps(r,i){
+function prRngOps(r,i,busy){
 var st=r&&r.status,ops='';
 if(!st)return '';
+ops+='<button class="btn btn-sm" data-rngregen title="重新生成切片（整组重跑，旧版自动归档 outputs.vN 可对照；可填改进要求）"'+(busy?' disabled':'')+'>🔄</button>';
 if(st!=='adopted')ops+='<button class="btn btn-sm" data-rngadopt="'+i+'" title="采纳为正式结果">采纳</button>';
 if(st!=='discarded')ops+='<button class="btn btn-sm" data-rngdiscard="'+i+'" title="弃用（下游跳过）">弃用</button>';
 return ops;
 }
-function prAwOps(aw){
+function prAwOps(aw,busy){
 var st=aw&&aw.status;
 if(!st)return '';
-return (st==='adopted'?'':'<button class="btn btn-sm" data-awadopt title="采纳为正式稿">采纳</button>')+
+return '<button class="btn btn-sm" data-awregen title="重新生成成稿（旧版自动归档可对照；可填改进要求，如「更简洁」）"'+(busy?' disabled':'')+'>🔄</button>'+
+(st==='adopted'?'':'<button class="btn btn-sm" data-awadopt title="采纳为正式稿">采纳</button>')+
 (st==='discarded'?'':'<button class="btn btn-sm" data-awdiscard title="弃用（下游跳过）">弃用</button>');
 }
 function prVerdict(verdicts,port){
@@ -87,7 +89,7 @@ function prReset(){
 prStop();
 PR.runId='';PR.jobId='';PR.steps=[];PR.status='';PR.error='';PR.artifacts=[];
 PR.segs=null;PR.ranges=null;PR.edits={};PR.editIdx=-1;PR.rngDel={};PR.rngAdd={};PR.hasSegs=false;
-PR.hasArticle=false;PR.awStatus='';PR.verdicts={};
+PR.hasArticle=false;PR.awStatus='';PR.verdicts={};PR.regen=0;PR.regenOpen='';
 $('pr-segs-wrap').hidden=true;$('pr-segs-wrap').innerHTML='';
 prPaint();
 }
@@ -214,7 +216,7 @@ return '<span class="badge pass" title="'+esc(p)+'">'+esc(String(p).split('/').p
 }).join(' ')||'<span class="action-hint">无登记产物</span>';
 var aw='';
 if(PR.hasArticle){
-aw='<div class="pr-lines"><div class="pr-line"><span class="pr-ts">成稿</span><span class="pr-tx">'+prStBadge(PR.awStatus,'AI 建议稿')+'</span><span class="pr-seg-ops">'+prAwOps({status:PR.awStatus})+'</span></div></div>';
+	aw='<div class="pr-lines"><div class="pr-line"><span class="pr-ts">成稿</span><span class="pr-tx">'+prStBadge(PR.awStatus,'AI 建议稿')+'</span><span class="pr-seg-ops">'+prAwOps({status:PR.awStatus},PR.regen)+'</span></div>'+(PR.regenOpen==='aw'?'<div class="pr-line">'+prRegenBar('aw')+'</div>':'')+'</div>';
 }
 var lines='';
 if(PR.segs&&PR.segs.length){
@@ -276,7 +278,7 @@ if(PR.ranges==null)return '';
 if(!PR.ranges.length&&!Object.keys(PR.rngAdd).length)return '<p class="action-hint">无切片 ranges（切片节点跑完后出现；也可在下表从 segments 勾选加入）。</p>';
 var rows=PR.ranges.map(function(r,i){
 if(PR.rngDel[i])return '';
-return '<div class="pr-rng"><span class="pr-seg-ts">'+pgFmtPair(r.start,r.end)+'</span>'+(r.label?'<span class="pr-tx">'+esc(r.label)+'</span>':'')+prStBadge(r.status)+'<span class="pr-seg-ops">'+prRngOps(r,i)+'</span><button class="btn btn-sm" data-delrng="'+i+'" title="从 ranges 移除（落 ranges.edited）">×</button></div>';
+	return '<div class="pr-rng"><span class="pr-seg-ts">'+pgFmtPair(r.start,r.end)+'</span>'+(r.label?'<span class="pr-tx">'+esc(r.label)+'</span>':'')+prStBadge(r.status)+'<span class="pr-seg-ops">'+prRngOps(r,i,PR.regen)+'</span><button class="btn btn-sm" data-delrng="'+i+'" title="从 ranges 移除（落 ranges.edited）">×</button></div>';
 }).join('');
 var adds=Object.keys(PR.rngAdd).map(function(k){var a=PR.rngAdd[k];return '<div class="pr-rng is-add"><span class="pr-seg-ts">'+pgFmtPair(a.start,a.end)+'</span><span class="badge pass">新增</span></div>';}).join('');
 return '<div class="pr-rngs">'+rows+adds+'</div>';
@@ -287,7 +289,7 @@ var dup=pgDupSet(PR.segs),cap=200,n=Object.keys(PR.edits).length;
 var rows=PR.segs.slice(0,cap).map(function(s,i){return prSegRow(s,i,dup);}).join('');
 var note=PR.segs.length>cap?'<p class="action-hint">仅显示前 '+cap+' 段（共 '+PR.segs.length+' 段）。</p>':'';
 $('pr-segs-wrap').hidden=false;
-$('pr-segs-wrap').innerHTML='<div class="card pr-panel"><div class="pr-phead"><h3 class="pr-ptitle">切片 ranges</h3>'+prRangeTitleBadge(PR.ranges)+'<span class="badge queued">可增删</span></div><div class="pr-pbody">'+prRangesHtml()+'</div></div>'+
+$('pr-segs-wrap').innerHTML='<div class="card pr-panel"><div class="pr-phead"><h3 class="pr-ptitle">切片 ranges</h3>'+prRangeTitleBadge(PR.ranges)+'<span class="badge queued">可增删</span></div><div class="pr-pbody">'+prRegenBar('ks')+prRangesHtml()+'</div></div>'+
 '<div class="card pr-panel"><div class="pr-phead"><h3 class="pr-ptitle">转写逐段编辑</h3><span class="badge '+(n?'pass':'queued')+'">'+(n?'已改 '+n+' 段':'未修改')+'</span><button class="btn btn-sm btn-primary" data-segsave>保存编辑</button></div><div class="pr-pbody pr-segs">'+rows+note+'</div></div>'+
 '<p class="action-hint">编辑落 edited 副本（原始转写不覆盖）；低置信标记段建议先 [▶] 听原声核对再改。</p>';
 }
@@ -301,9 +303,65 @@ toast((action==='adopt'?'已采纳':'已弃用')+'（'+(d.changed||0)+'/'+(d.tot
 if(PR.hasSegs)await prLoadSegs(true);
 var rd=await prFetchRun();
 if(rd)prApplyVerdicts(rd,(rd.plugins||[]).map(function(p){return {plugin:{outputs:(p.outputs||{})}};}).concat((PR.def&&PR.def.nodes)||[]));
-if(PR.hasArticle||step==='aw')prPaint();
-else prPaintSegs();
-}catch(err){toast((action==='adopt'?'采纳':'弃用')+'失败：'+err.message,WN);}
+	if(PR.hasArticle||step==='aw')prPaint();
+	else prPaintSegs();
+	}catch(err){toast((action==='adopt'?'采纳':'弃用')+'失败：'+err.message,WN);}
+}
+function prRegenBar(step){
+if(PR.regenOpen!==step)return '';
+var what=step==='ks'?'切片':'成稿';
+return '<div class="pr-rng is-add" style="flex-wrap:wrap;gap:6px">'+
+'<span class="badge warn">🔄 重新生成'+what+'</span>'+
+'<input class="input pr-seg-in" id="pr-regen-in" style="flex:1;min-width:160px" placeholder="改进要求（可留空，如「更简洁」「保留原话更多」）" data-regenin>'+
+'<span class="pr-seg-ops"><button class="btn btn-sm btn-primary" data-regengo="'+step+'"'+(PR.regen?' disabled':'')+'>重新生成</button><button class="btn btn-sm" data-regencancel>取消</button></span>'+
+'<span class="action-hint">旧版自动归档（outputs.vN）可对照；新产物为「AI 建议」待重新裁决</span></div>';
+}
+function prRegenOpen(step){
+if(!PR.runId||PR.regen)return;
+PR.regenOpen=step;
+if(step==='ks'){if(PR.segs!=null)prPaintSegs();}
+else prPaint();
+var inp=$('pr-regen-in');
+if(inp)inp.focus();
+}
+function prRegenCancel(){
+PR.regenOpen='';
+prPaint();if(PR.segs!=null)prPaintSegs();
+}
+async function prRegenGo(step){
+if(!PR.runId||PR.regen)return;
+var inp=$('pr-regen-in');
+var fb=inp?String(inp.value).trim():'';
+PR.regenOpen='';
+await prRegenSubmit(step,fb);
+}
+async function prRegenSubmit(step,fb){
+var what=step==='ks'?'切片':'成稿';
+PR.regen=1;prPaint();if(PR.segs!=null)prPaintSegs();
+try{
+var d=await postJSON(`/api/pipelines/runs/${encodeURIComponent(PR.runId)}/regenerate`,{step:step,feedback:fb,confirm:true});
+toast(what+'重生成已提交（job '+(d.job_id||'')+'）…',OK);
+await prRegenPoll(d.job_id,what);
+}catch(err){toast(what+'重生成失败：'+err.message,ER);PR.regen=0;prPaint();if(PR.segs!=null)prPaintSegs();}
+}
+function prRegenPoll(jobId,what){
+return new Promise(function(res){
+var miss=0;
+var t=setInterval(async function(){
+try{
+var j=await getJSON(`/api/jobs/${encodeURIComponent(jobId)}`);
+if(j.status==='done'||j.status==='failed'){
+clearInterval(t);PR.regen=0;PR.regenOpen='';
+if(j.status==='failed')toast(what+'重生成失败：'+(j.error||''),ER);
+else toast(what+'已重生成（旧版归档，新产物为 AI 建议待裁决）',OK);
+await prRestore();
+if(PR.hasSegs)await prLoadSegs(true);
+prPaint();if(PR.segs!=null)prPaintSegs();
+res();return;
+}
+}catch(err){miss++;if(miss>=10){clearInterval(t);PR.regen=0;prPaint();res();return;}}
+},800);
+});
 }
 async function prSaveSegs(){
 if(PR.segs==null)return;
@@ -328,7 +386,7 @@ async function prEnter(params){
 prStop();
 PR.editIdx=-1;
 PR.segs=null;PR.ranges=null;PR.edits={};PR.rngDel={};PR.rngAdd={};
-PR.hasArticle=false;PR.awStatus='';PR.verdicts={};
+PR.hasArticle=false;PR.awStatus='';PR.verdicts={};PR.regen=0;PR.regenOpen='';
 $('pr-segs-wrap').hidden=true;$('pr-segs-wrap').innerHTML='';
 var run=params.get('run'),id=params.get('id');
 if(run){
@@ -355,10 +413,14 @@ if(b)location.hash='#plugin-pipeline?id='+encodeURIComponent(b.getAttribute('dat
 $('pr-run-btn').addEventListener('click',prRun);
 $('pr-reset-btn').addEventListener('click',prReset);
 $('pr-back-btn').addEventListener('click',function(){location.hash='#plugins';});
-$('pr-out').addEventListener('click',function(e){
-if(e.target.closest('[data-awadopt]'))prAdjudicate('adopt','aw',null);
-else if(e.target.closest('[data-awdiscard]'))prAdjudicate('discard','aw',null);
-});
+	$('pr-out').addEventListener('click',function(e){
+	var t;
+	if(e.target.closest('[data-awadopt]'))prAdjudicate('adopt','aw',null);
+	else if(e.target.closest('[data-awdiscard]'))prAdjudicate('discard','aw',null);
+	else if(e.target.closest('[data-awregen]'))prRegenOpen('aw');
+	else if((t=e.target.closest('[data-regengo]')))prRegenGo(t.getAttribute('data-regengo'));
+	else if(e.target.closest('[data-regencancel]'))prRegenCancel();
+	});
 $('pr-segs-wrap').addEventListener('click',function(e){
 var t;
 if((t=e.target.closest('[data-playseg]')))prPlay(+t.getAttribute('data-playseg'));
@@ -375,16 +437,27 @@ if(s&&!PR.rngAdd[j])PR.rngAdd[j]={start:s.start,end:s.end};
 prPaintSegs();
 }
 else if((t=e.target.closest('[data-delrng]'))){PR.rngDel[+t.getAttribute('data-delrng')]=1;prPaintSegs();}
-else if((t=e.target.closest('[data-rngadopt]')))prAdjudicate('adopt','ks',[+t.getAttribute('data-rngadopt')]);
-else if((t=e.target.closest('[data-rngdiscard]')))prAdjudicate('discard','ks',[+t.getAttribute('data-rngdiscard')]);
-else if(e.target.closest('[data-segsave]'))prSaveSegs();
-});
+	else if((t=e.target.closest('[data-rngadopt]')))prAdjudicate('adopt','ks',[+t.getAttribute('data-rngadopt')]);
+	else if((t=e.target.closest('[data-rngdiscard]')))prAdjudicate('discard','ks',[+t.getAttribute('data-rngdiscard')]);
+	else if(e.target.closest('[data-rngregen]'))prRegenOpen('ks');
+	else if((t=e.target.closest('[data-regengo]')))prRegenGo(t.getAttribute('data-regengo'));
+	else if(e.target.closest('[data-regencancel]'))prRegenCancel();
+	else if(e.target.closest('[data-segsave]'))prSaveSegs();
+	});
 $('pr-segs-wrap').addEventListener('keydown',function(e){
 if(e.isComposing||e.keyCode===229)return;
 if(e.key==='Enter'&&e.target&&e.target.getAttribute&&e.target.getAttribute('data-editin')!=null){
 e.preventDefault();
 var btn=$('pr-segs-wrap').querySelector('[data-saveedit]');
 if(btn)btn.click();
+}
+});
+document.addEventListener('keydown',function(e){
+if(e.isComposing||e.keyCode===229)return;
+if(e.key==='Enter'&&e.target&&e.target.getAttribute&&e.target.getAttribute('data-regenin')!=null){
+e.preventDefault();
+var go=document.querySelector('[data-regengo]');
+if(go)go.click();
 }
 });
 }

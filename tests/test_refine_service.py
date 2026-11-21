@@ -230,3 +230,100 @@ def test_rejection_leaves_zero_trace(env, ai_on, kb_doc, monkeypatch) -> None:
     svc.preview(row["id"])
     after = sorted(p.name for p in env.rglob("*") if p.is_file())
     assert before == after  # 预览不产生任何新文件/新行
+
+
+# ── AI-3 重生成（2026-11-21，正典=《mdpub-AI产物裁决机制设计-2026-11-21》
+# §2.3/§三.3）：preview(feedback) → adopt 进 REFINE-ITER 版本链。服务层零
+# 新路径——断言落点即「prompt 真带改进要求（抓 messages 请求体，非只看
+# 返回）」与「新版本进链、旧版不动」。
+
+
+def _iter_meta_of(material_id: str) -> dict:
+    m = ms.get_material(material_id)
+    payload = m.get("payload") or {}
+    meta = payload.get("meta")
+    return meta if isinstance(meta, dict) else {}
+
+
+def test_regenerate_without_feedback_appends_version_chain(env, ai_on, monkeypatch) -> None:
+    """无 feedback 重生成：新版本进链（iteration+1 / of 指旧版）、旧版原样保留。"""
+    row = model.make_material(
+        mtype="crawled", source_id="manual", uri="https://x/regen", title="重生成源",
+        payload={"text": "重生成源的正文。"}, fetched_at="2026-11-21T09:00:00",
+    )
+    ms.add_material(row)
+    v1 = svc.adopt(row["id"], "旧版摘要正文")  # 链上已有 v1
+    calls = _mock_chat(monkeypatch, reply="· 重生成草稿一\n· 重生成草稿二")
+    out = svc.regenerate(row["id"])
+    assert out["ok"] is True
+    # 采信即所存：新素材正文就是本次 chat 草稿（preview→adopt 原样回传）
+    assert ms.get_material(out["id"])["payload"]["text"] == "· 重生成草稿一\n· 重生成草稿二"
+    # 版本链：iteration+1、root 同源、of 指旧版
+    meta = _iter_meta_of(out["id"])
+    assert meta["iteration"] == 2
+    assert meta["iteration_root"] == row["id"]
+    assert meta["iteration_of"] == v1["id"]
+    # 无 feedback → prompt 尾部不带「用户改进要求」
+    assert "用户改进要求" not in calls[0]["messages"][0]["content"]
+    # 旧版仍在且未动；链上升序 [1, 2]
+    assert ms.get_material(v1["id"])["payload"]["text"] == "旧版摘要正文"
+    assert [v["iteration"] for v in svc.list_iterations(row["id"])["versions"]] == [1, 2]
+    assert svc.list_iterations(row["id"])["versions"][-1]["id"] == out["id"]
+    # 空白 feedback 同无 feedback（不拼段）
+    svc.preview(row["id"], feedback="   ")
+    assert "用户改进要求" not in calls[-1]["messages"][0]["content"]
+
+
+def test_regenerate_feedback_reaches_llm_prompt(env, ai_on, monkeypatch) -> None:
+    """带 feedback：改进要求真出现在送 LLM 的请求体（抓 messages 断言，非只看 200），
+    且落在 prompt 尾部（素材正文之后）。"""
+    row = model.make_material(
+        mtype="crawled", source_id="manual", uri="https://x/fb", title="带要求源",
+        payload={"text": "带要求源的正文。"}, fetched_at="2026-11-21T09:10:00",
+    )
+    ms.add_material(row)
+    calls = _mock_chat(monkeypatch, reply="按改进要求重写的草稿")
+    out = svc.regenerate(row["id"], feedback="更简洁，保留原话更多")
+    assert out["ok"] is True
+    content = calls[0]["messages"][0]["content"]
+    assert calls[0]["task"] == "refine"
+    assert "用户改进要求：更简洁，保留原话更多" in content
+    assert content.rstrip().endswith("用户改进要求：更简洁，保留原话更多")  # 尾部落位
+    assert "带要求源的正文。" in content  # 素材正文仍在（指令在正文之后）
+    assert ms.get_material(out["id"])["payload"]["text"] == "按改进要求重写的草稿"
+    assert _iter_meta_of(out["id"])["iteration"] == 1  # 空链首版进链
+    # preview 单独带 feedback 同样透传（regenerate 的传递路径即此参数）
+    svc.preview(row["id"], feedback="换个角度再试")
+    assert "用户改进要求：换个角度再试" in calls[-1]["messages"][0]["content"]
+
+
+def test_regenerate_from_chain_member_inherits_root(env, ai_on, monkeypatch) -> None:
+    """从链上成员（v2）重生成 → v3：root 继承源头、iteration=3、of/chain 指直接源。"""
+    row = model.make_material(
+        mtype="crawled", source_id="manual", uri="https://x/mid", title="链中源",
+        payload={"text": "链中源的正文。"}, fetched_at="2026-11-21T09:20:00",
+    )
+    ms.add_material(row)
+    v1 = svc.adopt(row["id"], "第一版正文")
+    v2 = svc.adopt(v1["id"], "第二版正文")
+    _mock_chat(monkeypatch, reply="从 v2 重生成的新版")
+    out = svc.regenerate(v2["id"])
+    meta = _iter_meta_of(out["id"])
+    assert meta["iteration"] == 3
+    assert meta["iteration_root"] == row["id"]  # root 继承源头（adopt 自算）
+    assert meta["iteration_of"] == v2["id"]
+    # provenance.chain 指本次传入的直接源（v2）——血统准确性不破
+    assert ms.get_material(out["id"])["provenance"]["chain"] == [
+        {"from_id": v2["id"], "op": "summarize"}
+    ]
+    # 旧版全部保留，链上四行升序
+    assert [v["iteration"] for v in svc.list_iterations(row["id"])["versions"]] == [1, 2, 3]
+    assert ms.get_material(v1["id"])["payload"]["text"] == "第一版正文"
+
+
+def test_regenerate_errors_propagate_zero_trace(env, ai_on, monkeypatch) -> None:
+    """素材不存在 → RefineError 透传且零落库（preview 先拒，adopt 未触达）。"""
+    _mock_chat(monkeypatch)
+    with pytest.raises(svc.RefineError, match="不存在"):
+        svc.regenerate("nope00000000")
+    assert len(_lines(env)) == 0  # 拒绝零落盘（连源素材都不存在）

@@ -83,6 +83,19 @@ SHELL_MAX_BYTES = 48 * 1024
 #   黄：444,000B < 总量 ≤ 480,000B（+8%）     → PASS + 醒目告警（warnings+print，
 #       不阻塞交付；下批须在注释档补增长归因说明）
 #   红：总量 > 480,000B                        → FAIL（真膨胀，必须拆分/删除）
+# **AI-1 三态裁决前端批（2026-11-21）实测 447,540B 落黄档**（归因：plugin-run.js
+# 徽章/入口 +2,386B、material.js +394B——见 ASSETS_TOTAL_GREEN_MAX 上方注释档）。
+# **AI-3 重生成前端批（2026-11-21）实测 452,653B 仍在黄档**：+5,113B =
+# plugin-run.js +3,662B（🔄 入口×2 + 行内重生成输入条 prRegenBar——改进要求
+# 收集不用 window.prompt（自定义弹层红线，test_studio_ui 否向锁）+ prRegen*
+# 提交/轮询/忙闸）+ iterations.js +1,451B（每版 [🔄] 重生成入口 + regen 处理
+# 器）——壳零增量（49,124B 不变，按钮与输入条全 JS 动态渲染）；两文件均
+# 懒加载不进首屏。
+# **AI-3 六条复核修复（2026-11-21）实测 454,237B 仍在黄档**：+1,584B =
+# plugin-run.js +📜 版本对照面板（prVerPanel/prVerOpen/prVerDiff + 两按钮）、
+# iterations.js +2,852B（window.prompt→行内输入条、revert 走 askConfirm）、
+# versions.js +187B（window.confirm→askConfirm）、quickstart.js -4B（去 ✅ emoji）
+# ——壳零增量（49,124B 不变，全 JS 动态渲染）；均懒加载不进首屏。
 # **首屏锚（FIRST_SCREEN_MAX_BYTES）保持硬门不变**——那才是用户体验指标；
 # 本批另加 80% 使用率告警（见 test_first_screen_budget）。单文件/单视图/core
 # 分层锚维持硬门（防单点失控，三档只作用于「总量」一层）。
