@@ -8,11 +8,13 @@
    "fetched_at": "ISO",
    "provenance": {"chain":[{"from_id","op"}], "derived_from":[]},  # 原始恒空
    "payload": {"text?","url?","local_path?","meta?"},
-   "triage": {"read":false,"starred":false,"enabled":true,"tags":[]}}
+   "triage": {"read":false,"starred":false,"enabled":true,"tags":[],
+              "verified":false,"confidence":null}}   # N-4 扩后两键：人工核验布尔 + AI 自评 0-1（可空）
 
 不变式（正典红线）：
-  - immutable 原始：payload 落库后不改写——人工动作只改 triage 四键
-    （三布尔 + tags 列表，第二十一期 §1.2 修订；triage.py），
+  - immutable 原始：payload 落库后不改写——人工动作只改 triage 键
+    （三布尔 + tags 列表 + verified 人工核验布尔，N-4 扩；
+    verified 走专用端点 /api/materials/verify），
     derived 血统只由采纳动作写 provenance.chain；
   - 同 id 末次胜出：读序按文件序覆盖（merge_rows），与 publish_log 同
     纪律；删除以 tombstone 行（{"id", "deleted": true}）表达，不重写文件；
@@ -143,6 +145,10 @@ def make_material(
 
     material_id 缺省由 (source_id, mtype, uri) 稳定散列生成；显式传入用于
     测试与特殊归档场景。fetched_at 由调用方注入（本层不取时钟）。
+
+    triage 缺省六键（N-4 扩 verified/confidence，2026-11-21）：三布尔 +
+    tags + verified（人工核验，恒 False 起步）+ confidence（AI 自评，
+    None 起步——调用方携带 AI 置信度时显式传 triage 覆盖）。
     """
     return {
         "id": material_id or make_material_id(source_id, mtype, uri),
@@ -152,7 +158,10 @@ def make_material(
         "fetched_at": fetched_at,
         "provenance": provenance if provenance is not None else {"chain": [], "derived_from": []},
         "payload": payload if payload is not None else {},
-        "triage": triage if triage is not None else {"read": False, "starred": False, "enabled": True, "tags": []},
+        "triage": triage if triage is not None else {
+            "read": False, "starred": False, "enabled": True, "tags": [],
+            "verified": False, "confidence": None,
+        },
     }
 
 
@@ -185,9 +194,20 @@ def normalize_material(row: Any) -> dict[str, Any] | None:
     out["payload"] = dict(payload) if isinstance(payload, dict) else {}
     triage = out.get("triage")
     triage = dict(triage) if isinstance(triage, dict) else {}
-    for key, default in (("read", False), ("starred", False), ("enabled", True)):
+    for key, default in (("read", False), ("starred", False), ("enabled", True), ("verified", False)):
         value = triage.get(key, default)
         triage[key] = value if isinstance(value, bool) else default
+    # N-4 confidence（AI 自评 0-1，可空）：宽容归一——缺失/脏数据（非数值、
+    # 布尔、越界）一律折 None（读侧永不因脏数据崩溃；与「人工核验 verified」
+    # 正交，confidence 是机器字段不走 triage_patch 窄门）
+    conf = triage.get("confidence", None)
+    if (
+        not isinstance(conf, (int, float))
+        or isinstance(conf, bool)
+        or not (0.0 <= float(conf) <= 1.0)
+    ):
+        conf = None
+    triage["confidence"] = float(conf) if conf is not None else None
     tags = triage.get("tags", [])
     if not isinstance(tags, list):
         tags = []  # 宽容读：脏数据（非列表）按无标签，不崩读侧
@@ -295,6 +315,20 @@ def validate_material(row: dict[str, Any]) -> list[str]:
             errors.append(f"原始素材（type={mtype}）provenance 必须为空（血统只由采纳动作写入）")
     if not isinstance(row.get("payload"), dict):
         errors.append("payload 必须是对象")
+    # triage 校验（N-4 同步：verified 布尔 / confidence 可空数值 0-1）。
+    # triage 键集本身不在此校验（人工可变面归 triage_patch 窄门）；这里只
+    # 守两新键的值域——make_material 缺省即合法，显式携带时形状不对即拒
+    # （append 前最后一道；bool 不是 int 的豁免同 confidence 归一口径）。
+    tri = row.get("triage")
+    if isinstance(tri, dict):
+        if "verified" in tri and not isinstance(tri["verified"], bool):
+            errors.append(f"triage.verified 必须是布尔值: {tri['verified']!r}")
+        conf = tri.get("confidence", None)
+        if conf is not None and (
+            not isinstance(conf, (int, float)) or isinstance(conf, bool)
+            or not (0.0 <= float(conf) <= 1.0)
+        ):
+            errors.append(f"triage.confidence 必须是 0-1 数值或 null: {conf!r}")
     return errors
 
 

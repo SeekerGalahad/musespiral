@@ -143,6 +143,7 @@ tsugBox(m)+
 '<div class="action-row mat-acts">'+(m.type==='text'?'<button class="btn" data-mdraft="'+esc(o.uri)+'"'+(m.drafted?' disabled':'')+'>生成骨架</button>':'')+((meta.url||p.url)?'<a class="btn" href="'+esc(meta.url||p.url)+'" target="_blank" rel="noopener">查看原文</a>':'')+'<button class="btn" data-mcolladd="'+esc(m.id)+'">+ 集合</button><button class="btn" data-mstar="'+esc(m.id)+'">'+(tri.starred?'取消收藏':'收藏')+'</button><button class="btn" data-mread="'+esc(m.id)+'">'+(tri.read?'已读':'未读')+'</button><button class="btn" data-moff="'+esc(m.id)+'">'+(tri.enabled?'禁用':'启用')+'</button><button class="btn" data-mai="'+esc(m.id)+'">AI 摘要</button><button class="btn mat-del" data-mdel="'+esc(m.id)+'">删除</button></div>'+
 '';
 if(window.__mdpubMatIter)__mdpubMatIter.repaint(state.mdrawer);
+if(window.__mdpubMatLineage)__mdpubMatLineage.repaint(state.mdrawer);
 }
 var tsug={};
 function tsugBase(){var m=matById(state.mdrawer)||((state.mdrawerData||{}).material)||{};return (((m.triage||{}).tags)||[]).slice()}
@@ -372,7 +373,7 @@ else state.mdens=c.getAttribute('data-mdens');
 syncMatHash();renderCollRail();renderMaterials();
 });
 $('mat-empty-action').addEventListener('click',function(){
-state.msrc='';state.mtab='all';state.mtype='';state.mspark='';state.mquery='';state.mtag='';state.mcoll='';
+state.msrc='';state.mtab='all';state.mtype='';state.mspark='';state.mconf='';state.mquery='';state.mtag='';state.mcoll='';
 $('mat-search').value='';$('mat-search-x').hidden=true;fillMatType();
 syncMatHash();renderCollRail();renderMaterials();loadMaterials().then(renderMaterials);
 });

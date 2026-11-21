@@ -396,6 +396,18 @@ mark{background:color-mix(in srgb,var(--amber) 18%,transparent);color:inherit;bo
 .ver-tx,.ver-row del,.ver-row ins{flex:1;min-width:0}
 .ver-row del.dl-del{text-decoration:line-through}
 .ver-row ins.dl-add{text-decoration:none}
+/* N-5 并排预览：左原文 / 右平台版本双栏；差异红删绿增复用 .ver-diff 系（上方）。
+   窄屏堆叠断点与 .cm-dual-grid 同款（@900px 单列）。 */
+.sbs-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px}
+.sbs-col{min-width:0;display:flex;flex-direction:column;border:1px solid var(--line-1);border-radius:var(--radius-card);background:var(--paper-1)}
+.sbs-head{padding:8px 12px;border-bottom:1px solid var(--line-1);font-size:var(--fs-micro);font-weight:600;color:var(--ink-2)}
+.sbs-body{padding:12px 14px;font:13px/1.85 var(--font-body);overflow:auto;max-height:52vh;word-break:break-word}
+.sbs-body h1,.sbs-body h2,.sbs-body h3{margin:.6em 0 .4em}
+.sbs-body p{margin:0 0 8px}
+.sbs-meta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.sbs-empty{border:0;background:transparent}
+#sbs-diff{margin-top:12px}
+@media (max-width:900px){.sbs-grid{grid-template-columns:1fr}}
 
 /* ── 插件系统（PL-3 批 2026-11-20；视觉基准=原型/musespiral-插件系统-可交互原型.html；
    pg=plugins 视图 / pr=plugin-run 视图。设计纪律：图标容器不带文本、pick 名/副标题

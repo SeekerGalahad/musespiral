@@ -42,6 +42,7 @@ from urllib.parse import urlsplit
 from .. import config
 from ..core.discovery import scanner, scorer
 from ..core.materials import model, triage
+from ..core.materials import confidence as confidence_mod  # N-4 低置信阈值单一权威
 from ..core.materials import search as mat_search
 from ..infra.ai.gateway import chat_policed as _chat_policed  # distill 注入缝（refine 的 _chat 同款）
 from ..infra.storage.jsonl import read_rows as _jsonl_rows
@@ -143,6 +144,7 @@ def query(
     tag: str | None = None,
     q: str | None = None,
     collection: str | None = None,
+    confidence: str | None = None,
 ) -> list[dict[str, Any]]:
     """素材查询（全参数正交 AND：分诊 + 类型/子类型/源/标签/集合 + 搜索谓词）。
 
@@ -151,7 +153,12 @@ def query(
     应用——先过滤后搜索谓词，正典 §二-F64）。
     N-2 扩展（2026-11-21）：sub_type=payload.meta.sub_type 判别——spark
     chip 筛选读 sub_type 而非 type（裁决：类型枚举不动，语义在 meta 内）；
-    未携带 sub_type 键的存量素材在该过滤下天然不命中（普通 text 不受影响）。"""
+    未携带 sub_type 键的存量素材在该过滤下天然不命中（普通 text 不受影响）。
+    N-4 扩展（2026-11-21）：confidence='low' → triage.confidence 非 None 且
+    < confidence.CONFIDENCE_LOW_THRESHOLD（0.5）——只筛「AI 给过低分」的；
+    confidence=None（未自评）与 verified=true 的素材不命中（三态语义：
+    低置信与已核验互斥）；枚举外取值 ValueError（400 呈现，不静默恒真）。
+    """
     rows = triage.filter_materials(list_materials(), starred=starred, read=read, enabled=enabled)
     if mtype is not None:
         rows = [m for m in rows if m.get("type") == mtype]
@@ -169,9 +176,27 @@ def query(
 
         members = collections_service.active_member_ids(collection)
         rows = [m for m in rows if m["id"] in members]
+    if confidence is not None:
+        if confidence != "low":
+            raise ValueError(f"confidence 只支持 'low' 筛选: {confidence!r}")
+        rows = [
+            m for m in rows
+            if _confidence_of(m) is not None
+            and _confidence_of(m) < confidence_mod.CONFIDENCE_LOW_THRESHOLD
+            and not (m.get("triage") or {}).get("verified", False)
+        ]
     if q:
         rows = [m for m in rows if mat_search.matches_query(m, q)]
     return rows
+
+
+def _confidence_of(material: dict[str, Any]) -> float | None:
+    """素材的 AI 自评置信度（归一后恒合法；防御性再归一供纯读路径）。"""
+    value = (material.get("triage") or {}).get("confidence")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    value = float(value)
+    return value if 0.0 <= value <= 1.0 else None
 
 
 def tag_counts() -> list[dict[str, Any]]:
@@ -235,6 +260,7 @@ def query_scored(
     tag: str | None = None,
     q: str | None = None,
     collection: str | None = None,
+    confidence: str | None = None,
     limit: int | None = None,
 ) -> dict[str, Any]:
     """发现页（素材视图）查询面：materials 查询 + 评分现算 + drafted 推导。
@@ -253,7 +279,8 @@ def query_scored(
     缺失 None——F27 契约）；kb_root 缺省 config.knowledge_root()。limit
     钳制 [1, ∞)（0/负数按未限）。tag/q/collection 为第二十一期正交过滤
     （F62/F63/F64，全参数 AND，先过滤后搜索谓词）。sub_type 为 N-2 扩展
-    （2026-11-21，spark chip 读 meta.sub_type 非 type）。total=命中总数，
+    （2026-11-21，spark chip 读 meta.sub_type 非 type）。confidence 为 N-4
+    扩展（'low' 低置信筛选，query() 同语义）。total=命中总数，
     **不随 limit 截断缩水**（F64 截断可见性：total>limit 时前端须显「前
     N 条/共 total」）。
     """
@@ -262,7 +289,7 @@ def query_scored(
     rows = query(
         mtype=mtype, sub_type=sub_type, source_id=source_id, starred=starred,
         read=read, enabled=enabled,
-        tag=tag, q=q, collection=collection,
+        tag=tag, q=q, collection=collection, confidence=confidence,
     )
     drafted = drafted_uris(articles_root)
     root = _kb_root_for_scoring(kb_root)
@@ -313,13 +340,20 @@ def _sort_scored(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def add_material(material: dict[str, Any]) -> dict[str, Any]:
-    """落库一条素材（校验→幂等判定→追加；返回落库/既有行）。
+    """落库一条素材（归一→校验→幂等判定→追加；返回落库/既有行）。
 
+    - 归一：normalize_material 先行（N-4 起 triage 六键——老调用方携带
+      四键 triage 的行补齐 verified/confidence 缺省后再比再存，追加强制
+      写归一形态，文件内单形）；坏行（None）→ ValueError 可读；
     - 校验：model.validate_material 空错误清单方可入册（ValueError 带清单）；
     - 幂等：同 id 活跃行已存在且整行相等 → 零追加返回既有行（重采/重迁移
       天然收敛）；不相等 → ValueError（immutable 红线：payload 不许改写）；
     - 已删同 id（墓碑）→ 允许追加复活（追加式纪律的自然行为，删除可逆）。
     """
+    normalized = model.normalize_material(material)
+    if normalized is None:
+        raise ValueError(f"素材行不合法（id 缺失或非对象行）: {material!r}")
+    material = normalized
     errors = model.validate_material(material)
     if errors:
         raise ValueError("素材行不合法: " + "; ".join(errors))
@@ -349,11 +383,19 @@ def add_many(rows: list[dict[str, Any]]) -> dict[str, Any]:
       - 单次读索引（add_material 逐行读，批量路径 O(1) 次读）。
 
     返回 {"added": 新增行数, "skipped": 幂等跳过行数（等值/墓碑）}。
+
+    N-4 起逐行先 normalize_material 归一再校验/比较（与 add_material 同因：
+    老调用方四键 triage 与库内六键归一行对比恒等收敛，重采不误报 immutable
+    冲突）；批内比较也在归一形态上进行。
     """
     seen: dict[str, dict[str, Any]] = {}
     ordered: list[dict[str, Any]] = []
     skipped = 0
-    for i, row in enumerate(rows):
+    for i, raw in enumerate(rows):
+        normalized = model.normalize_material(raw)
+        if normalized is None:
+            raise ValueError(f"批量第 {i + 1} 行素材不合法（零写入，id 缺失或非对象行）: {raw!r}")
+        row = normalized
         errors = model.validate_material(row)
         if errors:
             raise ValueError(f"批量第 {i + 1} 行素材不合法（零写入）: " + "; ".join(errors))
@@ -387,7 +429,8 @@ def add_many(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def update_triage(material_id: str, changes: dict[str, Any]) -> dict[str, Any]:
-    """分诊更新：triage 三键窄门（core.triage.triage_patch）+ 追加全量新行。
+    """分诊更新：triage 窄门（core.triage.triage_patch 五键——三布尔+tags+
+    verified，confidence 不入人工窄门）+ 追加全量新行。
 
     新行=当前行原样 + 补丁后 triage（payload/provenance 逐字节不动——
     immutable 由「只改 triage 后整行重写」的构造路径保证）；同 id 末次
@@ -955,6 +998,8 @@ DEFAULT_DISTILL_PROMPT = (
     "你是编辑助手。阅读下面这篇文章，提炼 3-5 条核心论点，每条一行、"
     "一句独立成立的话（不带编号、不带列表符号、不换行内再分段）。"
     "只输出论点本身，不要任何前言或解释。\n\n"
+    "输出末尾单独加一行标注你对自己准确提炼原文的把握，格式固定为"
+    "「CONFIDENCE: 0.8」（0-1 小数；不确定时给低值）——该行不算论点。\n\n"
     "【标题】{{title}}\n\n【正文】\n{{body}}\n"
 )
 
@@ -1092,7 +1137,10 @@ def _distill_article(
     template = load_override(DISTILL_TASK) or DEFAULT_DISTILL_PROMPT
     prompt = template.replace("{{title}}", title).replace("{{body}}", body)
     res = _chat_policed([{"role": "user", "content": prompt}], task=DISTILL_TASK, cache=False)
-    points = _parse_points(str(res.get("text") or ""))
+    # N-4：先剥置信度行再解析论点（容错契约——AI 不带该行时 conf=None 不阻
+    # 断面，sparks 照常落库；行混进论点会污染 _parse_points 输出，故先剥）
+    reply, conf = confidence_mod.parse_ai_confidence(str(res.get("text") or ""))
+    points = _parse_points(reply)
     if not points:
         raise AIError("AI 未返回可用论点（空响应）")
     added: list[dict[str, Any]] = []
@@ -1120,6 +1168,7 @@ def _distill_article(
                 },
             },
             provenance={"chain": [{"from_id": slug, "op": "distill"}], "derived_from": []},
+            triage={"confidence": conf},  # AI 自评（None=未自评，归一后六键补齐）
             fetched_at=fetched_at or _now_iso(),
         )
         added.append(add_material(material))

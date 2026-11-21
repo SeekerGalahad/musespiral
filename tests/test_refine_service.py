@@ -93,7 +93,8 @@ def test_preview_drafts_without_persisting(env, ai_on, kb_doc, monkeypatch) -> N
     row = _kb_material(env)
     calls = _mock_chat(monkeypatch)
     out = svc.preview(row["id"])
-    assert out == {"id": row["id"], "title": "原文", "op": "summarize", "text": "· 摘要草稿一\n· 摘要草稿二"}
+    assert out == {"id": row["id"], "title": "原文", "op": "summarize",
+                   "text": "· 摘要草稿一\n· 摘要草稿二", "confidence": None}  # N-4 增 confidence（无标记行 → None 容错）
     # 任务键走 refine；prompt 注入原文正文
     assert calls and calls[0]["task"] == "refine"
     assert "这是一篇足够长的知识库文档正文" in calls[0]["messages"][0]["content"]

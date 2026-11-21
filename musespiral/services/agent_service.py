@@ -61,6 +61,7 @@ from ..core.agent.plans_builtin import (
 )
 from ..core.composition import blocks_from_markdown
 from ..core.materials import model
+from ..core.materials.confidence import parse_ai_confidence  # N-4 综合稿末行自评
 from ..infra.ai import TASKS, AIError, ai_configured
 from ..infra.ai.gateway import chat_policed
 from ..infra.ai.prompts import load_override
@@ -865,11 +866,14 @@ def adopt_material(run_id: str, *, title: str | None = None) -> dict[str, Any]:
         同样取自快照）；
       - `payload.meta.material_ids`=选中 id 全集（回溯面；chain 已带，此处便于
         详情页直接展示而不用遍历 chain）；
+      - `triage.confidence`=AI 自评 0-1（N-4：综合稿末行 CONFIDENCE 标记解析
+        剥除后写入；AI 未带该行/值非法 → None——容错不阻断面）；
       - `origin.source_id="synthesis"`、`uri=synthesis://<run_id>/<指纹8>`。
     幂等：同 run 二次采纳 → 同 uri → 同 id → `add_material` 返回既有行零追加。
     """
     meta = _require_done_synthesis(run_id)
     body = _synthesis_text(meta)
+    body, confidence = parse_ai_confidence(body)  # N-4：剥末行自评（无标记原样）
     licenses = _adopt_licenses(meta)
     ids = [str(mid) for mid in (meta.get("inputs") or {}).get("material_ids") or []]
     digest = hashlib.sha1(body.encode("utf-8")).hexdigest()[:8]
@@ -888,6 +892,7 @@ def adopt_material(run_id: str, *, title: str | None = None) -> dict[str, Any]:
             "chain": [{"from_id": mid, "op": SYNTHESIS_OP} for mid in ids],
             "derived_from": [],
         },
+        triage={"confidence": confidence},
         fetched_at=_now(),
     )
     saved = materials_service.add_material(row)

@@ -666,8 +666,8 @@ def test_contract_lock_membership() -> None:
 
     assert "/api/compose/novel-summary" in CONTRACT_POST_EXACT
     assert "/api/compose/novel-summary" in _ACTION_ROUTES
-    assert len(CONTRACT_POST_EXACT) == 72
-    assert len(CONTRACT_GET_EXACT) == 46  # §3.20 P2 迭代链两读面入锁（44→46；POST 零新增）
+    assert len(CONTRACT_POST_EXACT) == 73  # 72 + N-4 /api/materials/verify（§3.23，2026-11-21）
+    assert len(CONTRACT_GET_EXACT) == 47  # 46 + N-5 /api/article/pack（§3.22 并排预览读面）
 
 
 def test_kind_field_backward_compatible_with_legacy_session(root: Path) -> None:

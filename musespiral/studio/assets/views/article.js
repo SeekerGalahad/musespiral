@@ -295,6 +295,7 @@ if(n<30)return{title:h,chars:n,ok:false,msg:'正文过短（'+n+' 字）'};
 return{title:h,chars:n,ok:true,msg:'本地校验通过'};
 }
 async function renderVariants(){
+sbsMount();
 var it=state.articles.find(function(a){return a.path===state.detailPath;}),vs=(it&&it.flags&&it.flags.variants)||[],i,rel;
 for(i=0;i<vs.length;i++){rel=variantFile(state.detailPath,vs[i]);
 if(state.vraw[rel])continue;
@@ -318,6 +319,89 @@ var hit=state.vraw[rel];
 if(hit){show(hit.content);return;}
 getJSON(`/api/article/body?path=${encodeURIComponent(rel)}`).then(function(b){state.vraw[rel]=Object.assign({content:b.content||''},variantLocal(b.content||''));show(b.content);})
 .catch(function(err){toast('读取变体失败：'+err.message,ER);});
+}
+function sbsEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function sbsOptions(platforms,packs){
+var map=packs||{};
+return (Array.isArray(platforms)?platforms:[]).map(function(p){
+var code=String(p&&p.code||p||''),name=String((p&&p.name)||code||''),has=map[code]===true;
+return '<option value="'+sbsEsc(code)+'">'+sbsEsc(name)+'（'+sbsEsc(code)+'）'+(has?' ✓':'')+'</option>';
+}).join('');
+}
+function sbsMeta(payload){
+if(!payload)return '';
+var bits=[];
+if(payload.title)bits.push('<span class="tag">标题 '+sbsEsc(payload.title)+'</span>');
+if(payload.desc)bits.push('<span class="tag">描述 '+sbsEsc(payload.desc)+'</span>');
+if(Array.isArray(payload.tags)&&payload.tags.length)bits.push('<span class="tag accent">'+payload.tags.map(function(t){return '#'+sbsEsc(t);}).join(' ')+'</span>');
+return bits.length?'<div class="sbs-meta">'+bits.join('')+'</div>':'';
+}
+function sbsEmptyNote(note){return '<div class="empty sbs-empty"><div class="empty-title">尚未适配</div><div class="empty-text">'+sbsEsc(note||'该平台还没有物料包——在「操作」页「生成物料包」后回来看并排对照。')+'</div></div>';}
+var SBS={path:'',packs:null,platform:''};
+function sbsEnsure(){
+if($('sbs-grid'))return;
+var panel=$('panel-variants');
+if(!panel)return;
+panel.insertAdjacentHTML('afterbegin',
+'<div class="action-group sbs-group"><h3 class="action-title">平台适配预览</h3>'+
+'<div class="action-row"><label class="field">平台 <select class="input" id="sbs-platform"></select></label>'+
+'<span class="action-hint" id="sbs-note">并排对照：左原文 · 右平台版本（物料包 payload 正文）；下方红删绿增为两版差异。</span></div>'+
+'<div class="sbs-grid" id="sbs-grid">'+
+'<div class="sbs-col"><div class="sbs-head">原文</div><div class="sbs-body" id="sbs-left"></div></div>'+
+'<div class="sbs-col"><div class="sbs-head">平台版本</div><div class="sbs-body" id="sbs-right"></div></div></div>'+
+'<div id="sbs-diff"></div></div>');
+$('sbs-platform').addEventListener('change',function(){sbsLoad(this.value);});
+}
+function sbsMount(){
+sbsEnsure();
+var p=state.detailPath||'';
+if(!p){$('sbs-note').textContent='先打开一篇文章';return;}
+if(SBS.path!==p||!SBS.packs){
+SBS.path=p;SBS.packs=null;SBS.platform='';
+getJSON('/api/article/pack?path='+encodeURIComponent(p)).then(function(d){
+SBS.packs={};
+(d.packs||[]).forEach(function(x){SBS.packs[x.platform]=x.available;});
+sbsFillPlatforms();
+}).catch(function(err){SBS.packs={};sbsFillPlatforms();$('sbs-note').textContent='物料包清单读取失败：'+err.message;});
+}else sbsFillPlatforms();
+}
+function sbsFillPlatforms(){
+var manual=state.platforms.filter(function(p){return p.route==='manual_pack';});
+var sel=$('sbs-platform');
+if(!manual.length){sel.innerHTML='';$('sbs-note').textContent='暂无 manual_pack 平台';return;}
+sel.innerHTML=sbsOptions(manual,SBS.packs);
+var want=SBS.platform,ok=want&&[].some.call(sel.options,function(o){return o.value===want;});
+if(!ok){
+var hit=manual.filter(function(p){return SBS.packs&&SBS.packs[p.code];})[0]||manual[0];
+want=hit.code;SBS.platform=want;
+}
+sel.value=want;
+sbsLoad(want);
+}
+function sbsLoad(platform){
+if(!platform)return;
+SBS.platform=platform;
+var note=$('sbs-note');
+$('sbs-right').innerHTML='<p class="action-hint">读取中…</p>';
+$('sbs-diff').innerHTML='';
+getJSON('/api/article/pack?path='+encodeURIComponent(state.detailPath)+'&platform='+encodeURIComponent(platform)).then(function(d){
+if(SBS.platform!==platform)return;
+sbsRender(d);
+}).catch(function(err){note.textContent='读取失败：'+err.message;});
+}
+function sbsRender(d){
+var diff=d.diff||{};
+$('sbs-left').innerHTML=mdToHtml(d.original||'',dirOf(state.detailPath));
+if(!d.available){
+$('sbs-right').innerHTML=sbsEmptyNote(d.note);
+$('sbs-note').textContent=d.note||'尚未适配';
+$('sbs-diff').innerHTML='';
+return;
+}
+$('sbs-note').textContent='与原文差异：+'+(diff.added||0)+' 行 / −'+(diff.removed||0)+' 行'+(diff.identical?'（无变体直出，正文与原文一致）':'');
+$('sbs-right').innerHTML=sbsMeta(d.payload)+'<div class="sbs-render">'+mdToHtml((d.payload||{}).body||'',dirOf(state.detailPath))+'</div>';
+$('sbs-diff').innerHTML=diff.html||'';
 }
 function renderDetail(){
 var path=state.detailPath;

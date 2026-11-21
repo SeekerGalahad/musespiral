@@ -29,6 +29,7 @@ mtab:'all',
 mdens:'compact',
 mtype:'',
 mspark:'',
+mconf:'', // N-4 低置信筛选（'low'=confidence<0.5；服务端 confidence 参数同值）
 mquery:'',
 msort:'score',
 mdrawer:'',
@@ -449,11 +450,21 @@ async function matIngest(sid){
 var MTY={text:'文档',image:'图片',video:'视频',link:'链接',radar_signal:'雷达信号',crawled:'抓取',derived:'衍生'};
 var MTYI={text:'docs',image:'image',video:'video',link:'link',radar_signal:'radar',crawled:'globe',derived:'derived'};
 var LIC={'CC-BY':['lic-ok','CC-BY · 可用'],'ALL-RIGHTS':['lic-warn','版权 · 注意']};
+// N-4 置信度三态徽（正典=《总体方案》§二 N-4）：✓ 已核验（verified=true，人工判定）
+// / ? 待核验（有 AI 自评未人工核验）/ ⚠ 低置信（confidence<0.5）。无自评且未核验
+// 的原始素材不显徽（无信号不噪声）。threshold 单一权威=core（lineage.js 复用）。
+var CONF_LOW=0.5;
+function confBadge(m){
+var t=m.triage||{},c=t.confidence;
+if(t.verified)return '<span class="badge pass" title="人工核验通过（verified）">✓ 已核验'+Z;
+if(c==null)return '';
+return c<CONF_LOW?'<span class="badge warn" title="AI 自评置信度 '+c+'（低于 0.5），引用前先核对原文">⚠ 低置信 '+c+Z:'<span class="badge" title="AI 自评置信度 '+c+'，尚未人工核验（详情「血统」tab 可标记核验）">? 待核验 '+c+Z;
+}
 function licBadge(m){
 var l=String(m.license||'UNKNOWN'),x=(m.payload||{}).meta||{};
-if(l==='AI-GENERATED')return '<span class="lic-badge lic-ai">AI-GENERATED'+Z+(x.ai_generated?'<span class="gen-src">'+esc(x.provider)+' · '+esc(x.model)+' · '+esc(String(x.generated_at||'').replace('T',' '))+Z:'');
+if(l==='AI-GENERATED')return '<span class="lic-badge lic-ai">AI-GENERATED'+Z+(x.ai_generated?'<span class="gen-src">'+esc(x.provider)+' · '+esc(x.model)+' · '+esc(String(x.generated_at||'').replace('T',' '))+Z:'')+confBadge(m);
 var v=LIC[l]||['lic-unk','许可未知'];
-return '<span class="lic-badge '+v[0]+'" title="license 枚举">'+v[1]+Z;
+return '<span class="lic-badge '+v[0]+'" title="license 枚举">'+v[1]+Z+confBadge(m);
 }
 function renderCollRail(){
 var L=state.mats||[],sn=0,ur=0,hi=0,de=0;
@@ -685,7 +696,8 @@ refreshJobs(); // R4：任务角标初始装载
 probeHealth(); // 档A：静默徽章磁盘/凭证信号
 // 独立产物懒加载（quickstart E-4 §3.4 / outline G-T2 §三 / rolling G-T4 §五 / dual G-T3 §四 / tts G-T5 §六 / versions E-6 §3.7）：
 // core.js 贴 M3 拆分线，合并为单循环避免触线；字面量保留供各装载门断言
-['assets/quickstart.js','assets/outline.js','assets/rolling.js','assets/dual.js','assets/tts.js','assets/versions.js','assets/iterations.js'].forEach(function(s){var e=document.createElement('script');e.src=s;document.head.appendChild(e);});
+// lineage.js=N-4 血统 tab（material.js 贴 40KiB 锚，同 iterations.js 判例独立产物）
+['assets/quickstart.js','assets/outline.js','assets/rolling.js','assets/dual.js','assets/tts.js','assets/versions.js','assets/iterations.js','assets/lineage.js'].forEach(function(s){var e=document.createElement('script');e.src=s;document.head.appendChild(e);});
 }
 init();
 
@@ -833,6 +845,7 @@ var p=['limit='+limit];
 if(state.msrc)p.push('source='+encodeURIComponent(state.msrc));
 if(state.mtype)p.push('type='+encodeURIComponent(state.mtype));
 if(state.mspark)p.push('sub_type='+encodeURIComponent(state.mspark)); // N-2：灵感 chip 读 sub_type 非 type（枚举不动裁决）
+if(state.mconf)p.push('confidence='+state.mconf); // N-4：低置信筛选（服务端 triage.confidence<0.5）
 if(state.mtag)p.push('tag='+encodeURIComponent(state.mtag));
 if(state.mcoll)p.push('collection='+encodeURIComponent(state.mcoll));
 if(state.mquery)p.push('q='+encodeURIComponent(state.mquery));
@@ -841,7 +854,8 @@ return '/api/materials?'+p.join('&');
 async function loadMaterials(){
 try{var d=await getJSON(matQS(state.mquery||state.mcoll?500:200));
 state.mats=Array.isArray(d.items)?d.items:[];
-state.mqTotal=(d&&d.total!=null)?d.total:state.mats.length;}
+state.mqTotal=(d&&d.total!=null)?d.total:state.mats.length;
+var lc=$('mat-lowconf');if(lc)lc.classList.toggle('is-active',!!state.mconf);} // N-4 chip 激活态（material.js 贴 40KiB 锚，同步归 core——spark chip 判例）
 catch(err){state.mats=[];state.mqTotal=0;toast('加载素材失败：'+err.message,ER);}
 }
 async function loadDiscover(){
@@ -879,6 +893,21 @@ $('mat-type').insertAdjacentElement('afterend',sk);
 sk.onclick=function(){
 state.mspark=state.mspark?'':'spark';
 this.classList.toggle('is-active',!!state.mspark);
+loadMaterials().then(function(){renderCollRail();viewRepaint('material');});
+};
+}
+// N-4 低置信 chip（同 spark chip 判例：建在 core 的 fillMatType——material.js
+// 贴 40KiB 锚装不下；服务端 confidence=low 筛选，只中「AI 给过低分」条目）
+var lc=$('mat-lowconf');
+if(!lc){
+lc=document.createElement('button');
+lc.type='button';lc.id='mat-lowconf';lc.className='chip';
+lc.title='只看低置信素材（AI 自评 confidence<0.5，引用前先核对原文）';
+lc.textContent='⚠ 低置信';
+sk.insertAdjacentElement('afterend',lc);
+lc.onclick=function(){
+state.mconf=state.mconf?'':'low';
+this.classList.toggle('is-active',!!state.mconf);
 loadMaterials().then(function(){renderCollRail();viewRepaint('material');});
 };
 }
@@ -1417,6 +1446,7 @@ tsugBox(m)+
 '<div class="action-row mat-acts">'+(m.type==='text'?'<button class="btn" data-mdraft="'+esc(o.uri)+'"'+(m.drafted?' disabled':'')+'>生成骨架</button>':'')+((meta.url||p.url)?'<a class="btn" href="'+esc(meta.url||p.url)+'" target="_blank" rel="noopener">查看原文</a>':'')+'<button class="btn" data-mcolladd="'+esc(m.id)+'">+ 集合</button><button class="btn" data-mstar="'+esc(m.id)+'">'+(tri.starred?'取消收藏':'收藏')+'</button><button class="btn" data-mread="'+esc(m.id)+'">'+(tri.read?'已读':'未读')+'</button><button class="btn" data-moff="'+esc(m.id)+'">'+(tri.enabled?'禁用':'启用')+'</button><button class="btn" data-mai="'+esc(m.id)+'">AI 摘要</button><button class="btn mat-del" data-mdel="'+esc(m.id)+'">删除</button></div>'+
 '';
 if(window.__mdpubMatIter)__mdpubMatIter.repaint(state.mdrawer);
+if(window.__mdpubMatLineage)__mdpubMatLineage.repaint(state.mdrawer); // N-4 血统 tab（chip/容器由 lineage.js 自注入）
 }
 // 入口 B（设计 §四）：AI 标签建议——只建议不落库。chips 默认全部未选（「AI 只建议」的
 // 字面落实）；[采纳所选] 才走既有 /api/materials/triage 全量替换写面。打开详情不静默调 AI。
@@ -1659,7 +1689,7 @@ else state.mdens=c.getAttribute('data-mdens');
 syncMatHash();renderCollRail();renderMaterials();
 });
 $('mat-empty-action').addEventListener('click',function(){
-state.msrc='';state.mtab='all';state.mtype='';state.mspark='';state.mquery='';state.mtag='';state.mcoll='';
+state.msrc='';state.mtab='all';state.mtype='';state.mspark='';state.mconf='';state.mquery='';state.mtag='';state.mcoll='';
 $('mat-search').value='';$('mat-search-x').hidden=true;fillMatType();
 syncMatHash();renderCollRail();renderMaterials();loadMaterials().then(renderMaterials);
 });
@@ -3955,6 +3985,7 @@ if(n<30)return{title:h,chars:n,ok:false,msg:'正文过短（'+n+' 字）'};
 return{title:h,chars:n,ok:true,msg:'本地校验通过'};
 }
 async function renderVariants(){
+sbsMount();
 var it=state.articles.find(function(a){return a.path===state.detailPath;}),vs=(it&&it.flags&&it.flags.variants)||[],i,rel;
 for(i=0;i<vs.length;i++){rel=variantFile(state.detailPath,vs[i]);
 if(state.vraw[rel])continue;
@@ -3978,6 +4009,101 @@ var hit=state.vraw[rel];
 if(hit){show(hit.content);return;}
 getJSON(`/api/article/body?path=${encodeURIComponent(rel)}`).then(function(b){state.vraw[rel]=Object.assign({content:b.content||''},variantLocal(b.content||''));show(b.content);})
 .catch(function(err){toast('读取变体失败：'+err.message,ER);});
+}
+/*__SBS_BEGIN__*/
+// N-5 多平台并排预览·纯函数区（tests/test_pack_preview.py 的 node 行为断言
+// 抽取本段执行，不触 DOM、不引用本段外符号）。并排双栏：左=原文（只读
+// markdown 渲染），右=平台版本（物料包 payload.md）；差异高亮用服务端
+// core/version/diff.py 的红删绿增 HTML（前端只贴 html，不另写 diff）。
+function sbsEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+// 平台下拉项：manual_pack 平台全集；packs 为 {code:available} 映射，有包标 ✓
+function sbsOptions(platforms,packs){
+var map=packs||{};
+return (Array.isArray(platforms)?platforms:[]).map(function(p){
+var code=String(p&&p.code||p||''),name=String((p&&p.name)||code||''),has=map[code]===true;
+return '<option value="'+sbsEsc(code)+'">'+sbsEsc(name)+'（'+sbsEsc(code)+'）'+(has?' ✓':'')+'</option>';
+}).join('');
+}
+// 右栏头部物料字段 chips（payload 头部：标题/描述/话题）
+function sbsMeta(payload){
+if(!payload)return '';
+var bits=[];
+if(payload.title)bits.push('<span class="tag">标题 '+sbsEsc(payload.title)+'</span>');
+if(payload.desc)bits.push('<span class="tag">描述 '+sbsEsc(payload.desc)+'</span>');
+if(Array.isArray(payload.tags)&&payload.tags.length)bits.push('<span class="tag accent">'+payload.tags.map(function(t){return '#'+sbsEsc(t);}).join(' ')+'</span>');
+return bits.length?'<div class="sbs-meta">'+bits.join('')+'</div>':'';
+}
+function sbsEmptyNote(note){return '<div class="empty sbs-empty"><div class="empty-title">尚未适配</div><div class="empty-text">'+sbsEsc(note||'该平台还没有物料包——在「操作」页「生成物料包」后回来看并排对照。')+'</div></div>';}
+/*__SBS_END__*/
+var SBS={path:'',packs:null,platform:''};
+// 并排区骨架动态注入（壳贴顶 49,152B 硬锚仅余 28B——AI-3 批「新 UI 全 JS
+// 动态渲染、壳零增量」同款纪律；注入一次，幂等守卫 sbs-grid 存在性）
+// ↑ 注释内不写字符串字面量（test_real_sources_string_spans_preserved：
+//   压缩剥注释后 naive 提取器会把注释里的引号串计入 before 导致对拍红）
+function sbsEnsure(){
+if($('sbs-grid'))return;
+var panel=$('panel-variants');
+if(!panel)return;
+panel.insertAdjacentHTML('afterbegin',
+'<div class="action-group sbs-group"><h3 class="action-title">平台适配预览</h3>'+
+'<div class="action-row"><label class="field">平台 <select class="input" id="sbs-platform"></select></label>'+
+'<span class="action-hint" id="sbs-note">并排对照：左原文 · 右平台版本（物料包 payload 正文）；下方红删绿增为两版差异。</span></div>'+
+'<div class="sbs-grid" id="sbs-grid">'+
+'<div class="sbs-col"><div class="sbs-head">原文</div><div class="sbs-body" id="sbs-left"></div></div>'+
+'<div class="sbs-col"><div class="sbs-head">平台版本</div><div class="sbs-body" id="sbs-right"></div></div></div>'+
+'<div id="sbs-diff"></div></div>');
+$('sbs-platform').addEventListener('change',function(){sbsLoad(this.value);});
+}
+function sbsMount(){
+sbsEnsure();
+var p=state.detailPath||'';
+if(!p){$('sbs-note').textContent='先打开一篇文章';return;}
+if(SBS.path!==p||!SBS.packs){
+SBS.path=p;SBS.packs=null;SBS.platform='';
+getJSON('/api/article/pack?path='+encodeURIComponent(p)).then(function(d){
+SBS.packs={};
+(d.packs||[]).forEach(function(x){SBS.packs[x.platform]=x.available;});
+sbsFillPlatforms();
+}).catch(function(err){SBS.packs={};sbsFillPlatforms();$('sbs-note').textContent='物料包清单读取失败：'+err.message;});
+}else sbsFillPlatforms();
+}
+function sbsFillPlatforms(){
+var manual=state.platforms.filter(function(p){return p.route==='manual_pack';});
+var sel=$('sbs-platform');
+if(!manual.length){sel.innerHTML='';$('sbs-note').textContent='暂无 manual_pack 平台';return;}
+sel.innerHTML=sbsOptions(manual,SBS.packs);
+var want=SBS.platform,ok=want&&[].some.call(sel.options,function(o){return o.value===want;});
+if(!ok){
+var hit=manual.filter(function(p){return SBS.packs&&SBS.packs[p.code];})[0]||manual[0];
+want=hit.code;SBS.platform=want;
+}
+sel.value=want;
+sbsLoad(want);
+}
+function sbsLoad(platform){
+if(!platform)return;
+SBS.platform=platform;
+var note=$('sbs-note');
+$('sbs-right').innerHTML='<p class="action-hint">读取中…</p>';
+$('sbs-diff').innerHTML='';
+getJSON('/api/article/pack?path='+encodeURIComponent(state.detailPath)+'&platform='+encodeURIComponent(platform)).then(function(d){
+if(SBS.platform!==platform)return;  // 迟到响应丢弃（用户已切走）
+sbsRender(d);
+}).catch(function(err){note.textContent='读取失败：'+err.message;});
+}
+function sbsRender(d){
+var diff=d.diff||{};
+$('sbs-left').innerHTML=mdToHtml(d.original||'',dirOf(state.detailPath));
+if(!d.available){
+$('sbs-right').innerHTML=sbsEmptyNote(d.note);
+$('sbs-note').textContent=d.note||'尚未适配';
+$('sbs-diff').innerHTML='';
+return;
+}
+$('sbs-note').textContent='与原文差异：+'+(diff.added||0)+' 行 / −'+(diff.removed||0)+' 行'+(diff.identical?'（无变体直出，正文与原文一致）':'');
+$('sbs-right').innerHTML=sbsMeta(d.payload)+'<div class="sbs-render">'+mdToHtml((d.payload||{}).body||'',dirOf(state.detailPath))+'</div>';
+$('sbs-diff').innerHTML=diff.html||'';
 }
 function renderDetail(){
 var path=state.detailPath;

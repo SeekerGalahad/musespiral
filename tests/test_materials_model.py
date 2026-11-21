@@ -41,7 +41,8 @@ def test_make_material_full_shape() -> None:
     assert row["license"] == "UNKNOWN"
     assert row["provenance"] == {"chain": [], "derived_from": []}
     assert row["payload"] == {}
-    assert row["triage"] == {"read": False, "starred": False, "enabled": True, "tags": []}  # §1.2 四键
+    assert row["triage"] == {"read": False, "starred": False, "enabled": True, "tags": [],
+                             "verified": False, "confidence": None}  # §1.2 四键 + N-4 两键
 
 
 def test_make_material_id_stable_and_distinct() -> None:
@@ -99,13 +100,15 @@ def test_normalize_drops_bad_rows_and_fills_defaults() -> None:
     row = model.normalize_material({"id": " abc "})
     assert row is not None
     assert row["id"] == "abc"
-    assert row["triage"] == {"read": False, "starred": False, "enabled": True, "tags": []}  # §1.2 四键
+    assert row["triage"] == {"read": False, "starred": False, "enabled": True, "tags": [],
+                             "verified": False, "confidence": None}  # §1.2 四键 + N-4 两键
     assert row["provenance"] == {"chain": [], "derived_from": []}
     assert row["origin"] == {}
     # triage 键值非布尔按默认（宽容，不崩读侧）
     loose = model.normalize_material({"id": "a", "triage": {"read": "yes", "enabled": 0}})
     assert loose is not None
-    assert loose["triage"] == {"read": False, "starred": False, "enabled": True, "tags": []}
+    assert loose["triage"] == {"read": False, "starred": False, "enabled": True, "tags": [],
+                               "verified": False, "confidence": None}  # N-4 补默认同口径
     # tags 脏数据宽容：非列表→[]、非 str 元素剔除（读侧不崩）
     dirty = model.normalize_material({"id": "b", "triage": {"tags": "x"}})
     assert dirty is not None and dirty["triage"]["tags"] == []
@@ -185,7 +188,7 @@ def test_triage_patch_narrow_gate() -> None:
     patched = triage.triage_patch(base, {"starred": True})
     assert patched == {"read": False, "starred": True, "enabled": True, "tags": []}
     assert base["starred"] is False  # 纯函数：入参不改
-    with pytest.raises(ValueError, match="四键"):  # §1.2 修订：窄门句式三键→四键
+    with pytest.raises(ValueError, match="五键"):  # §1.2 修订三键→四键；N-4 四键→五键（+verified）
         triage.triage_patch(base, {"payload": {}})
     with pytest.raises(ValueError, match="布尔"):
         triage.triage_patch(base, {"read": 1})

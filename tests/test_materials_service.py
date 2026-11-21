@@ -98,7 +98,8 @@ def test_update_triage_appends_and_last_wins(env) -> None:
     row = _material()
     svc.add_material(row)
     updated = svc.update_triage(row["id"], {"starred": True, "read": True})
-    assert updated["triage"] == {"read": True, "starred": True, "enabled": True, "tags": []}  # §1.2 四键修订
+    assert updated["triage"] == {"read": True, "starred": True, "enabled": True, "tags": [],
+                                 "verified": False, "confidence": None}  # §1.2 四键修订 + N-4 两键
     assert len(_lines(env)) == 2  # 追加式：旧行保留、新行末次胜出
     fetched = svc.get_material(row["id"])
     assert fetched["triage"]["starred"] is True
@@ -114,7 +115,7 @@ def test_update_triage_idempotent_zero_append(env) -> None:
     assert len(_lines(env)) == 2
     svc.update_triage(row["id"], {"starred": True})  # 同值再改
     assert len(_lines(env)) == 2  # 零追加
-    with pytest.raises(ValueError, match="四键"):  # §1.2 修订：窄门句式三键→四键
+    with pytest.raises(ValueError, match="五键"):  # §1.2 修订三键→四键；N-4 四键→五键（+verified）
         svc.update_triage(row["id"], {"payload": {}})
     with pytest.raises(ValueError, match="不存在"):
         svc.update_triage("nope00000000", {"starred": True})

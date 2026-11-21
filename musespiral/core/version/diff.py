@@ -19,6 +19,14 @@
 口径说明：按行切分（`str.splitlines()`），**行尾换行差异不呈现**——文章是散文，
 末尾是否多一个换行不是「改了哪一段」；"\\ No newline at end of file" 标记因此
 不会出现。行号从 1 起算；ctx 行两侧行号并列，del 只占旧侧、ins 只占新侧。
+
+**行内字符级精化（2026-11-21 批4 复核④修复）**：对比仍按行（hunks/行号/
+added/removed 计数不变），但渲染替换块时对配对的 del/ins 行做字符级
+SequenceMatcher——「改一个字只高亮那个字」，未变字符以普通文本呈现（GitHub
+word-diff 的字符版）。判例与阈值和前端编辑器 edDiffRows（editor.js，单行
+≤1500 字符才逐字）同语义；两端各自实现（Python/JS 不能互调），阈值改值两处
+同步。全部 diff 消费面（E-6 版本对比 / REFINE-ITER 打磨史 / 插件 run 版本
+对照 / N-5 物料包并排预览）共用本引擎，一次升级全体生效。
 """
 from __future__ import annotations
 
@@ -32,6 +40,10 @@ DEFAULT_CONTEXT = 3
 
 # 首行摘要展示宽度（列表里每版一行，超出截断）
 SUMMARY_WIDTH = 60
+
+# 行内字符级精化的单行长度上限（与 editor.js edDiffRows 的 1500 同值——长行
+# 逐字会碎成噪声且 O(n·m) 放大；超限退回整行红删绿增）
+INLINE_REFINE_MAX_CHARS = 1500
 
 _HUNK_HEADER_RE = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 
@@ -180,6 +192,80 @@ def diff_result(
     )
 
 
+def _partner_map(rows: tuple[DiffRow, ...]) -> dict[int, int]:
+    """替换块内配对 del/ins 行：返回 行下标 → 配对行下标。
+
+    unified diff 的替换块形状恒为「连续 del 行 + 紧随连续 ins 行」（difflib
+    不会交错输出）；按出现顺序两两配对（第 k 条 del ↔ 第 k 条 ins），两侧
+    多余的行不配对（纯删/纯增语义，整行包裹才是对的形状）。
+    """
+    partners: dict[int, int] = {}
+    n = len(rows)
+    i = 0
+    while i < n:
+        if rows[i].kind != DEL:
+            i += 1
+            continue
+        j = i
+        while j < n and rows[j].kind == DEL:
+            j += 1
+        k = j
+        while k < n and rows[k].kind == INS:
+            k += 1
+        for p in range(min(j - i, k - j)):
+            partners[i + p] = j + p
+            partners[j + p] = i + p
+        i = k
+    return partners
+
+
+def _inline_body(old_line: str, new_line: str, kind: str) -> str | None:
+    """配对替换行的行内字符级精化（批4 复核④：「改一个字只高亮那个字」）。
+
+    对 del/ins 行各返回**包裹在单个 `.ver-tx` 容器里的混合片段**——本侧未变
+    字符为普通文本、本侧实改字符包 `<del class="dl-del">` / `<ins class="dl-add">`
+    （容器作 flex 子元素，内层片段自然行内排版）。返回 None = 不精化（调用方
+    走整行包裹的既有形态）：
+      - 任一侧为空 / 两行相同 / 任一侧超 `INLINE_REFINE_MAX_CHARS`；
+      - 本侧没有任何实改片段（改动全在对侧——整行包裹才是可读形状）；
+      - 整行无共同字符（精化结果与整行包裹逐字节同形，退回外层路径）。
+    相邻同向片段合并（SequenceMatcher 的 replace+delete 连发只出一个标签）。
+    """
+    if not old_line or not new_line or old_line == new_line:
+        return None
+    if len(old_line) > INLINE_REFINE_MAX_CHARS or len(new_line) > INLINE_REFINE_MAX_CHARS:
+        return None
+    matcher = difflib.SequenceMatcher(None, old_line, new_line, autojunk=False)
+    tag, cls = ("del", "dl-del") if kind == DEL else ("ins", "dl-add")
+    parts: list[str] = []
+    plain = ""
+    changed = False
+    for op, i1, i2, j1, j2 in matcher.get_opcodes():
+        if op == "equal":
+            plain += old_line[i1:i2]
+            continue
+        seg = old_line[i1:i2] if kind == DEL else new_line[j1:j2]
+        if not seg:
+            continue  # 该操作在本侧无对应片段（纯增对 del 行 / 纯删对 ins 行）
+        changed = True
+        if plain:
+            parts.append(html.escape(plain))
+            plain = ""
+        head, tail = f'<{tag} class="{cls}">', f"</{tag}>"
+        if parts and parts[-1].startswith(head):
+            # 相邻同向片段合并：剥外层标签拼接（减少碎标签噪声）
+            parts[-1] = f"{head}{parts[-1][len(head):-len(tail)]}{html.escape(seg)}{tail}"
+        else:
+            parts.append(f"{head}{html.escape(seg)}{tail}")
+    if plain:
+        parts.append(html.escape(plain))
+    if not changed:
+        return None
+    if len(parts) == 1 and parts[0].startswith(f"<{tag} "):
+        return None  # 整行实改且无共同字符 → 整行包裹同形，走外层路径
+    return f'<span class="ver-tx">{"".join(parts)}</span>'
+
+
 def render_diff_html(
     result: DiffResult,
     from_label: str = "旧版",
@@ -193,6 +279,11 @@ def render_diff_html(
     `.ver-hunk`（`@@` 头 + 行），每行 `.ver-row.ctx|del|ins` 含两侧行号槽与文本槽；
     删除行包 `<del class="dl-del">`（绯红 + 删除线）、新增行包
     `<ins class="dl-add">`（竹绿），着色与装饰在 ui.css。
+
+    替换块（del 行紧跟 ins 行）在两侧都可精化时按对升级为**行内字符级**
+    红删绿增（`_inline_body`）——共同字符以普通文本呈现、实改字符才着色；
+    纯删/纯增/长行/无共同字符的行保持整行包裹（同批两侧要么都精化要么都
+    整行，不出现半精化的错位对）。
     """
     if result.identical:
         return f'<p class="action-hint ver-same">{html.escape(empty_text)}</p>'
@@ -208,16 +299,32 @@ def render_diff_html(
     for hunk in result.hunks:
         out.append('<div class="ver-hunk">')
         out.append(f'<div class="ver-hh">{html.escape(hunk.header)}</div>')
-        for row in hunk.rows:
+        partners = _partner_map(hunk.rows)
+        bodies: dict[int, str | None] = {}  # 行内精化体缓存（del 行先算，ins 行复用同对判定）
+        for idx, row in enumerate(hunk.rows):
             old_no = "" if row.old_no is None else str(row.old_no)
             new_no = "" if row.new_no is None else str(row.new_no)
             text = html.escape(row.text) or "&nbsp;"
-            if row.kind == DEL:
-                body = f'<del class="dl-del">{text}</del>'
-            elif row.kind == INS:
-                body = f'<ins class="dl-add">{text}</ins>'
-            else:
-                body = f'<span class="ver-tx">{text}</span>'
+            body: str | None = None
+            pidx = partners.get(idx)
+            if row.kind in (DEL, INS) and pidx is not None:
+                if idx in bodies:
+                    body = bodies[idx]
+                else:
+                    old_line = row.text if row.kind == DEL else hunk.rows[pidx].text
+                    new_line = hunk.rows[pidx].text if row.kind == DEL else row.text
+                    ref_del = _inline_body(old_line, new_line, DEL)
+                    ref_ins = _inline_body(old_line, new_line, INS)
+                    # 两侧同生同死：一侧不可精化（如共同字符为零/超长）则整对整行包裹
+                    body = ref_del if row.kind == DEL else ref_ins
+                    bodies[pidx] = (ref_ins if row.kind == DEL else ref_del) if body else None
+            if body is None:
+                if row.kind == DEL:
+                    body = f'<del class="dl-del">{text}</del>'
+                elif row.kind == INS:
+                    body = f'<ins class="dl-add">{text}</ins>'
+                else:
+                    body = f'<span class="ver-tx">{text}</span>'
             out.append(
                 f'<div class="ver-row {row.kind}">'
                 f'<span class="ver-no">{old_no}</span>'

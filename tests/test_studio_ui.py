@@ -71,6 +71,9 @@ CONTRACT_PATHS = {
     "/api/article",
     "/api/article/html",
     "/api/article/review",
+    # N-5 平台适配并排预览（2026-11-21，契约 §3.22）：views/article.js 消费
+    # 的物料包清单/单平台 payload+diff 读面（@view:article 块，进 _js() 语料）
+    "/api/article/pack",
     "/api/platforms",
     "/api/stats",
     "/api/meta",
@@ -2139,7 +2142,7 @@ def test_filters_persist_in_hash() -> None:
     assert "mat-empty-title" in parsed.ids and "mat-empty-text" in parsed.ids
     assert "var MEMPTY_T=$('mat-empty-title').textContent" in src
     # 清除动作：回全部来源+全部 tab+全部类型+清搜索（客户端过滤，无需重拉）
-    assert "state.msrc='';state.mtab='all';state.mtype='';state.mspark='';state.mquery='';" in src
+    assert "state.msrc='';state.mtab='all';state.mtype='';state.mspark='';state.mconf='';state.mquery='';" in src  # N-4 清筛选含低置信
 
 def test_check_fail_tooltip_and_material_gap_badge() -> None:
     """建议6（沉淀·模式 22）：check 失败暗朱 chip 悬停见原文（详情汇总 badge

@@ -79,6 +79,27 @@ def _action_materials_delete(ctx: _StudioContext, data: dict[str, Any]) -> dict[
     return {"ok": True, "deleted": mid, "cascade": result["cascade"]}
 
 
+def _action_materials_verify(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
+    """POST /api/materials/verify {id, verified?}：人工核验标记（N-4）。
+
+    标记/取消同端点（body verified=false 即取消；缺省 true=标记）——写
+    triage.verified（人工核验布尔，与 AI 自评 confidence 正交不混写：
+    「AI 自评和人工核验必须可区分」）。同步瞬时（triage 窄门追加一行），
+    走 services.update_triage（triage_patch 五键窄门；confirmed 幂等零追加）。
+    素材不存在/已删、verified 非布尔 → 400 可读。响应 triage 五键全回。
+    """
+    mid = _require_str(data, "id")
+    verified = data.get("verified", True)
+    if not isinstance(verified, bool):
+        raise _HttpError(400, f"verified 必须是布尔值: {verified!r}")
+    from ...services import materials_service  # 函数体内导入（导入期解耦）
+
+    with _http_400_on(ValueError):
+        row = materials_service.update_triage(mid, {"verified": verified})
+    return {"ok": True, "id": mid, "verified": row.get("triage", {}).get("verified") is True,
+            "triage": row.get("triage") or {}}
+
+
 def _action_materials_register(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
     """POST /api/materials/register {url, title?, note?, duration_text?}（F61）。
 
@@ -344,4 +365,7 @@ ROUTES: dict[str, Callable[[_StudioContext, dict[str, Any]], dict[str, Any]]] = 
     "/api/materials/spark": _action_materials_spark,
     "/api/materials/from-article": _action_materials_from_article,
     "/api/sources/internal/refresh": _action_sources_internal_refresh,
+    # N-4 人工核验（2026-11-21，正典=《总体方案》§二 N-4）：标记/取消同端点
+    # （body verified=false 即取消）。契约锁 POST 72→73。
+    "/api/materials/verify": _action_materials_verify,
 }

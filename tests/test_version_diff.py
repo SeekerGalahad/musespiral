@@ -5,7 +5,9 @@
      两版相同 → identical 且无 hunk；空文件侧（全新增/全删除）正确；
   b) HTML 红删绿增：删除行包 `<del class="dl-del">`（绯红）、新增行
      `<ins class="dl-add">`（竹绿）、上下文行不包；文本一律 html.escape
-     （正文里写 <script> 只以文本形态出现）；
+     （正文里写 <script> 只以文本形态出现）；替换块配对行做**行内字符级
+     精化**（改一个字只高亮那个字——批4 复核④，共同字符为普通文本、
+     无共同字符/纯删纯增/超 1500 字符行退整行包裹）；
   c) 服务层：list_versions 首项为当前版（id="current"）、池内新→旧、
      旧无时间戳 .md.bak 尾部（id="legacy"）；diff_versions 双版读取与
      同版拒绝；restore_version 恢复 + 当前版先入池（恢复可再恢复）+
@@ -22,6 +24,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -214,11 +217,52 @@ def test_html_marks_del_and_ins_with_semantic_classes() -> None:
 
 
 def test_html_escapes_untrusted_body_text() -> None:
-    """正文是不可信输入：`<script>` 之类只以转义文本形态出现（绝不生成标签）。"""
+    """正文是不可信输入：`<script>` 之类只以转义文本形态出现（绝不生成标签）。
+
+    行内字符级精化会把转义片段按共同字符拆开（`<` `>` 常与对侧共同），
+    故不再断言 `&lt;script&gt;` 的连续形态——改断「产物里只可能出现自家
+    白名单标签」这一更强的安全性质。
+    """
     html = _html_for("旧 <script>alert(1)</script>\n", "新 <b>x</b>\n")
-    assert "<script>" not in html
-    assert "&lt;script&gt;" in html
-    assert "<b>x</b>" not in html and "&lt;b&gt;x&lt;/b&gt;" in html
+    tags = set(re.findall(r"</?([a-zA-Z]+)[ >]", html))
+    assert tags <= {"div", "span", "del", "ins", "p"}, tags
+    assert "<script>" not in html and "<b>" not in html
+    assert "&lt;" in html and "&gt;" in html  # 尖角只以转义形态出现
+
+
+def test_html_inline_char_refinement_for_single_char_change() -> None:
+    """行内字符级精化（批4 复核④验收）：改一个字只高亮那个字。
+
+    del/ins 行配对后按字符 SequenceMatcher 拆段——未变字符为普通文本、
+    实改字符才进 del/ins 标签；中文散文段落=单行，单字改动不再整段标红。
+    """
+    html = _html_for("基本原理，是理解整段的上下文。\n第二段保持不变。\n",
+                     "基本原裏，是理解整段的上下文。\n第二段保持不变。\n")
+    assert '<del class="dl-del">理</del>' in html
+    assert '<ins class="dl-add">裏</ins>' in html
+    # 未变字符不进高亮标签（整段红/绿的旧形态不再出现）
+    assert '<del class="dl-del">基本原理' not in html
+    assert '<ins class="dl-add">基本原裏' not in html
+    assert "基本原" in html and "，是理解整段的上下文。" in html  # 共同文本仍在行内
+
+
+def test_html_inline_refinement_fallbacks() -> None:
+    """精化的三个退路：无共同字符（整行包裹同形）/ 纯删纯增（不配对）/ 超长行。"""
+    from musespiral.core.version.diff import INLINE_REFINE_MAX_CHARS
+
+    # 无共同字符：乙→丙 精化体与整行包裹逐字节同形（走外层整行路径）
+    html = _html_for("甲\n乙\n", "甲\n丙\n")
+    assert '<del class="dl-del">乙</del>' in html
+    assert '<ins class="dl-add">丙</ins>' in html
+    # 纯删/纯增：无配对行，整行包裹
+    html2 = _html_for("甲\n乙\n", "甲\n")
+    assert '<del class="dl-del">乙</del>' in html2
+    # 超长行（>1500 字符）不精化——退整行包裹（长行逐字是噪声）
+    long_a = "长" * (INLINE_REFINE_MAX_CHARS + 1)
+    long_b = "长" * INLINE_REFINE_MAX_CHARS + "改"
+    html3 = _html_for(f"{long_a}\n", f"{long_b}\n")
+    assert f'<del class="dl-del">{long_a}</del>' in html3
+    assert f'<ins class="dl-add">{long_b}</ins>' in html3
 
 
 def test_html_identical_message() -> None:
@@ -267,7 +311,10 @@ def test_diff_versions_reads_both_sides(root: Path) -> None:
     assert out["v1"]["label"].startswith("2026-11-19")
     assert out["v2"]["label"] == "当前版"
     assert (out["added"], out["removed"]) == (1, 1)
-    assert "池内版正文" in out["html"] and "当前版正文" in out["html"]
+    # 行内字符级精化：共同片段「版正文」作普通文本，实改两字才进红绿标签
+    assert '<del class="dl-del">池内</del>' in out["html"]
+    assert '<ins class="dl-add">当前</ins>' in out["html"]
+    assert "版正文" in out["html"]
 
 
 def test_diff_versions_rejects_same_and_unknown(root: Path) -> None:
@@ -326,7 +373,10 @@ def test_get_diff_two_modes(server, root: Path) -> None:
     )
     assert code == 200
     assert d["diff"]["added"] == 1 and d["diff"]["removed"] == 1
-    assert '<ins class="dl-add">新正文</ins>' in d["diff"]["html"]
+    # 行内字符级精化（批4 复核④）：「新」字进绿、「正文」共同片段为普通文本
+    assert '<ins class="dl-add">新</ins>' in d["diff"]["html"]
+    assert "正文" in d["diff"]["html"]
+    assert '<del class="dl-del">旧</del>' in d["diff"]["html"]
     assert len(d["diff"]["hunks"]) == 1
 
 

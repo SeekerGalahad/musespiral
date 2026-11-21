@@ -102,8 +102,19 @@ def _action_refine(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
         text = data.get("text")
         if not isinstance(text, str) or not text.strip():
             raise _HttpError(400, "缺少必填字段 text（预览文本原样回传）")
+        # N-4：AI 自评置信度回传（preview 的 confidence 原样带回）；省略=None。
+        # 形状门在 HTTP 面（非 0-1 数值 → 400），业务校验在服务层。
+        confidence = data.get("confidence")
+        if confidence is not None and (
+            isinstance(confidence, bool)
+            or not isinstance(confidence, (int, float))
+            or not (0.0 <= float(confidence) <= 1.0)
+        ):
+            raise _HttpError(400, f"confidence 必须是 0-1 数值或省略: {confidence!r}")
         try:
-            return refine_service.adopt(mid, text)
+            return refine_service.adopt(
+                mid, text, confidence=float(confidence) if confidence is not None else None,
+            )
         except refine_service.RefineError as err:
             raise _HttpError(400, str(err)) from None
     if action == "regenerate":

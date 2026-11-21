@@ -22,6 +22,7 @@ from ..core.quality.render_checks import render_checks
 from ..platforms import PLIMITS, list_platforms
 from ..core.quality.review import build_review_html
 from ..services import publish_log_service, publish_service
+from ..services import pack_service  # N-5 物料包并排预览读面（清单+单平台 payload+diff）
 from .actions import _runner
 from .annotations import _load_annotations, _read_article_text, _split_head_body
 from .assets import _rewrite_local_images
@@ -250,6 +251,30 @@ def _article_body_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> d
     return {"content": _split_head_body(_read_article_text(path))[1]}
 
 
+def _article_pack_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> dict[str, Any]:
+    """GET /api/article/pack → 物料包并排预览数据面（N-5，纯读零写）。
+
+    双态（同 /api/article/diff 的「同一端点兼两态」判例）：
+      - 无 `platform` → `{article, packs:[{platform,dir,available}]}`（清单：
+        六个可成包平台逐个给有没有，前端下拉用）；
+      - 有 `platform` → `{article, **pack_service.pack_preview(...)}`：payload
+        头部字段 + 原文 + 红删绿增 diff HTML。物料包不存在/残缺**不是错误**
+        （200 `available:false` + note，前端「尚未适配」提示面）；platform
+        白名单外 → 400（service 的 PackPreviewError，同时挡目录名穿越）。
+    """
+    rel = _query_str(query, "path")
+    if rel is None:
+        raise _HttpError(400, "缺少 path 参数（root 内相对路径）")
+    path = _resolve_file(ctx.root, rel)
+    platform = _query_str(query, "platform")
+    if platform is None:
+        return {"article": rel, "packs": pack_service.pack_inventory(path)}
+    try:
+        return {"article": rel, **pack_service.pack_preview(path, platform)}
+    except pack_service.PackPreviewError as err:
+        raise _HttpError(400, str(err)) from None
+
+
 def _annotations_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> dict[str, Any]:
     """GET /api/annotations?path= → {annotations:[...]}；缺 sidecar = 空列表。"""
     rel = _query_str(query, "path")
@@ -362,6 +387,12 @@ def _materials_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> dict
         "q": _query_str(query, "q"),
         "collection": _query_str(query, "collection"),
     }
+    # N-4（2026-11-21）：confidence=low 低置信筛选（枚举外 400——与 query
+    # 服务层校验同语义双门；缺省 None=不过滤）
+    conf = _query_str(query, "confidence")
+    if conf is not None and conf != "low":
+        raise _HttpError(400, f"confidence 只支持 'low' 筛选: {conf}")
+    kwargs["confidence"] = conf
     limit_raw = _query_str(query, "limit")
     if limit_raw is not None:
         try:

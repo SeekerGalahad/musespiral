@@ -16,15 +16,18 @@ from __future__ import annotations
 import re
 import shutil
 from pathlib import Path
+from typing import Any
 
 import frontmatter
 
+from ..browser.flows.base import read_pack
 from ..core.content.parser import parse_article
 from ..core.quality.pack_checks import (
     _checks_lines,
     _material_checks_lines,
     _normalize_limits,
 )
+from ..core.version.diff import diff_result, render_diff_html
 from ..platforms import PLIMITS
 
 # variant（adapt 口播稿）正文自带的「描述：」行——payload 头部描述优先取它，
@@ -344,3 +347,115 @@ def build_pack_for(
         limits=PLIMITS.get(platform),
         outdir=outdir,
     )
+
+
+# ── 读侧：物料包并排预览（N-5，正典=《mdpub-优化重构与后续开发总体方案-
+# 2026-11-19》§二 N-5「I5 多平台并排预览」）───────────────────────────
+#
+# 只读零写面：清单 + 单平台预览（payload.md 头部字段 + 正文 + 与原文的
+# 红删绿增 diff）。两处既有实现**只复用不重造**——payload.md 解析复用
+# browser.flows.base.read_pack（browser 侧填表取材的同一份解析器，服务层
+# 向下 import infra 合法；playwright 在 session 内 lazy import，本路径不触），
+# diff 复用 core.version.diff（E-6 /api/article/diff 同款引擎与 HTML 产物面）。
+
+class PackPreviewError(ValueError):
+    """物料包预览业务错误（可读中文；表现层转 400）。"""
+
+
+# 可成 pack 的平台集 = _PLATFORM_GUIDES 键（build_pack 的白名单同源；registry
+# manual_pack 六平台与它的对拍由 tests/test_uploader_browser.py 看守）。
+# platform 参数以此做白名单——它要拼进目录名 `<stem>.<platform>.pack`，
+# 不白名单即放行 `../` 穿越形态。
+PACK_PLATFORM_CODES: tuple[str, ...] = tuple(_PLATFORM_GUIDES)
+
+
+def _pack_dir(article_file: Path, platform: str) -> Path:
+    """物料包目录约定（与 build_pack 缺省落点同一命名，单一事实源=本函数 + build_pack 内联式）。"""
+    return article_file.parent / f"{article_file.stem}.{platform}.pack"
+
+
+def pack_inventory(article_path: str | Path) -> list[dict[str, Any]]:
+    """文章的物料包清单：每个可成包平台的 `{platform, dir, available}`。
+
+    `available` 以 payload.md 存在为准（目录在而 payload 缺 = 残包，不可用
+    ——与 pack_preview 的 note 口径一致）；`dir` 仅在目录存在时给目录名。
+    """
+    article_file = Path(article_path)
+    out: list[dict[str, Any]] = []
+    for code in PACK_PLATFORM_CODES:
+        d = _pack_dir(article_file, code)
+        out.append(
+            {
+                "platform": code,
+                "dir": d.name if d.is_dir() else None,
+                "available": (d / "payload.md").is_file(),
+            }
+        )
+    return out
+
+
+def pack_preview(article_path: str | Path, platform: str) -> dict[str, Any]:
+    """单平台物料包预览：payload 字段 + 原文 + 两版 diff（红删绿增 HTML）。
+
+    - platform 不在白名单 → PackPreviewError（表现层转 400；同时挡路径穿越）；
+    - 物料包不存在 / 缺 payload.md → **200 形状** `available:false` + 可读
+      note（前端「尚未适配」提示面，不报错不打断切平台）；
+    - diff 口径：原文取 `parse_article(...).raw_body`（与 pack 落盘时同源），
+      两侧 `.strip()` 后逐行比（行尾/首尾空白不是「改了哪一段」；无 variant
+      的 pack 正文=原文，两侧 strip 后 identical）；渲染层对替换块配对行做
+      **行内字符级精化**（diff.py `_inline_body`，批4 复核④——「改一个字只
+      高亮那个字」，共同字符以普通文本呈现）。
+    """
+    if platform not in PACK_PLATFORM_CODES:
+        raise PackPreviewError(
+            f"不支持的平台: {platform}（可用: {'/'.join(PACK_PLATFORM_CODES)}）"
+        )
+    article_file = Path(article_path)
+    d = _pack_dir(article_file, platform)
+    out: dict[str, Any] = {
+        "platform": platform,
+        "dir": d.name if d.is_dir() else None,
+        "available": False,
+        "note": "",
+        "payload": None,
+        "original": None,
+        "diff": None,
+    }
+    if not d.is_dir():
+        out["note"] = "尚未适配——该平台还没有物料包（先在「操作」页生成）。"
+        return out
+    try:
+        fields = read_pack(d)
+    except FileNotFoundError:
+        out["note"] = "物料包缺 payload.md（目录存在但不完整），重新生成后再试。"
+        return out
+    except UnicodeDecodeError:
+        out["note"] = "payload.md 不是 UTF-8 文本，无法预览。"
+        return out
+    try:
+        original = parse_article(article_file).raw_body
+    except Exception as exc:  # 坏 frontmatter/IO → 可读拒绝（不 500）
+        raise PackPreviewError(f"文章解析失败，无法预览原文：{exc}") from None
+    result = diff_result(
+        original.strip(),
+        fields.body,
+        from_label="原文",
+        to_label=f"{platform} 平台版本",
+    )
+    out.update(
+        available=True,
+        payload={
+            "title": fields.title,
+            "desc": fields.desc,
+            "tags": list(fields.tags),
+            "body": fields.body,
+        },
+        original=original,
+        diff={
+            **result.to_dict(),
+            "html": render_diff_html(
+                result, from_label="原文", to_label=f"{platform} 平台版本"
+            ),
+        },
+    )
+    return out

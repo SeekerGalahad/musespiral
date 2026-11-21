@@ -28,6 +28,7 @@ mtab:'all',
 mdens:'compact',
 mtype:'',
 mspark:'',
+mconf:'', // N-4 低置信筛选（'low'=confidence<0.5；服务端 confidence 参数同值）
 mquery:'',
 msort:'score',
 mdrawer:'',
@@ -446,11 +447,21 @@ async function matIngest(sid){
 var MTY={text:'文档',image:'图片',video:'视频',link:'链接',radar_signal:'雷达信号',crawled:'抓取',derived:'衍生'};
 var MTYI={text:'docs',image:'image',video:'video',link:'link',radar_signal:'radar',crawled:'globe',derived:'derived'};
 var LIC={'CC-BY':['lic-ok','CC-BY · 可用'],'ALL-RIGHTS':['lic-warn','版权 · 注意']};
+// N-4 置信度三态徽（正典=《总体方案》§二 N-4）：✓ 已核验（verified=true，人工判定）
+// / ? 待核验（有 AI 自评未人工核验）/ ⚠ 低置信（confidence<0.5）。无自评且未核验
+// 的原始素材不显徽（无信号不噪声）。threshold 单一权威=core（lineage.js 复用）。
+var CONF_LOW=0.5;
+function confBadge(m){
+var t=m.triage||{},c=t.confidence;
+if(t.verified)return '<span class="badge pass" title="人工核验通过（verified）">✓ 已核验'+Z;
+if(c==null)return '';
+return c<CONF_LOW?'<span class="badge warn" title="AI 自评置信度 '+c+'（低于 0.5），引用前先核对原文">⚠ 低置信 '+c+Z:'<span class="badge" title="AI 自评置信度 '+c+'，尚未人工核验（详情「血统」tab 可标记核验）">? 待核验 '+c+Z;
+}
 function licBadge(m){
 var l=String(m.license||'UNKNOWN'),x=(m.payload||{}).meta||{};
-if(l==='AI-GENERATED')return '<span class="lic-badge lic-ai">AI-GENERATED'+Z+(x.ai_generated?'<span class="gen-src">'+esc(x.provider)+' · '+esc(x.model)+' · '+esc(String(x.generated_at||'').replace('T',' '))+Z:'');
+if(l==='AI-GENERATED')return '<span class="lic-badge lic-ai">AI-GENERATED'+Z+(x.ai_generated?'<span class="gen-src">'+esc(x.provider)+' · '+esc(x.model)+' · '+esc(String(x.generated_at||'').replace('T',' '))+Z:'')+confBadge(m);
 var v=LIC[l]||['lic-unk','许可未知'];
-return '<span class="lic-badge '+v[0]+'" title="license 枚举">'+v[1]+Z;
+return '<span class="lic-badge '+v[0]+'" title="license 枚举">'+v[1]+Z+confBadge(m);
 }
 function renderCollRail(){
 var L=state.mats||[],sn=0,ur=0,hi=0,de=0;
@@ -682,7 +693,8 @@ refreshJobs(); // R4：任务角标初始装载
 probeHealth(); // 档A：静默徽章磁盘/凭证信号
 // 独立产物懒加载（quickstart E-4 §3.4 / outline G-T2 §三 / rolling G-T4 §五 / dual G-T3 §四 / tts G-T5 §六 / versions E-6 §3.7）：
 // core.js 贴 M3 拆分线，合并为单循环避免触线；字面量保留供各装载门断言
-['assets/quickstart.js','assets/outline.js','assets/rolling.js','assets/dual.js','assets/tts.js','assets/versions.js','assets/iterations.js'].forEach(function(s){var e=document.createElement('script');e.src=s;document.head.appendChild(e);});
+// lineage.js=N-4 血统 tab（material.js 贴 40KiB 锚，同 iterations.js 判例独立产物）
+['assets/quickstart.js','assets/outline.js','assets/rolling.js','assets/dual.js','assets/tts.js','assets/versions.js','assets/iterations.js','assets/lineage.js'].forEach(function(s){var e=document.createElement('script');e.src=s;document.head.appendChild(e);});
 }
 init();
 
@@ -830,6 +842,7 @@ var p=['limit='+limit];
 if(state.msrc)p.push('source='+encodeURIComponent(state.msrc));
 if(state.mtype)p.push('type='+encodeURIComponent(state.mtype));
 if(state.mspark)p.push('sub_type='+encodeURIComponent(state.mspark)); // N-2：灵感 chip 读 sub_type 非 type（枚举不动裁决）
+if(state.mconf)p.push('confidence='+state.mconf); // N-4：低置信筛选（服务端 triage.confidence<0.5）
 if(state.mtag)p.push('tag='+encodeURIComponent(state.mtag));
 if(state.mcoll)p.push('collection='+encodeURIComponent(state.mcoll));
 if(state.mquery)p.push('q='+encodeURIComponent(state.mquery));
@@ -838,7 +851,8 @@ return '/api/materials?'+p.join('&');
 async function loadMaterials(){
 try{var d=await getJSON(matQS(state.mquery||state.mcoll?500:200));
 state.mats=Array.isArray(d.items)?d.items:[];
-state.mqTotal=(d&&d.total!=null)?d.total:state.mats.length;}
+state.mqTotal=(d&&d.total!=null)?d.total:state.mats.length;
+var lc=$('mat-lowconf');if(lc)lc.classList.toggle('is-active',!!state.mconf);} // N-4 chip 激活态（material.js 贴 40KiB 锚，同步归 core——spark chip 判例）
 catch(err){state.mats=[];state.mqTotal=0;toast('加载素材失败：'+err.message,ER);}
 }
 async function loadDiscover(){
@@ -876,6 +890,21 @@ $('mat-type').insertAdjacentElement('afterend',sk);
 sk.onclick=function(){
 state.mspark=state.mspark?'':'spark';
 this.classList.toggle('is-active',!!state.mspark);
+loadMaterials().then(function(){renderCollRail();viewRepaint('material');});
+};
+}
+// N-4 低置信 chip（同 spark chip 判例：建在 core 的 fillMatType——material.js
+// 贴 40KiB 锚装不下；服务端 confidence=low 筛选，只中「AI 给过低分」条目）
+var lc=$('mat-lowconf');
+if(!lc){
+lc=document.createElement('button');
+lc.type='button';lc.id='mat-lowconf';lc.className='chip';
+lc.title='只看低置信素材（AI 自评 confidence<0.5，引用前先核对原文）';
+lc.textContent='⚠ 低置信';
+sk.insertAdjacentElement('afterend',lc);
+lc.onclick=function(){
+state.mconf=state.mconf?'':'low';
+this.classList.toggle('is-active',!!state.mconf);
 loadMaterials().then(function(){renderCollRail();viewRepaint('material');});
 };
 }

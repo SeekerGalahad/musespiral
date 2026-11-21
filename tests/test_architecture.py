@@ -398,6 +398,11 @@ CONTRACT_GET_EXACT = {
     # 元信息由既有 /api/action/refine adopt 写入）。GET 44→46。
     "/api/materials/iterations",
     "/api/materials/iterations/diff",
+    # §3.22 新增（N-5 多平台并排预览 2026-11-21，正典=《mdpub-优化重构与后续
+    # 开发总体方案-2026-11-19》§二 N-5）：物料包清单 + 单平台 payload/原文/
+    # diff（纯读双态；diff 复用 E-6 引擎；残包 200 available:false 不 400；
+    # POST 零新增）。GET 46→47。
+    "/api/article/pack",
 }
 CONTRACT_POST_EXACT = {
     # §3.1 既有 27 条
@@ -510,6 +515,14 @@ CONTRACT_POST_EXACT = {
     # 同上动态段 POST——body {step:'ks'|'aw', feedback?}，长动作走 job
     # kind=plugin_pipeline）。POST 71→72。
     "/api/pipelines/runs/<run_id>/regenerate",
+    # §3.23 新增（N-4 置信度+血统 2026-11-21，正典=《mdpub-优化重构与后续开发
+    # 总体方案-2026-11-19.md》§二 N-4）：人工核验标记/取消同端点（body
+    # {id, verified?}——缺省 true 标记、false 取消）写 triage.verified，与
+    # AI 自评 confidence 正交不混写；同步瞬时（triage 窄门追加，无 job）。
+    # AI 自评面零新增端点（refine preview/adopt 与 agent adopt 既有端点形状
+    # 扩展）；GET 面零新增（低置信筛选走既有 /api/materials confidence=low
+    # 查询参数）。POST 72→73。
+    "/api/materials/verify",
 }
 
 
@@ -979,11 +992,12 @@ def test_rule_a_media_store_not_upward() -> None:
 
 
 def test_rule_a_triage_four_keys_anchor() -> None:
-    """规则 A3：TRIAGE_KEYS 四键形状锚（第二十一期 §1.2 修订——三布尔 +
-    tags；tags 之外的窄门不放宽由 triage 单测回归锚死）。"""
+    """规则 A3：TRIAGE_KEYS 形状锚（第二十一期 §1.2 修订——三布尔 + tags；
+    N-4 扩 verified 人工核验布尔（confidence 是 AI 自评字段不入窄门）；
+    tags/verified 之外的窄门不放宽由 triage 单测回归锚死）。"""
     from musespiral.core.materials.triage import TRIAGE_KEYS
 
-    assert TRIAGE_KEYS == ("read", "starred", "enabled", "tags")
+    assert TRIAGE_KEYS == ("read", "starred", "enabled", "tags", "verified")
 
 
 # ── Phase C 视觉创作线（F70-F74）：两条新架构门（设计 §三 依赖规则）────

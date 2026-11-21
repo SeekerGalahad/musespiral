@@ -43,6 +43,7 @@ import hashlib
 from typing import Any
 
 from ..core.materials import model
+from ..core.materials.confidence import parse_ai_confidence  # N-4 末行自评解析
 from ..core.version.diff import diff_result as _diff_result
 from ..core.version.diff import render_diff_html as _render_diff_html
 from ..infra.ai import AIError
@@ -61,12 +62,15 @@ REFINE_INPUT_MAX_CHARS = 20_000
 
 # 任务底座模板（内置缺省；~/.musespiral/prompts.d/refine.txt 存在即整体覆盖
 # ——F47 覆盖级联同纪律）。供应商无关：零模型/供应商字样（方言守门）。
+# N-4（2026-11-21）：末行 CONFIDENCE 自评——preview 解析剥行后回传，
+# 采纳写 triage.confidence；AI 不带该行时 confidence=None 不阻断面。
 DEFAULT_PROMPT = """你是资深内容编辑。请把给到的素材正文提炼成一段结构化中文摘要，供公众号写作时作为二手素材引用。
 
 要求：
 - 300 字以内，先一句话说清素材是什么，再给 3-5 条关键信息点（每条一行，以「· 」开头）
 - 保留具体事实（数字、名称、版本），不添加原文没有的推断
-- 结尾单独一行以「> 」开头标注这是摘要（引用时须回溯原文核实）"""
+- 结尾单独一行以「> 」开头标注这是摘要（引用时须回溯原文核实）
+- 最后单独加一行标注你对该摘要忠实概括原文的把握，格式固定为「CONFIDENCE: 0.8」（0-1 小数；不确定时给低值）——该行不算摘要正文"""
 
 # 素材正文注入插槽（覆盖文件可含 {{material}} 控制注入位置；缺省追加在末尾）
 _MATERIAL_SLOT = "{{material}}"
@@ -126,9 +130,13 @@ def _build_prompt(
 def preview(material_id: str, *, feedback: str | None = None) -> dict[str, Any]:
     """AI 摘要预览：chat(task="refine") 同步起草，绝不落盘。
 
-    返回 {"id", "title", "op", "text"}——text 即 AI 草稿（采纳时原样回传，
-    服务端不存中间态）。素材不存在/已删、无正文面 → RefineError；
-    AI 未配置/调用失败 → AIError（可读引导，同 annotate_rewrite 文案）。
+    返回 {"id", "title", "op", "text", "confidence"}——text 即 AI 草稿**原样**
+    （末行含 CONFIDENCE 自评标记——**preview 不剥行**：标记行随可编辑预览
+    一并呈现，剥离动作归 adopt（采纳时解析落 triage.confidence 并从正文
+    剔除）；人工所见即所存语义不破——用户删掉该行 = 放弃自评，宽容不阻断）；
+    confidence=AI 自评 0-1（N-4；AI 未带该行/值非法 → None——**容错不阻断
+    面**）。素材不存在/已删、无正文面 → RefineError；AI 未配置/调用失败 →
+    AIError（可读引导，同 annotate_rewrite 文案）。
 
     **N-3 读侧覆盖**：素材 origin.source_id 命中源级 ai_config 时，四键
     （profile/model/temperature/prompt_override）覆盖全局——只作用于本加工
@@ -158,11 +166,14 @@ def preview(material_id: str, *, feedback: str | None = None) -> dict[str, Any]:
         task="refine",
         **sources_service.override_kwargs(ai_cfg),
     )
+    # N-4：解析末行 CONFIDENCE 自评（只读不剥——剥行归 adopt；无标记 → None）
+    _, confidence = parse_ai_confidence(text)
     return {
         "id": material["id"],
         "title": str((material.get("origin") or {}).get("title") or material["id"]),
         "op": REFINE_OP,
         "text": text,
+        "confidence": confidence,
     }
 
 
@@ -226,6 +237,7 @@ def adopt(
     *,
     title: str | None = None,
     as_iteration: bool = True,
+    confidence: float | None = None,
 ) -> dict[str, Any]:
     """采纳预览草稿为 derived 素材（唯一写血统的动作面，F57 红线）。
 
@@ -235,8 +247,11 @@ def adopt(
       - origin.source_id 继承源素材的信息源、uri=refine://<源id>/<采纳ts>/
         <正文指纹8位>（同一源多次采纳各成一行，不撞 immutable 幂等——ts
         秒级粒度下同秒两采靠正文指纹区分；同秒同文的重复采纳幂等收敛）；
-      - 正文即预览 text（人工所见即所存——服务端不重跑 chat，避免采纳
-        内容与预览不一致）。
+      - 正文即预览 text，**采纳时解析并剥除末行 CONFIDENCE 自评标记**（N-4：
+        preview 原样带标记行，本动作剥离落 triage.confidence 后存正文——
+        入库正文不含自评行；用户编辑后标记行消失 → 自评 None，宽容不阻断）；
+      - confidence（N-4）：显式入参优先（API 直调面），缺省取正文标记行
+        解析值；两者皆无 → None。服务端不重算——AI 只起草红线不变。
 
     as_iteration=True（P2 缺省）：按链根判定写 META_ITERATION_KEYS 三键——
     iteration=链上既有最大版本号+1（空链即 1）、iteration_root=_chain_root
@@ -244,17 +259,29 @@ def adopt(
     的 id（v1 为 None）。provenance.chain 不变（仍指 material_id）。
     as_iteration=False：保持 P2 之前的旧行为——meta 不写迭代键。
 
-    素材不存在/已删、text 空 → RefineError（可读错误）。
+    素材不存在/已删、text 空、confidence 非 0-1 数值 → RefineError（可读错误）。
     """
     source = materials_service.get_material(material_id)
     if source is None:
         raise RefineError(f"素材不存在或已删: {material_id!r}")
     if not isinstance(text, str) or not text.strip():
         raise RefineError("采纳正文不能为空（预览文本原样回传）")
+    # N-4：剥末行自评标记（正文即所存的剥离点；剥离后空正文仍拒绝）
+    body, conf_from_text = parse_ai_confidence(text)
+    body = body.strip()
+    if not body:
+        raise RefineError("采纳正文不能为空（剥离自评行后无正文）")
+    if confidence is None:
+        confidence = conf_from_text
+    if confidence is not None and (
+        isinstance(confidence, bool)
+        or not isinstance(confidence, (int, float))
+        or not (0.0 <= float(confidence) <= 1.0)
+    ):
+        raise RefineError(f"confidence 必须是 0-1 数值或省略: {confidence!r}")
     origin = source.get("origin") or {}
     src_payload = source.get("payload") or {}
     src_meta = src_payload.get("meta") if isinstance(src_payload.get("meta"), dict) else {}
-    body = text.strip()
     ts = _now_iso()
     digest = hashlib.sha1(body.encode("utf-8")).hexdigest()[:8]
     payload: dict[str, Any] = {"text": body}
@@ -284,6 +311,7 @@ def adopt(
         license=str(source.get("license") or "UNKNOWN"),
         payload=payload,
         provenance={"chain": [{"from_id": material_id, "op": REFINE_OP}], "derived_from": []},
+        triage={"confidence": float(confidence) if confidence is not None else None},
         fetched_at=ts,
     )
     saved = materials_service.add_material(row)
@@ -302,7 +330,8 @@ def regenerate(material_id: str, *, feedback: str | None = None) -> dict[str, An
       - adopt(material_id, draft)：版本链三键（iteration/iteration_root/
         iteration_of）由 adopt 自算——material_id 是链上任一成员（原始源或
         某版 derived）时新行都落在同一条 REFINE-ITER 链上（iteration=链上
-        最大版本号+1，provenance.chain 指本次传入的直接源）。
+        最大版本号+1，provenance.chain 指本次传入的直接源）；confidence
+        （N-4）随 preview 自评透传。
 
     错误面同 preview/adopt 原样透传：素材不存在/已删 → RefineError；AI 未
     配置/调用失败 → AIError（此时零落库——旧版原样保留）。
@@ -310,7 +339,7 @@ def regenerate(material_id: str, *, feedback: str | None = None) -> dict[str, An
     返回即 adopt 返回：{"ok", "id", "material"}。
     """
     draft = preview(material_id, feedback=feedback)
-    return adopt(material_id, draft["text"])
+    return adopt(material_id, draft["text"], confidence=draft.get("confidence"))
 
 
 # ── 迭代链读面（P2：版本列表 + 两版对比）────────────────────────────

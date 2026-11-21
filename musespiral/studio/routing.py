@@ -51,6 +51,7 @@ from .payload import (
     _annotations_payload,
     _article_body_payload,
     _article_html,
+    _article_pack_payload,
     _article_payload,
     _article_review,
     _articles_payload,
@@ -136,6 +137,12 @@ _GET_ROUTES = _RouteSet(
             # 深度评审与改进-2026-11-18》§3.7）：版本池清单 + 任意两版对比
             # （纯读——无 v1/v2 只回清单，有则附 hunks 与红删绿增 HTML）
             "/api/article/diff",
+            # §3.22 新增（N-5 多平台并排预览 2026-11-21，正典=《mdpub-优化重构
+            # 与后续开发总体方案-2026-11-19》§二 N-5）：物料包清单 + 单平台
+            # payload/原文/diff（纯读双态——无 platform 只回清单，有则附
+            # payload 头部字段与红删绿增 HTML；diff 复用 E-6 core/version/diff
+            # 引擎；残包 200 available:false 不 400）。GET 46→47。
+            "/api/article/pack",
             "/api/annotations",  # R7：批注 sidecar 读取（增删走 POST 动作）
             "/api/platforms",
             "/api/stats",
@@ -208,6 +215,8 @@ def _get_response(
         return 200, _JSON_CTYPE, _json_bytes(_article_body_payload(ctx, query))
     if path == "/api/article/diff":  # E-6 §3.7：版本清单（+ 可选两版 diff，纯读）
         return 200, _JSON_CTYPE, _json_bytes(_article_diff_payload(ctx, query))
+    if path == "/api/article/pack":  # N-5 §3.22：物料包清单（+ 单平台 payload/diff，纯读）
+        return 200, _JSON_CTYPE, _json_bytes(_article_pack_payload(ctx, query))
     if path == "/api/annotations":
         return 200, _JSON_CTYPE, _json_bytes(_annotations_payload(ctx, query))
     if path == "/api/platforms":

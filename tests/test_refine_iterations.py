@@ -197,10 +197,14 @@ def test_diff_iterations_added_removed(env: Path) -> None:
     assert out["diff"]["identical"] is False
     kinds = {row["kind"] for hunk in out["diff"]["hunks"] for row in hunk["rows"]}
     assert {"del", "ins"} <= kinds  # 红删绿增都在（ctx 上下文行随 diff_result 缺省存在）
-    # 服务端渲染 html 红删绿增（E-6 同款产物面）
+    # 服务端渲染 html 红删绿增（E-6 同款产物面；行内字符级精化——配对行的
+    # 共同字符「行」作普通文本，实改片段才进标签，故不再断言整行连续形态）
     assert 'class="dl-del"' in out["diff"]["html"]
     assert 'class="dl-add"' in out["diff"]["html"]
-    assert "删除行甲" in out["diff"]["html"]
+    assert '<del class="dl-del">删除</del>行<del class="dl-del">甲</del>' in out["diff"]["html"]
+    assert '<del class="dl-del">乙</del>' in out["diff"]["html"]
+    assert '<ins class="dl-add">新增</ins>' in out["diff"]["html"]
+    assert '<ins class="dl-add">新增行戊</ins>' in out["diff"]["html"]  # 多余侧不配对→整行
 
 
 def test_diff_iterations_identical_versions(env: Path) -> None:

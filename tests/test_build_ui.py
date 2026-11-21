@@ -101,6 +101,17 @@ SHELL_MAX_BYTES = 48 * 1024
 # iterations.js +2,852B（window.prompt→行内输入条、revert 走 askConfirm）、
 # versions.js +187B（window.confirm→askConfirm）、quickstart.js -4B（去 ✅ emoji）
 # ——壳零增量（49,124B 不变，全 JS 动态渲染）；均懒加载不进首屏。
+# **N-4 置信度+血统批（2026-11-21）实测 469,192B 仍在黄档**：+14,955B（同批
+# 树上另含 N-5 并排预览批增量，二者共用黄档，归因一并记）= lineage.js 新建
+# 7,671B（N-4 血统 tab：正向树+反向列表+人工核验入口——material.js 贴 40KiB
+# 锚余量 97B 装不下，走 iterations.js 独立产物判例；懒加载不进首屏；含冒烟
+# 轮 +17B 首开死锁修复——repaint 只在 V.id 已置位时才赋值，首开 V.id 恒 ''，
+# 点击门 if(t&&V.id) 永假，改为 V.id!==id 即重置赋值）+
+# core.js +2,014B（confBadge 三态徽入 licBadge + mat-lowconf 筛选 chip +
+# matQS confidence 参数 + 独立产物装载清单+lineage 装载行）+ views/
+# material.js +85B（lineage repaint 钩子 + 清筛选复位 mconf——40,863→40,948B
+# 距 40KiB 锚余 12B）+ N-5 侧 views/article.js +4,330B（并排双栏 SBS 函数族）
+# 与 core.css +753B（sbs 样式，见其批注释）。
 # **首屏锚（FIRST_SCREEN_MAX_BYTES）保持硬门不变**——那才是用户体验指标；
 # 本批另加 80% 使用率告警（见 test_first_screen_budget）。单文件/单视图/core
 # 分层锚维持硬门（防单点失控，三档只作用于「总量」一层）。
