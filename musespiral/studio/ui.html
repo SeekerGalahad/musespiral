@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="assets/core.css">
 </head>
 <body>
-<div id="toast" class="toast" hidden><span id="toast-text"></span><button id="toast-action" class="btn btn-ghost" hidden></button></div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden><span id="toast-text"></span><button id="toast-action" class="btn btn-ghost" hidden></button></div>
 <div id="modal" class="modal-overlay" hidden>
 <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
 <h3 class="modal-title" id="modal-title">确认操作</h3>
@@ -19,7 +19,7 @@
 </div>
 </div>
 <div class="modal-overlay" id="clip-form" hidden>
-<div class="modal">
+<div class="modal" role="dialog" aria-modal="true" aria-labelledby="clip-title">
 <h3 class="modal-title" id="clip-title">剪藏 URL</h3>
 <div style="display:flex;flex-direction:column;gap:8px">
 <input id="clip-url" class="input" placeholder="URL（http(s) 开头；SSRF/robots 门生效）">
@@ -93,10 +93,10 @@
 <div class="topbar-actions">
 <button class="btn btn-ghost btn-icon" id="cp-btn" title="命令面板（⌘K）" aria-label="命令面板"><span data-icon="command"></span></button>
 <button class="btn btn-ghost btn-icon" id="theme-toggle" title="主题：跟随系统（点击切换）" aria-label="切换主题"><span id="theme-icon" data-icon="monitor"></span></button>
-<div class="sys-badge" id="sys-badge" hidden></div>
+<div class="sys-badge" id="sys-badge" role="status" hidden></div>
 <div class="jobs-wrap" id="jobs-wrap">
 <button class="btn btn-ghost btn-icon" id="jobs-btn" title="后台任务" aria-label="后台任务"><span data-icon="bell"></span></button>
-<span class="jobs-badge" id="jobs-badge" hidden>0</span>
+<span class="jobs-badge" id="jobs-badge" role="status" hidden>0</span>
 <div class="jobs-menu" id="jobs-menu" hidden></div>
 </div>
 <button class="btn btn-ghost btn-icon" id="refresh-btn" title="刷新" aria-label="刷新"><span data-icon="refresh"></span></button>

@@ -385,7 +385,7 @@ var ED_SEP_AFTER=[3,6,11,14];
 var bar=document.createElement('div');bar.className='ed-bar';bar.id='ed-bar';
 bar.innerHTML=ED_BTNS.map(function(b,i){
 return(i>0&&ED_SEP_AFTER.indexOf(i)>=0?'<span class="ed-sep"></span>':'')
-+'<button type="button" class="btn ed-tb" data-edb="'+b[0]+'" title="'+edEsc(b[2])+'">'+edEsc(b[1])+'</button>';
++'<button type="button" class="btn ed-tb" data-edb="'+b[0]+'" title="'+edEsc(b[2])+'" aria-label="'+edEsc(b[2])+'">'+edEsc(b[1])+'</button>';
 }).join('');
 bar.addEventListener('click',function(ev){
 var b=ev.target.closest('[data-edb]');
@@ -396,12 +396,12 @@ col.insertBefore(bar,col.firstChild);
 var find=document.createElement('div');find.className='ed-find';find.id='ed-find';find.hidden=true;
 find.innerHTML='<input type="text" id="ed-find-q" placeholder="查找…" aria-label="查找">'
 +'<span class="ed-find-n" id="ed-find-n"></span>'
-+'<button type="button" class="btn ed-tb" data-edf="prev" title="上一个（⇧⏎）">↑</button>'
-+'<button type="button" class="btn ed-tb" data-edf="next" title="下一个（⏎）">↓</button>'
++'<button type="button" class="btn ed-tb" data-edf="prev" title="上一个（⇧⏎）" aria-label="上一个匹配">↑</button>'
++'<button type="button" class="btn ed-tb" data-edf="next" title="下一个（⏎）" aria-label="下一个匹配">↓</button>'
 +'<input type="text" id="ed-find-r" placeholder="替换为…" aria-label="替换为">'
 +'<button type="button" class="btn ed-tb" data-edf="rep">替换</button>'
 +'<button type="button" class="btn ed-tb" data-edf="all">全部</button>'
-+'<button type="button" class="btn ed-tb" data-edf="close" title="Esc 关闭">✕</button>';
++'<button type="button" class="btn ed-tb" data-edf="close" title="Esc 关闭" aria-label="关闭查找条">✕</button>';
 find.addEventListener('click',function(ev){
 var b=ev.target.closest('[data-edf]');
 if(!b)return;

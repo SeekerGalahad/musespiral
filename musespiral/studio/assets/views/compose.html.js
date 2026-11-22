@@ -84,8 +84,8 @@ document.getElementById('view-compose').innerHTML=`
 </details>
 </div>
 </div>
-<div class="modal-overlay" id="cv-pm" hidden><div class="modal"><h3 class="modal-title">存为我的模板</h3><div class="cv-col"><input class="input" id="cv-pid" placeholder="模板 id（kebab，如 my-cover）"><input class="input" id="cv-pl" placeholder="显示名（选填）"></div><div class="modal-actions"><button class="btn" id="cv-pm-x">取消</button><button class="btn btn-primary" id="cv-pm-ok">保存</button></div></div></div>
-<div class="modal-overlay" id="sc-modal" hidden><div class="modal sc-modal">
+<div class="modal-overlay" id="cv-pm" hidden><div class="modal" role="dialog" aria-modal="true" aria-label="存为我的模板"><h3 class="modal-title">存为我的模板</h3><div class="cv-col"><input class="input" id="cv-pid" placeholder="模板 id（kebab，如 my-cover）"><input class="input" id="cv-pl" placeholder="显示名（选填）"></div><div class="modal-actions"><button class="btn" id="cv-pm-x">取消</button><button class="btn btn-primary" id="cv-pm-ok">保存</button></div></div></div>
+<div class="modal-overlay" id="sc-modal" hidden><div class="modal sc-modal" role="dialog" aria-modal="true" aria-label="智能组稿">
 <h3 class="modal-title">✨ 智能组稿</h3>
 <div class="sc-steps" id="sc-steps"><span class="sc-step">1 · 主题</span><span class="sc-step">2 · 素材</span><span class="sc-step">3 · 大纲与会话</span></div>
 <div class="sc-pane" id="sc-pane1">

@@ -175,7 +175,9 @@ return out.join('\n');
 function setTab(tab,updateHash){
 state.tab=tab;
 QA('[data-tab]').forEach(function(el){
-el.classList.toggle('is-active',el.getAttribute('data-tab')===tab);
+var on=el.getAttribute('data-tab')===tab;
+el.classList.toggle('is-active',on);
+el.setAttribute('aria-selected',on?'true':'false');
 });
 QA('[data-panel]').forEach(function(el){
 el.hidden=el.getAttribute('data-panel')!==tab;
@@ -482,7 +484,7 @@ if(e.isComposing||e.keyCode===229)return;
 if(e.key==='Enter'){e.preventDefault();submitAnnot();}
 if(e.key==='Escape')hideBubble();
 });
-$('viewer-close').addEventListener('click',function(){ $('viewer').hidden=true;});
+$('viewer-close').addEventListener('click',function(){ closeDlg('viewer');});
 EA.addEventListener('input',function(){state.saveSt='dirty';syncGutter();renderHl();scheduleLive();updateStatusbar();hideBubble();});
 EA.addEventListener('scroll',function(){
 EG.scrollTop=EA.scrollTop;HL.scrollTop=EA.scrollTop;HL.scrollLeft=EA.scrollLeft;

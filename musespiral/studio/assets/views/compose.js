@@ -39,7 +39,7 @@ if(!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(id)){toast('模板 id 须为 kebab（小写�
 btn.disabled=true;
 try{
 await postJSON('/api/visual/preset',{confirm:true,id:id,label:$('cv-pl').value.trim()||id,template:CV.tpl,params:cvP(),kind:'cover'});
-$('cv-pm').hidden=true;toast('模板已保存：'+id,OK);
+closeDlg('cv-pm');toast('模板已保存：'+id,OK);
 CV.pr=(await getJSON('/api/visual/presets')).items||[];cvChips();
 }catch(err){toast('模板保存失败：'+err.message,ER);}
 finally{btn.disabled=false;}
@@ -316,11 +316,11 @@ finally{if(el)el.disabled=false;}
 }
 function cnNew(){
 var w='',i;
-if($('cm-ch-modal')){$('cm-ch-modal').hidden=false;return;}
+if($('cm-ch-modal')){openDlg('cm-ch-modal','#cm-chf-name');return;}
 [['name','姓名'],['role','角色'],['appearance','外貌'],['speech_style','说话风格']].forEach(function(x){
 w+='<input class="input" id="cm-chf-'+x[0]+'" placeholder="'+x[1]+'">';});
-$('cm-novel').insertAdjacentHTML('beforeend','<div class="modal-overlay" id="cm-ch-modal"><div class="modal"><h3 class="modal-title">新建人物</h3><div class="cv-col">'+w+'<textarea class="input set-area" id="cm-chf-key_events" rows="3" placeholder="关键事件（每行一条）"></textarea><textarea class="input set-area" id="cm-chf-relations" rows="3" placeholder="人物关系（每行： 人物名=关系，如 陈默=宿敌）——关系图见下方🕸折叠区"></textarea></div><div class="modal-actions"><button class="btn" data-cn="mclose">取消</button><button class="btn btn-primary" data-cn="create">建卡</button></div></div></div>');
-$('cm-chf-name').focus();
+$('cm-novel').insertAdjacentHTML('beforeend','<div class="modal-overlay" id="cm-ch-modal"><div class="modal" role="dialog" aria-modal="true" aria-label="新建人物"><h3 class="modal-title">新建人物</h3><div class="cv-col">'+w+'<textarea class="input set-area" id="cm-chf-key_events" rows="3" placeholder="关键事件（每行一条）"></textarea><textarea class="input set-area" id="cm-chf-relations" rows="3" placeholder="人物关系（每行： 人物名=关系，如 陈默=宿敌）——关系图见下方🕸折叠区"></textarea></div><div class="modal-actions"><button class="btn" data-cn="mclose">取消</button><button class="btn btn-primary" data-cn="create">建卡</button></div></div></div>');
+openDlg('cm-ch-modal','#cm-chf-name');
 }
 function cnParseRelations(text){
 return String(text||'').split('\n').map(function(s){return s.trim();}).filter(Boolean).map(function(s){
@@ -332,7 +332,7 @@ var fv=function(k){var e=$('cm-chf-'+k);return e?String(e.value||'').trim():'';}
 if(!name)return toast('姓名不能为空',ER);
 try{d=await cnPost({action:'character_create',name:name,role:fv('role'),appearance:fv('appearance'),speech_style:fv('speech_style'),key_events:fv('key_events').split('\n').map(function(s){return s.trim();}).filter(Boolean),relations:cnParseRelations(fv('relations'))});
 if((d.material||{}).id)await cnPost({action:'character_add',id:d.material.id});
-$('cm-ch-modal').hidden=true;toast('已建卡:'+name,OK);
+closeDlg('cm-ch-modal');toast('已建卡:'+name,OK);
 await loadComposeDetail(state.cslug,true);renderCompose();
 }catch(err){toast('建卡失败：'+err.message,ER);}
 }
@@ -434,8 +434,8 @@ function scSec(id){var S=(SC.outline||{}).sections||[],i;for(i=0;i<S.length;i++)
 function scTitleOf(mid){var m=null,i,L=SC.items;for(i=0;i<L.length;i++)if(L[i].id===mid){m=L[i];break;}return m?String(m.title||mid).slice(0,24):mid;}
 function scMerge(a,b){var seen={},out=[];a.forEach(function(m){seen[m.id]=1;out.push(m);});b.forEach(function(m){if(!seen[m.id]){seen[m.id]=1;out.push(m);}});return out;}
 function scReset(){SC.step=1;SC.topic='';SC.items=[];SC.sel={};SC.sorted=true;SC.outline=null;SC.outlineSource=null;SC.slug='';SC.done=false;$('sc-topic').value='';$('sc-q').value='';scPaint();}
-function scOpen(){$('sc-modal').hidden=false;scReset();$('sc-topic').focus({preventScroll:true});}
-function scClose(){$('sc-modal').hidden=true;}
+function scOpen(){scReset();openDlg('sc-modal','#sc-topic');}
+function scClose(){closeDlg('sc-modal');}
 function scGoto(n){SC.step=n;scPaint();}
 function scBack(){if(SC.step>1&&!SC.done)scGoto(SC.step-1);}
 function scRow(m){
@@ -523,8 +523,8 @@ $('cv-hook').addEventListener('input',cvEdit);
 $('cv-fs').addEventListener('change',cvEdit);
 $('cv-al').addEventListener('change',cvEdit);
 $('cv-x').addEventListener('click',function(){cvExport(this);});
-$('cv-pt').addEventListener('click',function(){$('cv-pid').value='';$('cv-pl').value='';$('cv-pm').hidden=false;$('cv-pid').focus();});
-$('cv-pm-x').addEventListener('click',function(){$('cv-pm').hidden=true;});
+$('cv-pt').addEventListener('click',function(){$('cv-pid').value='';$('cv-pl').value='';openDlg('cv-pm','#cv-pid');});
+$('cv-pm-x').addEventListener('click',function(){closeDlg('cv-pm');});
 $('cv-pm-ok').addEventListener('click',function(){cvPreset(this);});
 $('cm-blocks').addEventListener('contextmenu',function(e){
 var b=e.target.closest('[data-cm-block]');
@@ -580,10 +580,15 @@ if(c){state.cround=+c.getAttribute('data-cm-round');state.cmWork=null;renderCmRo
 });
 $('cm-generate-btn').addEventListener('click',function(){state.cmWork=null;cmGenerate(this);});
 $('cm-adopt-btn').addEventListener('click',cmAdopt);
+document.addEventListener('keydown',function(e){
+if(e.isComposing||e.keyCode===229)return;
+if(e.defaultPrevented)return;
+if((e.metaKey||e.ctrlKey)&&e.key==='Enter'&&!$('view-compose').hidden&&$('sc-modal').hidden&&(!$('cm-ch-modal')||$('cm-ch-modal').hidden)){e.preventDefault();state.cmWork=null;cmGenerate($('cm-generate-btn'));}
+});
 $('cm-novel').addEventListener('click',function(e){
 var b=e.target.closest('[data-cn]'),cmd=b&&b.getAttribute('data-cn');
 if(!cmd)return;
-if(cmd==='mclose'){$('cm-ch-modal').hidden=true;return;}
+if(cmd==='mclose'){closeDlg('cm-ch-modal');return;}
 if(cmd==='create'){cnCreate(b);return;}
 cnAct(cmd,b.getAttribute('data-id'),b);
 });

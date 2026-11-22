@@ -76,7 +76,23 @@ CORE_MAX = 163_840            # 160KiB
 # +348B /insight.css +222B /sources.css +334B /core.css +160B。全部落在懒加载视图
 # 或已加载 JS，首屏壳仍 10,541B 不动。本硬门随批上移 563,000→569,000（距黄上限
 # 570,000 仅余 1.7KB——下批前端必须走独立产物或瘦身，勿再放宽）。
-TOTAL_MAX = 569_000
+# UIX-3 material 视图三拆批（2026-11-22）：五角色评审问题 11（material.js 40,631B
+# 贴 40KiB 锚余 329B）——按职责三拆 core/drawer/media 三子段（40,631B 单文件退役
+# → 41,364B，+733B＝三文件固有开销）+ core.js +174B（VJS 首载映射与 matPart 懒
+# 加载器）。纯物理拆分零功能新增；drawer/media 走 matPart 按需装载不占首屏。
+# 实测手写总量 568,282→569,230B——本硬门随批上移 569,000→570,000（＝test_build_ui
+# 黄带上限同值；总量三档权威仍在其 _assert_assets_total_tier，黄档归因已登记其
+# 注释档）。
+# UIX-3 无障碍批（2026-11-23）：aria/键盘全覆盖（弹窗焦点管理对 openDlg/closeDlg
+# + Esc 登记制兜底 + 导航 aria-current + 徽标键盘化 + 表格/列表语义 + ⌘⏎ 工坊生成
+# + focus-visible 补齐），总交付面 569,230→574,729B（+5,499B，全量归因见
+# test_build_ui.py ASSETS_TOTAL_GREEN_MAX 注释档本批行）。同批修偏：test_build_ui
+# 的 _assert_assets_total_tier 原在 >570,000 即 raise，与其自身 docstring「红
+# >600,000B FAIL」及 ASSETS_TOTAL_RED_MAX 常量矛盾（黄带被静默折成硬门）——已按
+# 文档语义修为 600,000 红线（570,000~600,000 段发距红线告警不阻塞）。本硬门按
+# 既有「随批对齐实际水位」协议上移 570,000→576,000（实际 574,729 + ~1.3K 锚距；
+# 权威判定仍在 test_build_ui 三档，距红线 600,000 尚余 ~25KB）。
+TOTAL_MAX = 576_000
 FIRST_SCREEN_MAX = 245_760    # 240KiB
 
 

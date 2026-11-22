@@ -201,11 +201,11 @@ for(i=0;i<go.length;i++)h+='<button class="chip'+(IM.grp===go[i]?' is-active':''
 $('im-groups').innerHTML=h;}
 function imPaintWin(){
 var rows=IM.visible,n=rows.length,win=imWindow($('im-list').scrollTop,n),h='',i,r,
-P='<div class="im-row" style="top:',C='<div class="im-row is-ver" style="top:',S='<div class="im-row is-skip" style="top:';
+P='<div class="im-row" role="listitem" style="top:',C='<div class="im-row is-ver" role="listitem" style="top:',S='<div class="im-row is-skip" role="listitem" style="top:';
 $('im-canvas').style.height=(n*IM_ROW)+'px';
 for(i=win[0];i<win[1];i++){r=rows[i];
 if(r.t==='g'){var s=r.last.source,nm=esc(s.bookSourceName||'（未命名）'),gp=esc(s.bookSourceGroup||'');
-h+=P+i*IM_ROW+'px"><input type="checkbox" data-imurl="'+esc(r.url)+'"'+(IM.sel[r.url]?' checked':'')+'><button class="im-exp" data-imexp="'+esc(r.url)+'" type="button">'+(IM.exp[r.url]?'▾':'▸')+'</button><span class="im-name" title="'+nm+'">'+nm+(r.n>1?'（'+r.n+' 版本取最新）':'')+'</span><span class="im-grp" title="'+gp+'">'+gp+'</span>'+imBadge(r.last.status)+'</div>';}
+h+=P+i*IM_ROW+'px"><input type="checkbox" data-imurl="'+esc(r.url)+'" aria-label="书源 '+nm+'"'+(IM.sel[r.url]?' checked':'')+'><button class="im-exp" data-imexp="'+esc(r.url)+'" type="button" aria-label="展开或收起版本" aria-expanded="'+(IM.exp[r.url]?'true':'false')+'">'+(IM.exp[r.url]?'▾':'▸')+'</button><span class="im-name" title="'+nm+'">'+nm+(r.n>1?'（'+r.n+' 版本取最新）':'')+'</span><span class="im-grp" title="'+gp+'">'+gp+'</span>'+imBadge(r.last.status)+'</div>';}
 else if(r.t==='v'){var v=r.v;
 h+=C+i*IM_ROW+'px"><span class="im-verdot">└</span><span class="im-name">'+esc(v.source.bookSourceName||'（未命名）')+'</span><span class="im-grp">'+esc(v.source.bookSourceGroup||'')+'</span>'+imBadge(v.status)+'</div>';}
 else h+=S+i*IM_ROW+'px" title="已跳过：'+esc(r.reason)+'"><input type="checkbox" disabled><span class="im-name">（第 '+(r.idx+1)+' 条）</span><span class="im-grp">'+esc(r.reason)+'</span><span class="badge queued">已跳过</span></div>';}
@@ -268,8 +268,8 @@ $('im-warn').hidden=true;$('im-prog').hidden=true;imRo(false);
 $('im-total').textContent='';
 $('im-canvas').innerHTML='';$('im-canvas').style.height='0px';
 imTab('paste');imSummary();
-$('im').hidden=false;}
-function imClose(){$('im').hidden=true;IM.st='idle';}
+openDlg('im','#im-tabs .tab');}
+function imClose(){closeDlg('im');IM.st='idle';}
 async function imParse(text){
 if(!text||!text.trim())return toast('内容为空：先粘贴 JSON / 填 URL / 选文件',WN);
 IM.st='parsing';IM.text=text;

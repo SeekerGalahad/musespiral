@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 r"""Studio 前端构建入口（R1 三源合成 + F58 视图拆源 + M1 双层 + M3 按视图拆 JS
-+ ARCH-1 壳 HTML 外移 + ② CSS 按视图拆源）。
++ ARCH-1 壳 HTML 外移 + ② CSS 按视图拆源 + UIX-3 material 视图三拆）。
 
 源文件（musespiral/studio/，开发态正典，改前端改这些）：
   - ui.tmpl.html   HTML 骨架；占位注释各占整行：
@@ -309,6 +309,14 @@ def _split_js(js: bytes) -> tuple[bytes, bytes]:
 # M3 视图块标记（注释级，不影响源码执行）：// @view:<name> ... // @endview。
 # build 期据此把同一份 ui.js 源拆成 core.js + views/<name>.js；视图函数用顶层
 # function 声明，注入后即挂到全局（core 已预置 no-op 占位符供早于注入的调用）。
+# UIX-3 视图子拆分（2026-11-22 素材三拆）：@view 块内可用「// @<view>-<part>」独占
+# 行圈出子段——块首到首标记 = <view>-core，各标记到下一标记/块尾 = <view>-<part>；
+# 产物 = assets/views/<view>-<part>.js，**不再产出** <view>.js（ensureView 经
+# VJS[view] 首载 -core，其余 part 由视图内 matPart() 按需拉取——进抽屉/开面板才载）。
+# 登记表锁子段名与顺序：乱序/缺失/多余/错视图/未登记视图出现子标记，一律拒绝构建
+# （防静默漏拆；与 EXPECTED_VIEWS 同一纪律）。
+EXPECTED_SUBVIEWS: dict[str, tuple[str, ...]] = {"material": ("core", "drawer", "media")}
+_SUBVIEW_BEGIN_RE = re.compile(rb"^// @([a-z0-9-]+)$")
 _VIEW_BEGIN_RE = re.compile(rb"^// @view:([a-z0-9-]+)$", re.MULTILINE)
 _VIEW_END = b"// @endview"
 # 预期十一视图（M3 九视图 + PL-3 批 2026-11-20 增 plugins/plugin-run——插件系统
@@ -372,11 +380,88 @@ def render_core_js(js: bytes) -> bytes:
 
 
 def render_view_js(js: bytes, name: str) -> bytes:
-    """ui.js 源 → 单个 assets/views/<name>.js（视图块保守压缩；尾换行）。"""
+    """ui.js 源 → 单个 assets/views/<name>.js（视图块保守压缩；尾换行）。
+
+    UIX-3 起仅适用**未子拆分**视图；material 等登记于 EXPECTED_SUBVIEWS 的视图
+    无单文件形态（用 render_view_parts 取各子段产物）。
+    """
+    parts = render_view_parts(js, name)
+    if set(parts) != {""}:
+        raise ValueError(
+            f"视图 {name} 已子拆分（子段 {sorted(parts)}），无单文件形态——用 render_view_parts")
+    return parts[""]
+
+
+def _norm_part(buf: list[bytes]) -> bytes:
+    """子段行 → 字节：剥尾部空行，非空以单个换行结尾；全空段 → b"\\n"。
+
+    与 split_ui_js 对整块的既有归一同语义（块尾空行不进产物，文本文件卫生）。
+    """
+    while buf and buf[-1] == b"":
+        buf.pop()
+    return (b"\n".join(buf) + b"\n") if buf else b"\n"
+
+
+def split_view_parts(name: str, blob: bytes) -> dict[str, bytes]:
+    """@view 块字节 → {产物名后缀: 子段字节}（UIX-3 子拆分）。
+
+    无子标记 → {"": blob}（产物仍为 assets/views/<name>.js，其余十视图不变）；
+    有子标记 → {"-core": 块首到首标记, "-<part>": 各标记到下一标记/块尾}，标记行
+    本身不进任何产物。纪律（构建期硬校验，违者拒构建）：
+      - 子段名必须以「<view>-」开头（books 块内写 @material-* 即拒）；
+      - 视图未登记于 EXPECTED_SUBVIEWS 而出现子标记 → 拒；
+      - 子段顺序与集合必须与登记完全一致（缺段/多段/乱序 → 拒）。
+    """
+    if not blob.endswith(b"\n"):
+        raise ValueError(f"@view:{name} 块须以换行结尾")
+    all_lines = blob.split(b"\n")
+    expected = EXPECTED_SUBVIEWS.get(name)
+    if not any(_SUBVIEW_BEGIN_RE.match(l) for l in all_lines):
+        # 无子标记：保持 M3 既有整块归一语义（字节不变）
+        block = all_lines[:-1]  # 去掉 blob 末尾换行产生的空尾行
+        legacy = (b"\n".join(block) + b"\n") if block and block[-1] != b"" else b"\n"
+        return {"": legacy}
+    parts: dict[str, bytes] = {}
+    cur = "-core"
+    buf: list[bytes] = []
+    seen: list[str] = []
+    for line in all_lines[:-1]:
+        m = _SUBVIEW_BEGIN_RE.match(line)
+        if m is None:
+            buf.append(line)
+            continue
+        part = m.group(1).decode()
+        if not part.startswith(name + "-"):
+            raise ValueError(f"@view:{name} 内子标记 // @{part} 与视图名不符")
+        if expected is None:
+            raise ValueError(
+                f"视图 {name} 未登记子拆分，出现子标记 // @{part}（EXPECTED_SUBVIEWS 无此项）")
+        suffix = part[len(name) + 1:]
+        # expected[0]="core" 为隐式首段（块首到首标记），标记名只登记其后各段
+        if len(seen) >= len(expected) - 1 or suffix != expected[len(seen) + 1]:
+            raise ValueError(
+                f"@view:{name} 子段顺序/集合与登记 {list(expected)} 不符：得到 @{part}（已见 {seen}）")
+        seen.append(suffix)
+        parts[cur] = _norm_part(buf)
+        buf = []
+        cur = "-" + suffix
+    parts[cur] = _norm_part(buf)
+    if seen != list(expected[1:]):
+        raise ValueError(f"@view:{name} 子段 {seen} 与登记 {list(expected)} 不一致（标记须按序齐备）")
+    return parts
+
+
+def render_view_parts(js: bytes, name: str) -> dict[str, bytes]:
+    """ui.js 源 → {产物后缀: 压缩字节}（UIX-3；未子拆分视图 → {"": 产物}）。
+
+    各子段独立保守压缩（compress_bytes 复用，字符串零触碰）；产物为
+    assets/views/<name><suffix>.js，尾换行。
+    """
     _, views = split_ui_js(js)
     if name not in views:
         raise ValueError(f"未知视图: {name}")
-    return _inline(views[name], allow_line_comments=True) + b"\n"
+    return {suffix: (_inline(blob, allow_line_comments=True) + b"\n")
+            for suffix, blob in split_view_parts(name, views[name]).items()}
 
 
 def render_view_html_js(views: dict[str, bytes], name: str) -> bytes:
@@ -522,7 +607,14 @@ def build() -> Path:
     views_js_dir = ASSETS_DIR / "views"
     views_js_dir.mkdir(exist_ok=True)
     for name, blob in js_views.items():
-        _write_if_changed(views_js_dir / f"{name}.js", render_view_js(js, name))
+        parts = render_view_parts(js, name)
+        for suffix, product in parts.items():
+            _write_if_changed(views_js_dir / f"{name}{suffix}.js", product)
+        if set(parts) != {""}:
+            # UIX-3：子拆分视图退役单文件产物（防陈旧 material.js 残留被误引）
+            stale = views_js_dir / f"{name}.js"
+            if stale.exists():
+                stale.unlink()
     # ARCH-1：非首屏视图的 HTML 骨架注入器（与 <view>.js 同路径；publish 除外）
     for name in sorted(views):
         if name == FIRST_SCREEN_VIEW:

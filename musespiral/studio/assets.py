@@ -9,6 +9,9 @@
 """
 from __future__ import annotations
 
+import gzip
+import hashlib
+import io
 import re
 from importlib import resources
 from pathlib import Path
@@ -131,6 +134,65 @@ def _studio_asset_response(
     if if_none_match is not None and etag in if_none_match:
         return 304, ctype, b"", (("ETag", etag),)
     return 200, ctype, body, (("ETag", etag), ("Cache-Control", "no-cache"))
+
+
+# ── 静态服务 gzip（五角色评审问题 12，2026-11-22）────────────────────────
+# 只对 >1KB 的文本资源（js/css/html）压缩，小文件/二进制直传；压缩结果按
+# (ctype, sha256(body)) 缓存，同一内容只压一次（本地工具首屏 assets 反复取，
+# 不重复压缩 ui.js/core.js 这类大文件）。mtime=0 保证压缩字节确定性。
+_GZIP_MIN_BYTES = 1024
+_GZIP_TEXT_MIMES = frozenset({"text/css", "text/html", "application/javascript"})
+_GZIP_CACHE: dict[tuple[str, str], bytes] = {}
+
+
+def _accepts_gzip(value: str | None) -> bool:
+    """Accept-Encoding 是否含 gzip（`gzip;q=0` 视为拒绝）。"""
+    if not value or "gzip" not in value.lower():
+        return False
+    for token in value.lower().split(","):
+        parts = token.split(";")
+        if parts[0].strip() == "gzip":
+            return not (len(parts) > 1 and parts[1].strip().startswith("q=0"))
+    return False
+
+
+def _gzip_body(ctype: str, body: bytes) -> bytes | None:
+    """压缩 >1KB 文本体返回 gzip 字节；非文本/小文件返回 None=直传。"""
+    mime = ctype.split(";", 1)[0].strip().lower()
+    if len(body) <= _GZIP_MIN_BYTES or not (
+        mime in _GZIP_TEXT_MIMES or mime.startswith("text/")
+    ):
+        return None
+    key = (mime, hashlib.sha256(body).hexdigest())
+    cached = _GZIP_CACHE.get(key)
+    if cached is not None:
+        return cached
+    buf = io.BytesIO()
+    with gzip.GzipFile(fileobj=buf, mode="wb", mtime=0) as gz:
+        gz.write(body)
+    compressed = buf.getvalue()
+    _GZIP_CACHE[key] = compressed
+    return compressed
+
+
+def _maybe_gzip(
+    ctype: str,
+    body: bytes,
+    accept_encoding: str | None,
+    extra_headers: tuple[tuple[str, str], ...] = (),
+) -> tuple[bytes, tuple[tuple[str, str], ...]]:
+    """静态面统一入口：客户端接受 gzip 且为 >1KB 文本才压缩，加 Content-Encoding/Vary。
+
+    ETag 基于未压缩内容（mtime+size），压缩与直传共用同一 ETag；304 空体不压缩。
+    """
+    if _accepts_gzip(accept_encoding):
+        gz = _gzip_body(ctype, body)
+        if gz is not None:
+            return gz, extra_headers + (
+                ("Content-Encoding", "gzip"),
+                ("Vary", "Accept-Encoding"),
+            )
+    return body, extra_headers
 
 
 def _meta_payload(ctx: _StudioContext) -> dict[str, Any]:

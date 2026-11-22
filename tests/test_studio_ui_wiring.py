@@ -151,8 +151,11 @@ def test_lightbox_structure_and_keyboard_literals() -> None:
     # 灯箱开启即吞单键（浮层守卫）：A 类专项（2026-11-20）起键位处理自 core 全局
     # keydown 下沉 @view:material 的 capture 监听（capture+stopPropagation 先于
     # core bubble 分支，吞 g 序列/⌘K 语义不变）；守卫取提前 return 形态
+    # UIX-3 无障碍批（2026-11-23）：关闭态分支扩兼收 gen/syn 两面板 Esc——守卫
+    # 形态由单行 return 改为块形态 if($('lightbox').hidden){…Esc 兼收…return;}
     assert "if(!$('lightbox').hidden())" not in src  # $ 返回元素非函数（防笔误形态）
-    assert "if($('lightbox').hidden)return;" in src
+    assert "if($('lightbox').hidden){" in src
+    assert "if(gAb)gAb.abort();$('gen-panel').hidden=true;" in src  # 生成面板 Esc（含中止在途请求）
     assert "e.stopPropagation();" in src  # 吞键：capture 阶段拦断 core 全局处理器
     assert "lbClose();\nelse if(e.key==='ArrowLeft')lbGo(-1);" in src
     # 导航序=当前可见集 image 子序（matFiltered 截断序即导航序，正典 F60 交互流 3）

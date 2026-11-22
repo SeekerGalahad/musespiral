@@ -227,6 +227,13 @@ $('pg-grid').addEventListener('click',function(e){
 var c=e.target.closest('[data-pgopen]');
 if(c)location.hash='#plugins?d='+encodeURIComponent(c.getAttribute('data-pgopen'));
 });
+// UIX-3 键盘可达：插件卡 role=button tabindex=0 的键激活等价物（Enter/Space 开详情）
+$('pg-grid').addEventListener('keydown',function(e){
+if(e.isComposing||e.keyCode===229)return;
+if(e.key!=='Enter'&&e.key!==' ')return;
+var c=e.target.closest('[data-pgopen]');
+if(c){e.preventDefault();location.hash='#plugins?d='+encodeURIComponent(c.getAttribute('data-pgopen'));}
+});
 $('pg-refresh-btn').addEventListener('click',async function(){
 this.disabled=true;
 try{

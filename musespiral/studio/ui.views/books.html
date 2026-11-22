@@ -7,7 +7,7 @@
 <button class="btn btn-ghost" id="bk-subs-btn">订阅管理</button>
 </div></div>
 <div id="bk-search">
-<input id="bk-search-box" class="input bk-search-input" placeholder="搜索书名 / 作者 / 关键词…">
+<input id="bk-search-box" class="input bk-search-input" placeholder="搜索书名 / 作者 / 关键词…" aria-label="搜索书籍">
 <div class="empty" id="bk-guide">
 <div class="empty-icon" data-icon="docs"></div>
 <div class="empty-title" id="bk-guide-t">搜索结果渲染 · R4 批</div>
@@ -77,7 +77,7 @@
 <div class="chips im-chips" id="im-groups"></div>
 <button class="im-collapse" id="im-collapse" type="button" hidden></button>
 <div class="im-selrow" id="im-selrow"><label class="im-selall"><input type="checkbox" id="im-selall"><b id="im-selall-t">全选</b></label><span class="muted" id="im-shown"></span></div>
-<div class="im-list" id="im-list"><div class="im-canvas" id="im-canvas"></div></div>
+<div class="im-list" id="im-list" aria-label="书源列表"><div class="im-canvas" id="im-canvas" role="list"></div></div>
 </div>
 <div class="im-foot">
 <span class="im-keeps">

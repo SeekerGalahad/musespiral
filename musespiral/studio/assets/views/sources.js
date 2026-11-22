@@ -32,7 +32,7 @@ var rows=list.filter(function(s){return !state.srctype||s.type===state.srctype;}
 $('src-rows').innerHTML=rows.length?rows.map(function(s){
 var h=s.health||{},st=h.status||'unknown',un=unread[s.id]||0,n=counts[s.id]||0;
 var dot='<span class="health-dot '+st+'" title="'+(st==='ok'?'正常（上次 '+esc(h.last_ok||'刚刚')+'）':st==='down'?'down（上次正常 '+esc(h.last_ok||'—')+'）':'未探测（手动验证或刷新时回写）')+(h.last_refresh?'；上次拉取 '+esc(h.last_refresh):'')+'">'+(st==='down'?'!':st==='ok'?'':'·')+'</span>';
-return '<tr'+(state.ssrc===s.id?' class="sel"':'')+' data-srcrow="'+esc(s.id)+'"><td>'+dot+'</td><td>'+esc(s.label||s.id)+'<span class="meta-path" title="源 ID：'+esc(s.id)+'">'+esc(s.id)+Z+'</td><td><span class="tag">'+esc(s.type)+Z+'</td><td>'+((s.subscriptions||[]).length||'—')+'</td><td>'+n+(un?' <span class="badge warn">'+un+' 未读</span>'+Z:'')+'</td><td>'+esc(h.last_ok||'从未')+'</td><td>'+(fails[s.id]?'<span class="badge fail" title="近 7 次拉取失败 '+fails[s.id]+' 次">'+fails[s.id]+Z:'—')+'</td><td><input type="checkbox" aria-label="启用源" data-srcen="'+esc(s.id)+'"'+(s.enabled?' checked':'')+'></td><td><button class="btn" data-srcverify="'+esc(s.id)+'">验证</button> <button class="btn" data-srcrefresh="'+esc(s.id)+'">刷新</button> <button class="btn" title="源级 AI 配置（只影响该源素材加工）" data-srcai="'+esc(s.id)+'">⚙</button></td></tr>';
+return '<tr'+(state.ssrc===s.id?' class="sel"':'')+' data-srcrow="'+esc(s.id)+'"><td>'+dot+'</td><td>'+esc(s.label||s.id)+'<span class="meta-path" title="源 ID：'+esc(s.id)+'">'+esc(s.id)+Z+'</td><td><span class="tag">'+esc(s.type)+Z+'</td><td>'+((s.subscriptions||[]).length||'—')+'</td><td>'+n+(un?' <span class="badge warn">'+un+' 未读</span>'+Z:'')+'</td><td>'+esc(h.last_ok||'从未')+'</td><td>'+(fails[s.id]?'<span class="badge fail" title="近 7 次拉取失败 '+fails[s.id]+' 次">'+fails[s.id]+Z:'—')+'</td><td><input type="checkbox" aria-label="启用源" data-srcen="'+esc(s.id)+'"'+(s.enabled?' checked':'')+'></td><td><button class="btn" data-srcverify="'+esc(s.id)+'">验证</button> <button class="btn" data-srcrefresh="'+esc(s.id)+'">刷新</button> <button class="btn" title="源级 AI 配置（只影响该源素材加工）" aria-label="源级 AI 配置" data-srcai="'+esc(s.id)+'">⚙</button></td></tr>';
 }).join(''):'<tr><td colspan="9" class="action-hint">暂无此类型源</td></tr>';
 $('src-empty').hidden=list.length>0;
 $('sources-sub').textContent='共 '+list.length+' 源 · 启用 '+en+' · 素材 '+(sc.total_materials!=null?sc.total_materials:mats.length)+' 条';
@@ -64,7 +64,7 @@ $('sf-root').hidden=t!=='kb';
 $('sf-path').hidden=t!=='dir';
 $('sf-url').hidden=t!=='rss';
 }
-function sfOpen(){sfTypeSync();$('src-form').hidden=false;$('sf-id').focus();}async function sfSubmit(){
+function sfOpen(){sfTypeSync();openDlg('src-form','#sf-id');}async function sfSubmit(){
 var t=$('sf-type').value,id=$('sf-id').value.trim(),cfg={};
 var K={radar_hub:['base','sf-base'],kb:['root','sf-root'],dir:['path','sf-path'],rss:['url','sf-url']}[t];
 cfg[K[0]]=$(K[1]).value.trim();
@@ -72,7 +72,7 @@ if(!cfg[K[0]]){toast(t+' 必填 config.'+K[0],ER);return;}
 var subs=$('sf-subs').value.split('\n').map(function(s){return s.trim();}).filter(Boolean);
 try{await postJSON('/api/sources',{id:id,type:t,config:cfg,subscriptions:subs,confirm:true});
 toast('源已注册：'+id,OK);
-$('src-form').hidden=true;
+closeDlg('src-form');
 await refreshSrcData();renderSources();renderCollRail();
 }catch(err){toast('注册失败：'+err.message,ER);}
 }
@@ -87,7 +87,7 @@ $('sac-model').value=cfg.model||'';
 $('sac-temp').value=(cfg.temperature==null?'':cfg.temperature);
 $('sac-prompt').value=cfg.prompt_override||'';
 $('src-aicfg').setAttribute('data-id',id);
-$('src-aicfg').hidden=false;
+openDlg('src-aicfg','#sac-profile');
 }
 async function srcAiSave(){
 var id=$('src-aicfg').getAttribute('data-id'),s=srcById(id);if(!s){toast('源已失效',ER);return;}
@@ -99,7 +99,7 @@ if(po.trim())cfg.prompt_override=po;
 try{
 await postJSON('/api/sources',{id:s.id,type:s.type,label:s.label,config:s.config,enabled:s.enabled,subscriptions:s.subscriptions||[],ai_config:cfg,confirm:true});
 toast('「'+id+'」AI 配置已保存（只影响该源素材加工，不影响文章生成）',OK);
-$('src-aicfg').hidden=true;
+closeDlg('src-aicfg');
 await refreshSrcData();renderSources();
 }catch(err){toast('保存失败：'+err.message,ER);}
 }
@@ -154,11 +154,15 @@ if(en){var s=srcById(en.getAttribute('data-srcen2'));srcToggle(en.getAttribute('
 var d=e.target.closest('[data-srcdel]');
 if(d)srcDelete(d.getAttribute('data-srcdel'));
 });
+document.addEventListener('keydown',function(e){
+if(e.isComposing||e.keyCode===229)return;
+if(e.key==='Escape'&&!$('src-drawer').hidden)$('src-drawer').hidden=true;
+});
 $('src-add-btn').addEventListener('click',sfOpen);
-$('src-form').addEventListener('click',function(e){if(e.target===this||e.target.id==='sf-cancel')this.hidden=true;});
+$('src-form').addEventListener('click',function(e){if(e.target===this||e.target.id==='sf-cancel')closeDlg('src-form');});
 $('sf-type').addEventListener('change',sfTypeSync);
 $('sf-ok').addEventListener('click',sfSubmit);
-$('src-aicfg').addEventListener('click',function(e){if(e.target===this||e.target.id==='sac-cancel')this.hidden=true;});
+$('src-aicfg').addEventListener('click',function(e){if(e.target===this||e.target.id==='sac-cancel')closeDlg('src-aicfg');});
 $('sac-ok').addEventListener('click',srcAiSave);
 $('src-rows').addEventListener('change',function(e){
 var t=e.target;

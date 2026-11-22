@@ -4,6 +4,7 @@
     （方法表仅 GET/POST，其余 405；错误统一 JSON，不吐 HTML traceback）
   - GET / 与 GET /assets/* 为 server 层特判（静态文件非 API 面；后者 ETag
     304 需读 If-None-Match 请求头），其余 GET 走 _GET_ROUTES 分派
+  - 静态文本面（js/css/html）按 Accept-Encoding 协商 gzip（问题 12，见 assets._maybe_gzip）
   - make_server：ThreadingHTTPServer 装配（只绑 127.0.0.1，port=0 系统分配）
 公开入口 make_server 由包 __init__ re-export（签名不变）。
 """
@@ -16,7 +17,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from .actions import _ACTION_ROUTES
-from .assets import _read_ui_html, _studio_asset_response
+from .assets import _maybe_gzip, _read_ui_html, _studio_asset_response
 from .plugin_actions import (  # 三态裁决动态 POST（AI-1 批）+ 节点重生成（AI-3 批）
     resolve_adjudicate_post,
     run_adjudicate,
@@ -90,7 +91,10 @@ def _make_handler(ctx: _StudioContext) -> type[BaseHTTPRequestHandler]:
                     ui = _read_ui_html()
                     if ui is None:
                         raise _HttpError(404, "studio/ui.html 缺失（集成阶段 package-data 接线）")
-                    self._send(200, _HTML_CTYPE, ui)
+                    body, headers = _maybe_gzip(
+                        _HTML_CTYPE, ui, self.headers.get("Accept-Encoding")
+                    )
+                    self._send(200, _HTML_CTYPE, body, headers)
                     return
                 if path.startswith("/assets/") and len(path) > len("/assets/"):
                     # M1 前端多文件化（2026-11-18）：壳的 assets/core.js|css
@@ -99,10 +103,14 @@ def _make_handler(ctx: _StudioContext) -> type[BaseHTTPRequestHandler]:
                     # 的 (ctx,path,query) 签名）。安全四门见 _studio_asset_response。
                     if method != "GET":
                         raise _HttpError(405, "方法不允许（仅 GET/POST）")
-                    result = _studio_asset_response(
+                    status, ctype, body, extra = _studio_asset_response(
                         path[len("/assets/") :], self.headers.get("If-None-Match")
                     )
-                    self._send(*result)
+                    if status == 200:  # 304 空体不压缩
+                        body, extra = _maybe_gzip(
+                            ctype, body, self.headers.get("Accept-Encoding"), extra
+                        )
+                    self._send(status, ctype, body, extra)
                     return
                 # 三态裁决（AI-1 批 2026-11-21，契约 §3.19 修订 3）+ 节点重
                 # 生成（AI-3 批 2026-11-21）：动态段 POST（/api/pipelines/

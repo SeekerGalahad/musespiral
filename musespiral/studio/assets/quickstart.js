@@ -106,7 +106,8 @@ var ov=qGet('qs-overlay');
 if(!ov){ov=document.createElement('div');ov.id='qs-overlay';ov.className='modal-overlay';
 document.body.appendChild(ov);}
 ov.innerHTML=qsModalHtml(title,mats,QS.mode);
-ov.hidden=false;
+// UIX-3：焦点管理复用 core 的 openDlg（记触发者+显弹+焦点入首交互元素）
+if(typeof openDlg==='function')openDlg('qs-overlay');else ov.hidden=false;
 ov.querySelectorAll('[data-qs-mode]').forEach(function(ch){
 ch.addEventListener('click',function(){QS.mode=ch.getAttribute('data-qs-mode');
 ov.querySelectorAll('[data-qs-mode]').forEach(function(x){x.classList.toggle('is-active',x===ch);});});});
@@ -115,7 +116,7 @@ ov.addEventListener('click',function(e){if(e.target===ov)qClose();});
 qGet('qs-go').addEventListener('click',qRun);
 });
 }
-function qClose(){var ov=qGet('qs-overlay');if(ov){ov.hidden=true;ov.innerHTML='';}}
+function qClose(){var ov=qGet('qs-overlay');if(ov){if(typeof closeDlg==='function')closeDlg('qs-overlay');else ov.hidden=true;ov.innerHTML='';}}
 
 function qSetProgress(pct,label){
 var bar=qGet('qs-prog'),txt=qGet('qs-prog-label');
@@ -231,6 +232,8 @@ if(!b)return;
 var title=b.getAttribute('data-qs-title');
 qSnapshot().then(function(){qOpenModal(title);});
 });
+document.addEventListener('keydown',function(e){ // UIX-3：Esc 关极速启动弹窗
+if(e.key==='Escape'&&!e.isComposing&&e.keyCode!==229){var ov=qGet('qs-overlay');if(ov&&!ov.hidden)qClose();}});
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);
 else boot();

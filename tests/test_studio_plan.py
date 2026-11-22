@@ -143,7 +143,8 @@ def test_plan_range_enum_strict(server) -> None:
 
 def test_plan_default_is_text_form(server, studio_root: Path) -> None:
     """无参（前端 showPlan 既有调用形态）→ text 文字周历，非 items。"""
-    _article(studio_root, "a.md", publish_at=str(TODAY))
+    # 无参走服务器真实时钟渲染当前周——文章日期须跟真实今天，否则跨周即腐（W47 写下的用例 W48 红过）
+    _article(studio_root, "a.md", publish_at=str(date.today()))
     code, payload = _request(server, "GET", "/api/plan")
     assert code == 200
     assert payload["ok"] is True and payload["week"] == ""

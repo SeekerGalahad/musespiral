@@ -171,7 +171,12 @@ def test_css_split_rule_multiset_equivalent_to_head() -> None:
                    b".src-table td:nth-child(2) .meta-path{display:block;margin-top:2px;color:var(--ink-3);font-size:11px;word-break:break-all}",
                    b".src-table td:nth-child(2) .meta-path:before{content:'ID ';color:var(--ink-3);font-family:inherit}",
                    b".im-collapse{display:block;width:100%;text-align:left;padding:8px 10px;margin:2px 0;background:color-mix(in srgb,var(--jade) 8%,var(--paper-1));border:1px solid color-mix(in srgb,var(--jade) 32%,transparent);border-radius:var(--radius-btn);color:var(--ink-1);font-size:var(--fs-caption);cursor:pointer}",
-                   b".im-collapse:hover{border-color:var(--jade)}"}
+                   b".im-collapse:hover{border-color:var(--jade)}",
+                   # UIX-3 无障碍批（2026-11-23）在 ui.css 新增的 focus-visible 补齐
+                   # 规则（1 条多选择器——nav-item/coll-item/cp-item/[role=button]/
+                   # nav-badge/switch input/im-exp/mat-thumb 键盘焦点环）——
+                   # 基线锚早于本批，合法新增登记。
+                   b".nav-item:focus-visible,.coll-item:focus-visible,.cp-item:focus-visible,[role=\"button\"]:focus-visible,.nav-badge:focus-visible,.switch input:focus-visible,.im-exp:focus-visible,.mat-thumb:focus-visible{outline:2px solid var(--vermilion);outline-offset:1px}"}
     assert set(missing) <= known_missing, f"有非预期规则丢失: {list(set(missing) - known_missing)[:3]}"
     assert set(extra) <= known_extra, f"有非预期规则新增: {list(set(extra) - known_extra)[:3]}"
 

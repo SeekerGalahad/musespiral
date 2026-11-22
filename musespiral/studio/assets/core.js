@@ -198,7 +198,7 @@ function jobsPollStop(){if(jobsPoll){clearInterval(jobsPoll);jobsPoll=null;}}
 function viewJob(j){
 $('viewer-title').textContent='任务 '+j.kind+' · '+(JSTAT[j.status]||j.status)+' · '+jobAgo(j.created);
 $('viewer-body').textContent=JSON.stringify({id:j.id,kind:j.kind,status:j.status,params:j.params||{},phase:j.phase||'',error:j.error||'',result:j.result||'',created:j.created||'',finished:j.finished||''},null,2);
-$('viewer').hidden=false;}
+openDlg('viewer','#viewer-close');}
 async function handleResend(id){
 var j=state.jobs.find(function(x){return x&&x.id===id;});
 if(!j)return;
@@ -260,9 +260,20 @@ if(!toastHover)toastArm();
 }
 function toastArm(){if(toastTimer)clearTimeout(toastTimer);toastTimer=setTimeout(toastHide,toastLeft);}
 function toastHide(){var el=$('toast');el.hidden=true;toastTimer=null;}
+// ── UIX-3 无障碍批（2026-11-23）：弹窗焦点管理对 ──────────────────────────
+// openDlg：记触发元素（data-dlg-from，仅当可寻址）→ 显弹 → 焦点移入弹内首个交互
+// 元素（focusSel 可指定，缺省查 input/select/textarea/button——[hidden] 输入跳过）。
+// closeDlg：关弹 → 焦点还给触发元素（触发元素已随视图隐藏/不可聚焦时 focus() 静默
+// 无操作，无害）。壳/视图弹窗共用；已开着再 openDlg 为幂等 no-op（不覆盖 from）。
+function openDlg(id,focusSel){var el=$(id);if(!el||!el.hidden)return;var p=document.activeElement;if(p&&p.id&&p!==document.body)el.setAttribute('data-dlg-from','#'+p.id);el.hidden=false;var f=focusSel?el.querySelector(focusSel):el.querySelector('input:not([hidden]),select,textarea,button:not([disabled])');if(f)f.focus({preventScroll:true});}
+function closeDlg(id){var el=$(id);if(!el||el.hidden)return;el.hidden=true;var s=el.getAttribute('data-dlg-from'),b=s&&document.querySelector(s);if(b)b.focus({preventScroll:true});}
+// Esc 兜底登记表：只收「纯 hidden 关闭」的弹窗（壳 clip-form + 视图 src-form/
+// src-aicfg/coll-form/cv-pm/sc-modal/cm-ch-modal）；有专属收尾态的（#im 状态机、
+// design 双层、askConfirm、cp/kbd）由各自处理器收口，不进登记——防 Esc 双关或漏状态复位。
+var DM_ESC=['clip-form','src-form','src-aicfg','coll-form','cv-pm','sc-modal','cm-ch-modal'];
 function askConfirm(options){
 return new Promise(function(resolve){
-var modal=$('modal');
+var modal=$('modal'),from=document.activeElement;
 $('modal-title').textContent=options.title||'确认操作';
 $('modal-message').textContent=options.message||'';
 MC.textContent=options.confirmText||'确认';
@@ -270,6 +281,7 @@ modal.hidden=false;
 MC.focus();
 function finish(value){
 modal.hidden=true;
+if(from&&from.focus&&from!==MC)from.focus({preventScroll:true}); // UIX-3：焦点还给触发者
 MC.removeEventListener('click',onOk);
 $('modal-cancel').removeEventListener('click',onCancel);
 modal.removeEventListener('click',onOverlay);
@@ -363,7 +375,10 @@ $('root-path').textContent=label;
 var CRUMBS={sources:'源中枢',material:'素材库',books:'书籍',compose:'创作工坊',design:'视觉编辑',publish:'发布中心',insight:'洞察',settings:'设置',article:'文章详情',plugins:'插件','plugin-run':'流水线'};
 function renderNav(view){
 QA('[data-nav]').forEach(function(el){
-el.classList.toggle('is-active',el.getAttribute('data-nav')===view);
+var on=el.getAttribute('data-nav')===view;
+el.classList.toggle('is-active',on);
+// UIX-3 无障碍：当前视图导航项标 aria-current=page（读屏/键盘用户的「你在哪」）
+if(on)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');
 });
 var c=$('crumb-title');if(c)c.textContent=CRUMBS[view]||view;
 }
@@ -393,6 +408,8 @@ renderNav(view);
 // 跳过前两步不触发懒加载。样式/骨架产物由 build_ui.py 每懒视图一份（缺文件即
 // 装载失败走 catch 清缓存可重试，与脚本缺文件同语义）。
 var __viewPromises={};
+// UIX-3 视图子拆分首载映射：material 三拆后首载 -core（drawer/media 由视图内 matPart 按需拉取）
+var VJS={material:'material-core.js'};
 function __loadScript(src){return new Promise(function(res,rej){
 var s=document.createElement("script");s.src=src;
 s.onload=res;s.onerror=function(){rej(new Error("脚本加载失败: "+src));};
@@ -420,7 +437,7 @@ var xs=VSTANDALONE[view];
 if(xs)xs.forEach(function(g){var w=window[g];if(w&&w.boot)w.boot();});
 }
 function ensureView(view){
-if(!__viewPromises[view]){__viewPromises[view]=(view==='publish'?Promise.resolve():__loadCss("assets/views/"+view+".css").then(function(){return __loadScript("assets/views/"+view+".html.js");}).then(function(){__onViewHtml(view);})).then(function(){return __loadScript("assets/views/"+view+".js");}).catch(function(err){delete __viewPromises[view];throw new Error("视图装载失败: "+view+"（"+err.message+"）");});}
+if(!__viewPromises[view]){__viewPromises[view]=(view==='publish'?Promise.resolve():__loadCss("assets/views/"+view+".css").then(function(){return __loadScript("assets/views/"+view+".html.js");}).then(function(){__onViewHtml(view);})).then(function(){return __loadScript("assets/views/"+(VJS[view]||view+".js"));}).catch(function(err){delete __viewPromises[view];throw new Error("视图装载失败: "+view+"（"+err.message+"）");});}
 return __viewPromises[view];}
 // ── 跨视图调用治理（2026-11-20 台账 A 类专项）──────────────────────────
 // M3 拆分初期靠「core 预置 no-op 占位符 + 视图顶层同名函数覆盖」兜底跨块调用——
@@ -652,10 +669,9 @@ button.disabled=false;
 }
 var CP={items:[],cur:0};
 var gSeq=0,GK={s:'sources',m:'material',b:'books',c:'compose',p:'publish',i:'insight'};
-function cpClose(){$('cp').hidden=true;CP.items=[];CP.cur=0;}
+function cpClose(){closeDlg('cp');CP.items=[];CP.cur=0;}
 function cpOpen(){
-$('cp').hidden=false;$('cp-input').value='';cpBuild('');
-$('cp-input').focus();
+openDlg('cp','#cp-input');$('cp-input').value='';cpBuild('');
 if(!state.articlesLoaded)loadArticles().then(function(){if(!$('cp').hidden)cpBuild($('cp-input').value);});}
 function cpArts(q){
 q=q.toLowerCase();
@@ -756,7 +772,7 @@ $('clip-title').textContent=m==='clip'?'剪藏 URL':(m==='crawl'?'手动爬取':
 $('clip-ok').textContent=m==='clip'?'抓取预览':(m==='crawl'?'抓取入待决区':'登记');
 $('clip-sub').hidden=$('clip-note').hidden=m!=='video';
 $('clip-url').value='';$('clip-sub').value='';$('clip-note').value='';$('clip-err').textContent='';
-$('clip-form').hidden=false;$('clip-url').focus();
+openDlg('clip-form','#clip-url');
 }
 function clipSubmit0(){
 var u=$('clip-url').value.trim();
@@ -765,8 +781,8 @@ return u;
 }
 // ARCH-1：src-clip-btn/src-crawl-btn/mat-reg-btn 三入口属懒视图骨架——原 top-level
 // on2 绑定迁 __onViewHtml（boot 时元素未到会抛 TypeError 中断 core 尾段执行）
-on2('clip-cancel',function(){$('clip-form').hidden=true;});
-$('clip-form').addEventListener('click',function(e){if(e.target===this)this.hidden=true;});
+on2('clip-cancel',function(){closeDlg('clip-form');});
+$('clip-form').addEventListener('click',function(e){if(e.target===this)closeDlg('clip-form');});
 $('clip-ok').addEventListener('click',async function(){
 var u=clipSubmit0();
 if(!u)return;
@@ -774,17 +790,17 @@ this.disabled=true;$('clip-err').textContent='';
 try{
 if(CM==='video'){
 var d=await postJSON('/api/materials/register',{url:u,title:$('clip-sub').value.trim(),note:$('clip-note').value.trim(),confirm:true});
-$('clip-form').hidden=true;
+closeDlg('clip-form');
 	toast(d.dedup?'已登记过（幂等命中）':'视频已登记',d.dedup?WN:OK);
 	await loadMaterials();renderCollRail();viewRepaint('material');
 	}else if(CM==='crawl'){
 	var dc=await postJSON('/api/ingest/crawl',{url:u,confirm:true});
-	$('clip-form').hidden=true;
+	closeDlg('clip-form');
 	await queued(dc.job_id);
 	await loadMaterials();viewRepaint('sources');
 }else{
 var d2=await postJSON('/api/ingest/clip',{action:'preview',url:u,confirm:true});
-$('clip-form').hidden=true;
+closeDlg('clip-form');
 var j=await waitForJob(d2.job_id);
 if(j.status==='failed'){toast('抓取失败：'+(j.error||'未知错误'),ER);return;}
 clipCard(j.result||{},u);
@@ -1073,6 +1089,7 @@ return !!(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)
 var SHORTCUTS=[
 ['全局','全局',[['⌘K / Ctrl+K','命令面板（文章/素材/命令混搜）'],['⌘1-7','按导航序切视图'],['g 然后 s/m/c/p/i/,','跳转 源/素材/工坊/发布/洞察/设置'],['⌘⇧I','灵感速记（任意视图）'],['/','聚焦当前视图搜索框'],['?','本速查'],['Esc','逐层关闭浮层']]],
 ['article','文章详情',[['⌘1-4','编辑/变体/检查/预览'],['⌘S','保存'],['⌘⏎','主操作（保存/批量/发布）']]],
+['compose','创作工坊',[['⌘⏎','按反馈再生成']]],
 ['material','素材库',[['← →','灯箱上一张/下一张'],['Esc','关灯箱/抽屉']]],
 ['design','视觉编辑',[['Esc','收行内编辑']]]
 ];
@@ -1085,8 +1102,8 @@ return '<div class="kbd-row"><kbd>'+esc(r[0])+'</kbd><span>'+esc(r[1])+'</span><
 });
 $('kbd-body').innerHTML=h;
 }
-function kbdOpen(){kbdPaint();$('kbd-modal').hidden=false;$('kbd-close').focus();}
-function kbdClose(){$('kbd-modal').hidden=true;}
+function kbdOpen(){kbdPaint();openDlg('kbd-modal','#kbd-close');}
+function kbdClose(){closeDlg('kbd-modal');}
 function pPaint(){
 var p=state.pipe||{},b=$('pipe-progress');
 if(!b)return; // ARCH-1：article 未注入时面板 DOM 不在；重进 article 时 renderActions→pPaint 按 state.pipe 重绘，跳过不可观测
@@ -1130,9 +1147,11 @@ if(e.key==='Escape'){
 if(sparkBox){sparkClose();return;}
 if(!$('cp').hidden){cpClose();return;}
 if(!$('kbd-modal').hidden){kbdClose();return;}
+var dEsc=DM_ESC.filter(function(d){var m=$(d);return m&&!m.hidden;});
+if(dEsc.length){dEsc.forEach(closeDlg);return;}
 if(!$('ctx').hidden){ctxHide();return;}
 if(AB&&!AB.hidden)hideBubble();
-if(!$('viewer').hidden)$('viewer').hidden=true;
+if(!$('viewer').hidden)closeDlg('viewer');
 if(!JM.hidden){JM.hidden=true;jobsPollStop();}
 }
 });
@@ -1185,6 +1204,10 @@ location.hash=hash;
 $('nav-badge-material').addEventListener('click',function(e){e.preventDefault();e.stopPropagation();badgeGo('#material?tab=unread');});
 $('nav-badge-publish').addEventListener('click',function(e){e.preventDefault();e.stopPropagation();badgeGo('#publish?filter=pending');});
 $('nav-badge-sources').addEventListener('click',function(e){e.preventDefault();e.stopPropagation();badgeGo('#sources');});
+QA('.nav-badge').forEach(function(b){
+b.setAttribute('tabindex','0');b.setAttribute('role','button');
+b.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();b.click();}});
+});
 $('cp-btn').addEventListener('click',function(){$('cp').hidden?cpOpen():cpClose();});
 $('rail-fold').addEventListener('click',function(){
 var root=document.documentElement;

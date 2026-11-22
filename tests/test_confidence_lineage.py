@@ -455,10 +455,17 @@ def test_lineage_js_frontend_literals_have_backend_routes() -> None:
 
 
 def test_frontend_confidence_wiring() -> None:
-    """前端接线结构锚（N-4）：三态徽/筛选 chip/血统 tab/核验端点四处全接。"""
+    """前端接线结构锚（N-4）：三态徽/筛选 chip/血统 tab/核验端点四处全接。
+
+    UIX-3（2026-11-22）起 material 视图为三子段产物（core/drawer/media，单文件
+    退役）；repaint 钩子随 paintMatDrawer 落 material-drawer.js，否向断言域=三段并集。
+    """
     studio_dir = Path(__file__).resolve().parent.parent / "musespiral" / "studio"
     core_js = (studio_dir / "assets" / "core.js").read_text(encoding="utf-8")
-    mat_js = (studio_dir / "assets" / "views" / "material.js").read_text(encoding="utf-8")
+    mat_parts = sorted((studio_dir / "assets" / "views").glob("material-*.js"))
+    assert len(mat_parts) == 3, f"material 三拆产物应为 3 个，实为 {mat_parts}"
+    assert not (studio_dir / "assets" / "views" / "material.js").exists()
+    mat_js = "\n".join(p.read_text(encoding="utf-8") for p in mat_parts)
     lineage = (studio_dir / "assets" / "lineage.js").read_text(encoding="utf-8")
     # 三态徽挂在 licBadge 出口（三处展示点零改动全带上）
     assert "function confBadge(m)" in core_js
@@ -466,7 +473,7 @@ def test_frontend_confidence_wiring() -> None:
     assert "✓ 已核验" in core_js and "待核验" in core_js and "低置信" in core_js
     # 低置信筛选 chip（core fillMatType 建，matQS 带 confidence 参数，loadMaterials 同步激活态）
     assert "'mat-lowconf'" in core_js and "confidence='+state.mconf" in core_js
-    # 血统 tab：material.js 只挂 repaint 钩子（byte 纪律），逻辑全在 lineage.js
+    # 血统 tab：material 视图只挂 repaint 钩子（byte 纪律），逻辑全在 lineage.js
     assert "__mdpubMatLineage.repaint" in mat_js
     assert "window.__mdpubMatLineage" in lineage and "data-mver" in lineage
     assert "references" in lineage and "cascade" in lineage  # 正向/反向数据面

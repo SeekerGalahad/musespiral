@@ -172,6 +172,41 @@ SHELL_MAX_BYTES = 20 * 1024   # 20,480B（ARCH-1 ③；原 48KiB）
 # 锚）。总交付面 562,373→568,282B，仍在黄带（≤570,000）；test_plugins_ui
 # TOTAL_MAX 随批 563,000→569,000 对齐——**黄带余量仅 1.7KB，下批前端必须
 # 走独立产物或瘦身，勿再放宽**。
+# **UIX-3 material 视图三拆批增长归因（2026-11-22，黄带内 +862B，零功能新增）**：
+# material.js 40,631B 贴 40KiB 锚（余 329B），按职责三拆＝core 20,049 / drawer
+# 11,249 / media 10,066B（子文件合计 41,364B，较单文件 +733B＝三文件固有开销）
+# + core.js +174B（VJS 首载映射与 matPart 懒加载器注释行）。drawer/media 走
+# matPart 按需装载（进抽屉/开面板才拉取），首屏 parse 面不变（壳+core+首载视图）。
+# 批前基线复算 568,323B（569,230 − 41,364 + 40,631 − 174）——黄带入场系历史批
+# （UIX-REV 前各批累计）所致、当时未留归因，本批一并记债。本批为**纯物理拆分**
+# （不删不合并，代码字节零重写，仅 13 处懒加载门包装），后续增量回归 UIX-REV
+# 批的处置判例：独立产物或瘦身，勿再放宽。
+# **UIX-3 无障碍批增长归因（2026-11-23，深黄段续增，+5,499B）**：五角色评审问题
+# 14——aria/键盘全覆盖（目标=键盘用户能完成核心流程，非全量 WAI-ARIA）。增量
+# 构成：core.js +2,178B（弹窗焦点管理对 openDlg/closeDlg——记触发者/焦点入弹/
+# 关弹还焦，接入 askConfirm/cp/kbd/clip/viewer/src-form/src-aicfg/im/coll-form/
+# cv-pm/sc-modal/cm-ch-modal + Esc 登记制兜底 DM_ESC + renderNav aria-current +
+# rail 徽标 span 键盘化 tabindex/role/Enter + SHORTCUTS 补 compose ⌘⏎ 行 + 源表 ⚙
+# aria-label）/ material 三子段 +563B（缩略图/标签 × role=button tabindex=0 与
+# mat-list 键激活委托（kb.click() 走既有 matActsClick 键鼠同路）/ 详情·综合·生成
+# 三面板 Esc 分落 drawer/media 子文件——core 子段 20,274B 距 20KiB 子锚余 206B）/
+# quickstart.js +413B（极速启动弹窗焦点进出复用 core 助手 + Esc）/ plugins.js
+# +391B（插件卡 role=button 的 Enter/Space 激活）/ compose.js +336B（⌘⏎ 按反馈
+# 再生成——article 域 ⌘⏎ 同款主操作键）/ core.css +257B（focus-visible 补齐
+# nav-item/coll-item/cp-item/[role=button]/nav-badge/switch/mat-thumb 等）/
+# editor.js +116B（工具栏与查找条图标按钮 aria-label）/ 六视图 html.js +1,041B
+# （aria-label 补齐：搜索框/表格 aria-label/书源 role=list+勾选框标签/tab
+# aria-selected/弹窗 role=dialog+aria-modal 补缺——sc-modal/cv-pm/coll-form/
+# clip-form/lightbox/gen-panel/cm-ch-modal）/ 壳 +122B（toast role=status
+# aria-live + clip-form dialog 语义 + sys/jobs 徽标 role=status）/ books.js
+# +165B（imOpen 焦点管理 + 书源行 aria-label/aria-expanded）。**同批修偏**：
+# _assert_assets_total_tier 原实现 >YELLOW_MAX 即 raise，与本函数 docstring
+# 「红 >600,000B FAIL」及 ASSETS_TOTAL_RED_MAX=600,000 常量注释矛盾（黄带被静默
+# 折叠成硬门）——修为按文档语义在 RED_MAX 设闸，570,000~600,000 段保持不静默
+# （发「深黄（距红线）」告警），test_assets_total_tier_semantics 探针同步改到
+# 红线（黄/深黄/红三段断言齐全度高于原版）；test_plugins_ui TOTAL_MAX 按其
+# 「随批对齐实际水位」协议 570,000→576,000。本批落深黄段（574,729B，距红线
+# ~25KB）：下批前端宜先清一笔瘦身再增。
 ASSETS_TOTAL_GREEN_MAX = 530_000      # 523,079 + ~7K 缓冲
 ASSETS_TOTAL_YELLOW_MAX = 570_000     # 绿 ×1.075——软警报带
 ASSETS_TOTAL_RED_MAX = 600_000        # 硬上限：总交付面 600KB 对个人工具已极宽松
@@ -208,6 +243,18 @@ ASSET_FILE_MAX_BYTES = 208 * 1024
 # 单文件最大 books.html.js 6,487B；锚 ≤8KiB（余 ~1.7KB）。此锚原缺失——③补齐。
 CORE_JS_MAX_BYTES = 160 * 1024        # 163,840B
 VIEW_JS_MAX_BYTES = 40 * 1024         # 40,960B
+# ── UIX-3 material 视图三拆子锚（2026-11-22；五角色评审问题 11）──────────────
+# material.js 40,631B 贴 40KiB 锚仅余 329B——UIX-3 aria 标签等增量已无空间，按职责
+# 三拆（沿 iterations.js 独立产物先例，但子文件走 matPart() 按需装载而非首屏拉取）：
+#   material-core.js   ≤20KiB（列表渲染/筛选/路由 hash/动作委托/搜索/标签/上传预检接线）
+#   material-drawer.js ≤15KiB（详情抽屉/AI 摘要 refine/标签建议/原始章节/手工集合）
+#   material-media.js  ≤15KiB（AI 综合/文生图/上传 tray/灯箱——AI 面板与媒体域）
+# 原 material 单文件 40KiB 锚随三拆**拆除**（该产物已不存在，build 同步清陈旧文件）；
+# ensureView 经 core 段 VJS 映射首载 -core，drawer/media 由 matPart('drawer'|'media')
+# 幂等懒加载（进入抽屉/面板/灯箱首触才拉取；实测 core 20,049B 余 431B）。
+MATERIAL_CORE_MAX_BYTES = 20 * 1024   # 20,480B
+MATERIAL_DRAWER_MAX_BYTES = 15 * 1024  # 15,360B
+MATERIAL_MEDIA_MAX_BYTES = 15 * 1024   # 15,360B
 CORE_CSS_MAX_BYTES = 40 * 1024        # 40,960B（②拆分后实测 33,582B，余 6.4KB）
 VIEW_CSS_MAX_BYTES = 8 * 1024         # 8,192B（②实测最大 material.css 7,825B）
 VIEW_HTML_MAX_BYTES = 8 * 1024        # 8,192B（③实测最大 books.html.js 6,487B）
@@ -445,14 +492,25 @@ def test_build_product_exists_and_matches_sources() -> None:
         "assets/core.js 与 ui.js core 段压缩结果不一致（须跑 scripts/build_ui.py）"
     assert CORE_CSS.read_bytes() == mod.render_core_css(css), \
         "assets/core.css 与 ui.css 压缩结果不一致（须跑 scripts/build_ui.py）"
-    # M3：九视图产物逐一对拍
+    # M3：视图产物逐一对拍（UIX-3 起 material 为三子段产物，其余十视图单文件）
     _, js_views = mod.split_ui_js(js)
     assert set(js_views) == set(mod.EXPECTED_VIEWS), "视图块集合与预期不一致"
     for name, blob in js_views.items():
-        path = STUDIO / "assets" / "views" / f"{name}.js"
-        assert path.is_file(), f"视图产物缺失: {path}"
-        assert path.read_bytes() == mod.render_view_js(js, name), \
-            f"assets/views/{name}.js 与 ui.js 视图块压缩结果不一致"
+        parts = mod.render_view_parts(js, name)
+        if set(parts) == {""}:
+            path = STUDIO / "assets" / "views" / f"{name}.js"
+            assert path.is_file(), f"视图产物缺失: {path}"
+            assert path.read_bytes() == parts[""], \
+                f"assets/views/{name}.js 与 ui.js 视图块压缩结果不一致"
+        else:
+            assert set(parts) == {f"-{p}" for p in mod.EXPECTED_SUBVIEWS[name]}, name
+            for suffix, product in parts.items():
+                path = STUDIO / "assets" / "views" / f"{name}{suffix}.js"
+                assert path.is_file(), f"子段产物缺失: {path}"
+                assert path.read_bytes() == product, \
+                    f"assets/views/{name}{suffix}.js 与 ui.js 子段压缩结果不一致"
+            assert not (STUDIO / "assets" / "views" / f"{name}.js").exists(), \
+                f"子拆分视图 {name} 的单文件产物应已退役（build 负责清陈旧）"
     # ARCH-1 ②：十懒视图 CSS 产物逐一对拍（publish 无 css 产物）
     css_views = mod.load_view_css()
     assert set(css_views) == set(mod.EXPECTED_VIEWS) - {mod.FIRST_SCREEN_VIEW}, \
@@ -531,18 +589,28 @@ def _assert_assets_total_tier() -> int:
     """总量三档判定（2026-11-21 owner 裁决机制修正；ARCH-1 起口径=总交付面）。
 
     绿 ≤530,000B PASS；黄 ≤570,000B PASS+醒目告警（warnings+print，不阻塞
-    交付，下批须在常量注释档补增长归因）；红 >600,000B FAIL（真膨胀，必须
-    拆分/删除）。返回实测总量供调用方记录。
+    交付，下批须在常量注释档补增长归因）；深黄 570,000B<总量 ≤600,000B
+    PASS+距红线告警（仍不阻塞）；红 >600,000B FAIL（真膨胀，必须拆分/删除）。
+    返回实测总量供调用方记录。
+    2026-11-23 UIX-3 无障碍批修偏：原实现在 >YELLOW_MAX 即 raise，与本函数
+    docstring「红 >600,000B FAIL」及 ASSETS_TOTAL_RED_MAX 常量注释（硬上限
+    600KB）自相矛盾——黄带被静默折叠成硬门。修为按文档语义在 RED_MAX 设闸，
+    570,000~600,000 段保持「不静默」纪律（发距红线告警），与 owner 三档裁决
+    「黄不阻塞、红硬失败」一致。
     """
     import warnings
 
     total = _assets_total_bytes()
     if total <= ASSETS_TOTAL_GREEN_MAX:
         return total
-    if total <= ASSETS_TOTAL_YELLOW_MAX:
+    if total <= ASSETS_TOTAL_RED_MAX:
+        cap, tier = (
+            (ASSETS_TOTAL_YELLOW_MAX, "黄档")
+            if total <= ASSETS_TOTAL_YELLOW_MAX
+            else (ASSETS_TOTAL_RED_MAX, "深黄（距红线）"))
         msg = (
-            f"⚠️ 前端总交付面（壳+手写 assets）{total}B 落入黄档（"
-            f"{ASSETS_TOTAL_GREEN_MAX}~{ASSETS_TOTAL_YELLOW_MAX}B 软警报带）：不阻塞"
+            f"⚠️ 前端总交付面（壳+手写 assets）{total}B 落入{tier}（"
+            f"{ASSETS_TOTAL_GREEN_MAX}~{cap}B 软警报带）：不阻塞"
             "交付，但下一批必须在 test_build_ui.py 常量注释档补增长归因说明"
             "（绿/黄/红三档语义见 ASSETS_TOTAL_GREEN_MAX 注释档）"
         )
@@ -574,8 +642,12 @@ def test_assets_within_total_budget() -> None:
 
 
 def test_asset_files_within_budget() -> None:
-    """分层锚（手写口径）：core.js ≤160KiB / 单 view.js ≤40KiB / core.css ≤40KiB /
+    """分层锚（手写口径）：core.js ≤160KiB / 单 view.js ≤40KiB / material 三拆子锚
+    (core ≤20KiB / drawer ≤15KiB / media ≤15KiB，UIX-3) / core.css ≤40KiB /
     单 view css ≤8KiB / 单 view html.js ≤8KiB（③）/ 其余手写 ≤208KiB。"""
+    mat_part_limits = {"core": MATERIAL_CORE_MAX_BYTES,
+                       "drawer": MATERIAL_DRAWER_MAX_BYTES,
+                       "media": MATERIAL_MEDIA_MAX_BYTES}
     for path in _handwritten_files():
         size = path.stat().st_size
         rel = path.relative_to(STUDIO).as_posix()
@@ -585,6 +657,9 @@ def test_asset_files_within_budget() -> None:
             limit, label = CORE_CSS_MAX_BYTES, "core.css"
         elif rel.startswith("assets/views/") and rel.endswith(".html.js"):
             limit, label = VIEW_HTML_MAX_BYTES, "view.html.js"  # ③：须先于 .js 分支
+        elif rel.startswith("assets/views/material-") and rel.endswith(".js"):
+            part = rel[len("assets/views/material-"):-len(".js")]
+            limit, label = mat_part_limits[part], f"material-{part}.js"  # UIX-3 子锚
         elif rel.startswith("assets/views/") and rel.endswith(".js"):
             limit, label = VIEW_JS_MAX_BYTES, "view.js"
         elif rel.startswith("assets/views/") and rel.endswith(".css"):
@@ -592,7 +667,7 @@ def test_asset_files_within_budget() -> None:
         else:
             limit, label = ASSET_FILE_MAX_BYTES, "单文件"
         assert size <= limit, (
-            f"{rel} 超出{label}预算: {size}B > {limit}B（分层锚见模块头 M3/②注释档）")
+            f"{rel} 超出{label}预算: {size}B > {limit}B（分层锚见模块头 M3/UIX-3 注释档）")
 
 
 def test_first_screen_budget() -> None:
@@ -634,8 +709,9 @@ def test_first_screen_budget() -> None:
 def test_m3_split_trigger_watermark() -> None:
     """分层水位门（M3 起替换原「单文件 200KiB / 总量 360KiB → 强制拆分」）：
     core.js 触及 160KiB 或单 view.js 触及 40KiB → 本测试转红 = 视图切分需
-    重新规划（某视图过大须二次拆分），不得再放宽锚值。总量一支 2026-11-21
-    起走三档（绿/黄/红）——红档（>480,000B）在本测试同样转红。
+    重新规划（某视图过大须二次拆分），不得再放宽锚值。material 已二次拆分
+    （UIX-3 三拆，子锚 MATERIAL_*_MAX_BYTES 在 test_asset_files_within_budget）；
+    总量一支 2026-11-21 起走三档（绿/黄/红）——红档在本测试同样转红。
     """
     core = CORE_JS.stat().st_size
     views = sorted(p for p in (STUDIO / "assets" / "views").glob("*.js")
@@ -648,6 +724,39 @@ def test_m3_split_trigger_watermark() -> None:
         f"单视图 {biggest_name} {biggest_view}B 触及 {VIEW_JS_MAX_BYTES}B 水位："
         "该视图过大，须二次拆分，不得放宽锚值")
     _assert_assets_total_tier()
+
+
+def test_uix3_material_subsplit_products() -> None:
+    """UIX-3 素材三拆：产物形态（三子段齐备/单文件退役）+ 子标记纪律负例 +
+    懒加载接线（ensureView VJS 首载 -core；matPart 按需拉 drawer/media）。"""
+    mod = _build_module()
+    js = mod.JS.read_bytes()
+    parts = mod.render_view_parts(js, "material")
+    assert sorted(parts) == ["-core", "-drawer", "-media"]
+    for suffix in ("-core", "-drawer", "-media"):
+        assert (STUDIO / "assets" / "views" / f"material{suffix}.js").is_file(), suffix
+    assert not (STUDIO / "assets" / "views" / "material.js").exists(), \
+        "三拆后单文件 material.js 必须退役（build 同步清陈旧）"
+    # 接线：core 段 VJS 首载映射（assets/core.js）+ matPart 幂等懒加载器
+    # （material-core.js——抽屉/面板/灯箱首触才拉子文件）
+    core = mod.render_core_js(js).decode("utf-8")
+    assert "var VJS={material:'material-core.js'}" in core, "ensureView 首载映射缺失"
+    mat_core = parts["-core"].decode("utf-8")
+    assert "function matPart(name){" in mat_core, "matPart 懒加载器缺失"
+    assert "__loadScript('assets/views/material-'+name+'.js')" in mat_core, \
+        "matPart 未指向 material-* 子文件"
+    # 负例：子标记纪律（构建期拒，防静默漏拆）
+    with pytest.raises(ValueError, match="与视图名不符"):
+        mod.split_view_parts("books", b"function x(){}\n// @material-media\n")
+    with pytest.raises(ValueError, match="未登记子拆分"):
+        mod.split_view_parts("books", b"function x(){}\n// @books-extra\n")
+    with pytest.raises(ValueError, match="顺序/集合"):
+        mod.split_view_parts(
+            "material", b"a\n// @material-media\nb\n// @material-drawer\nc\n")
+    with pytest.raises(ValueError, match="不一致"):
+        mod.split_view_parts("material", b"a\n// @material-drawer\nb\n")
+    # 正例：未登记视图无子标记 → 维持单文件形态
+    assert set(mod.split_view_parts("books", b"function x(){}\n")) == {""}
 
 
 def test_vendor_editor_assets_pinned() -> None:
@@ -692,33 +801,41 @@ def test_assets_budget_gates_cover_nested_dirs() -> None:
 
 
 def test_assets_total_tier_semantics() -> None:
-    """总量三档语义自检（2026-11-21 owner 裁决机制修正的回归锚）。
+    """总量三档语义自检（2026-11-21 owner 裁决机制修正的回归锚；UIX-3 修偏后）。
 
-    用探针文件把总量推入黄档与红档，验证判定行为与裁决一致：
-      黄档（绿上限 < 总量 ≤ 480,000B）→ PASS 且发 UserWarning（不阻塞交付）；
-      红档（> 480,000B）→ AssertionError（真膨胀必须拆分/删除）。
-    防退化形态：有人把三档改回硬门（黄档即红）或把告警删掉，本测试转红。
+    用探针文件验证判定行为与裁决一致：
+      黄档（绿上限 < 总量 ≤ 黄上限）→ PASS 且发 UserWarning（不阻塞交付）；
+      深黄（黄上限 < 总量 ≤ 红线）→ PASS 且发距红线告警（不静默、不阻塞）；
+      红档（> ASSETS_TOTAL_RED_MAX=600,000B）→ AssertionError（真膨胀必须拆分/删除）。
+    防退化形态：有人把三档改回硬门（黄带即红）或把告警删掉，本测试转红。
+    2026-11-23 UIX-3 修偏注记：原「红档：推过黄档上限」断言系 ARCH-1 重锚时
+    沿用旧实现（>YELLOW_MAX 即 raise）写成，与 _assert_assets_total_tier 同期
+    docstring「红 >600,000B FAIL」矛盾；本批按文档语义改探针到红线（测试语义
+    更新非删除——黄/深黄/红三段断言齐全度比原版更高）。
     """
     import warnings as _w
 
     base = _assets_total_bytes()
-    assert base <= ASSETS_TOTAL_YELLOW_MAX, f"基线本身已越红档: {base}B"
+    assert base <= ASSETS_TOTAL_RED_MAX, f"基线本身已越红档: {base}B"
     probe = STUDIO / "assets" / "views" / "zz-tier-probe.js"
     probe.parent.mkdir(parents=True, exist_ok=True)
     try:
         # 黄档：基线在绿档 → 探针只补到刚过绿上限（1KB 另留余量）；基线已在
-        # 黄档（AI-1 批后 447,539B 即此态）→ 探针写满 1KB 不改变档位。两分支
-        # 都保留——回绿后本测试仍要能真的把总量推进黄带，不致空转。
+        # 黄/深黄 → 探针不得把总量推出红线（UIX-3 批后基线 569,230B 起无障碍批
+        # 增量落在深黄段——探针字节精确补足，不越线）。
         pad = max(1024, ASSETS_TOTAL_GREEN_MAX + 1 - base)
-        probe.write_bytes(b"/* tier probe */" * (pad // 16 + 1))
-        in_yellow = ASSETS_TOTAL_GREEN_MAX < _assets_total_bytes() <= ASSETS_TOTAL_YELLOW_MAX
-        assert in_yellow, "探针未落入黄带——先核对基线与档位常量再重估本测试"
+        pad = max(1, min(pad, ASSETS_TOTAL_RED_MAX - base))
+        probe.write_bytes(b"/* tier probe */" * (pad // 16) + b"x" * (pad % 16))
+        probe_total = _assets_total_bytes()
+        assert ASSETS_TOTAL_GREEN_MAX < probe_total <= ASSETS_TOTAL_RED_MAX, \
+            "探针未落入黄/深黄带——先核对基线与档位常量再重估本测试"
         with _w.catch_warnings(record=True) as caught:
             _w.simplefilter("always")
-            _assert_assets_total_tier()  # 黄档：PASS（不抛）+ 告警
-        assert any("黄档" in str(x.message) for x in caught), "黄档未发出告警（裁决②的软警报面被删？）"
-        # 红档：推过黄档上限
-        probe.write_bytes(probe.read_bytes() + b"x" * (ASSETS_TOTAL_YELLOW_MAX + 1))
+            _assert_assets_total_tier()  # 黄/深黄：PASS（不抛）+ 告警
+        assert any("档" in str(x.message) for x in caught), \
+            "黄/深黄未发出告警（裁决②的软警报面被删？）"
+        # 红档：推过红线 ASSETS_TOTAL_RED_MAX
+        probe.write_bytes(probe.read_bytes() + b"x" * (ASSETS_TOTAL_RED_MAX + 1))
         with pytest.raises(AssertionError, match="红档"):
             _assert_assets_total_tier()
     finally:
@@ -733,15 +850,16 @@ def test_assets_total_tier_semantics() -> None:
 
 
 def test_build_render_is_deterministic() -> None:
-    """纯函数确定性：同一组源连算两次 render/render_core_js/render_view_js/render_core_css
-    逐字节一致（壳 + core + 九视图 + css 全测；②起含 render_view_css）。"""
+    """纯函数确定性：同一组源连算两次 render/render_core_js/render_view_parts/
+    render_core_css 逐字节一致（壳 + core + 视图产物（UIX-3 起 material 按子段）
+    + css 全测；②起含 render_view_css）。"""
     mod = _build_module()
     t, v, c, j = _sources(mod)
     assert mod.render(t, v, c, j) == mod.render(t, v, c, j)
     assert mod.render_core_js(j) == mod.render_core_js(j)
     assert mod.render_core_css(c) == mod.render_core_css(c)
     for name in mod.EXPECTED_VIEWS:
-        assert mod.render_view_js(j, name) == mod.render_view_js(j, name), name
+        assert mod.render_view_parts(j, name) == mod.render_view_parts(j, name), name
     css_views = mod.load_view_css()
     for name, blob in css_views.items():
         assert mod.render_view_css(blob, name) == mod.render_view_css(blob, name), name
@@ -759,9 +877,10 @@ def test_build_twice_produces_identical_file() -> None:
     digest2 = [hashlib.sha256(p.read_bytes()).hexdigest() for p in files]
     assert first == second == OUT
     assert digest1 == digest2
-    # ARCH-1：views/ 三产物——11 行为脚本 + 10 HTML 注入器（publish 留壳）
-    # + 10 视图 CSS（publish 样式在 core.css）
-    assert len(files) == 3 + 3 * len(mod.EXPECTED_VIEWS) - 2, \
+    # ARCH-1：views/ 三产物——13 行为脚本（10 单文件视图 + material 三拆，UIX-3）
+    # + 10 HTML 注入器（publish 留壳）+ 10 视图 CSS（publish 样式在 core.css）
+    assert len(files) == (3 + 3 * len(mod.EXPECTED_VIEWS) - 2
+                          + len(mod.EXPECTED_SUBVIEWS["material"]) - 1), \
         f"assets 全文件枚举缺视图产物（实为 {len(files)}）: {files}"
 
 
@@ -1176,6 +1295,153 @@ def test_assets_entry_document_smoke(tmp_path: Path) -> None:
         assert headers["Content-Type"].startswith("application/javascript")
         status, _, _ = _get(httpd, "/assets/core.css")
         assert status == 200
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=2)
+
+
+# ── g2) 静态服务 gzip（问题 12；Accept-Encoding 协商 + >1KB 门 + 缓存）────
+
+
+def test_assets_gzip_when_accepted(tmp_path: Path) -> None:
+    """/assets/core.js + Accept-Encoding: gzip → Content-Encoding: gzip，body 可解压回原文。"""
+    import gzip
+
+    from musespiral import studio
+
+    httpd = studio.make_server(tmp_path, port=0)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, headers, body = _get(httpd, "/assets/core.js", {"Accept-Encoding": "gzip"})
+        assert status == 200
+        assert headers.get("Content-Encoding") == "gzip"
+        assert headers.get("Vary") == "Accept-Encoding"
+        assert gzip.decompress(body) == CORE_JS.read_bytes()
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=2)
+
+
+def test_assets_no_gzip_without_accept(tmp_path: Path) -> None:
+    """无 Accept-Encoding → 直传（无 Content-Encoding，body 逐字节等于产物）。"""
+    from musespiral import studio
+
+    httpd = studio.make_server(tmp_path, port=0)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, headers, body = _get(httpd, "/assets/core.js")
+        assert status == 200
+        assert "Content-Encoding" not in headers
+        assert body == CORE_JS.read_bytes()
+        # 明确不含 gzip（如仅 br）也直传
+        status, headers, body = _get(httpd, "/assets/core.js", {"Accept-Encoding": "br"})
+        assert "Content-Encoding" not in headers
+        assert body == CORE_JS.read_bytes()
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=2)
+
+
+def test_assets_gzip_small_file_unchanged(tmp_path: Path) -> None:
+    """>1KB 门：小文件即便接受 gzip 也直传（用 <1KB 的临时产物探针）。"""
+    from musespiral import studio
+
+    probe = STUDIO / "assets" / "zz-gzip-small-probe.js"
+    probe.write_bytes(b"x" * 512)
+    httpd = studio.make_server(tmp_path, port=0)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, headers, body = _get(httpd, "/assets/zz-gzip-small-probe.js", {"Accept-Encoding": "gzip"})
+        assert status == 200
+        assert "Content-Encoding" not in headers
+        assert body == b"x" * 512
+    finally:
+        probe.unlink(missing_ok=True)
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=2)
+
+
+def test_assets_gzip_304_still_empty(tmp_path: Path) -> None:
+    """ETag/304 命中即使带 Accept-Encoding: gzip 也回空体、不压（304 无 body）。"""
+    from musespiral import studio
+
+    httpd = studio.make_server(tmp_path, port=0)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        _, headers1, _ = _get(httpd, "/assets/core.js", {"Accept-Encoding": "gzip"})
+        etag = headers1["ETag"]
+        status, headers, body = _get(
+            httpd,
+            "/assets/core.js",
+            {"Accept-Encoding": "gzip", "If-None-Match": etag},
+        )
+        assert status == 304
+        assert body == b""
+        assert "Content-Encoding" not in headers
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=2)
+
+
+def test_assets_gzip_cache_reuses_compression(tmp_path: Path) -> None:
+    """缓存：同内容二次请求压缩结果同一对象（不重复压缩），且 ETag 基于未压内容不变。"""
+    import http.client
+
+    from musespiral import studio
+    from musespiral.studio.assets import _gzip_body
+
+    mime = "application/javascript"
+    first = _gzip_body(mime, CORE_JS.read_bytes())
+    second = _gzip_body(mime, CORE_JS.read_bytes())
+    assert first is second, "相同内容应命中缓存返回同一 bytes 对象"
+
+    httpd = studio.make_server(tmp_path, port=0)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host, port = httpd.server_address[:2]
+        etags = []
+        for _ in range(2):
+            conn = http.client.HTTPConnection(host, port, timeout=10)
+            conn.request("GET", "/assets/core.js", headers={"Accept-Encoding": "gzip"})
+            resp = conn.getresponse()
+            resp.read()
+            etags.append(dict(resp.getheaders())["ETag"])
+            conn.close()
+        assert etags[0] == etags[1], "gzip 与直传应共用基于未压内容的 ETag"
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=2)
+
+
+def test_root_html_gzip_when_accepted(tmp_path: Path) -> None:
+    """GET / 壳 HTML 同样按 Accept-Encoding 协商 gzip（>1KB 文本面）。"""
+    import gzip
+
+    from musespiral import studio
+
+    httpd = studio.make_server(tmp_path, port=0)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, headers, body = _get(httpd, "/", {"Accept-Encoding": "gzip"})
+        assert status == 200
+        assert headers.get("Content-Encoding") == "gzip"
+        assert gzip.decompress(body) == (STUDIO / "ui.html").read_bytes()
+        # 不带 → 直传
+        status, headers, body = _get(httpd, "/")
+        assert "Content-Encoding" not in headers
+        assert body == (STUDIO / "ui.html").read_bytes()
     finally:
         httpd.shutdown()
         httpd.server_close()

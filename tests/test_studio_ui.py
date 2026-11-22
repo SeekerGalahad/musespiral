@@ -266,8 +266,28 @@ def _js() -> str:
     assert CORE_JS.exists(), f"core.js 产物不存在: {CORE_JS}"
     files = [CORE_JS] + sorted(
         p for p in VIEWS_JS.glob("*.js") if not p.name.endswith(".html.js"))
-    assert len(files) == 12, f"视图产物应为 11 个，实为 {len(files) - 1}: {files}"
+    # UIX-3（2026-11-22）：material 三拆 → 13 行为脚本（10 单文件视图 + material 三子段）
+    assert len(files) == 14, f"视图产物应为 13 个，实为 {len(files) - 1}: {files}"
     return "\n".join(p.read_text(encoding="utf-8") for p in files)
+
+
+def _mat_js() -> str:
+    """material 三拆产物并集（UIX-3）：core/drawer/media 三子段合并读。
+
+    多数 material 断言关心「标记在素材视图 JS 语料里存在/不存在」而非落在哪个
+    子段（与 _js() 的 M3 合并读同构）；归属断言另用 _mat_part("drawer") 形态。
+    """
+    parts = sorted(VIEWS_JS.glob("material-*.js"))
+    assert len(parts) == 3, f"material 三拆产物应为 3 个，实为 {parts}"
+    assert not (VIEWS_JS / "material.js").exists(), "单文件 material.js 应已退役"
+    return "\n".join(p.read_text(encoding="utf-8") for p in parts)
+
+
+def _mat_part(name: str) -> str:
+    """读单个 material 子段产物（UIX-3 归属断言：core/drawer/media）。"""
+    path = VIEWS_JS / f"material-{name}.js"
+    assert path.exists(), f"material 子段产物不存在: {path}"
+    return path.read_text(encoding="utf-8")
 
 
 def _core_js() -> str:
@@ -974,7 +994,7 @@ def test_detail_bidirectional_scroll_sync() -> None:
     # 退役现场）；editor.js 是另一子系统（CodeMirror↔iframe 滚动同步），其
     # 自己的 scrollHeight 比例公式是正当实现，不属本条「material 预览退役」
     # 语义——fix-6 扩 all_src 域后不能拿别处的正当用法误伤本条（各锁各域）。
-    _mv = _view_js("material") if VIEWS_JS.exists() else ""
+    _mv = _mat_js() if VIEWS_JS.exists() else ""  # UIX-3：material 三拆并集域
     assert "scrollHeight-b.clientHeight" not in (src + _mv)
     # 编辑器滚动同时同步行号列与 overlay（既有行为保留）
     assert "EG.scrollTop=EA.scrollTop;HL.scrollTop=EA.scrollTop;HL.scrollLeft=EA.scrollLeft" in src
@@ -1028,7 +1048,8 @@ def test_detail_cmd_s_save_binding() -> None:
     assert "e.key==='Escape'" in src
     # ARCH-1（2026-11-21）：AB 惰性抓取（article HTML 懒注入）——null 守卫形态
     assert "if(AB&&!AB.hidden)hideBubble();" in src
-    assert "if(!$('viewer').hidden)$('viewer').hidden=true;" in src
+    # UIX-3（2026-11-23）：Esc 关查看器走 closeDlg（焦点还给触发者）
+    assert "if(!$('viewer').hidden)closeDlg('viewer');" in src
 
 
 def test_selection_annotation_bubble() -> None:
@@ -1497,8 +1518,8 @@ def test_command_palette_structure_and_open() -> None:
     assert 'class="modal-overlay cp-overlay" id="cp"' in src  # 复用 modal 遮罩体系
     assert "(e.metaKey||e.ctrlKey)&&(e.key==='k'||e.key==='K')){e.preventDefault();$('cp').hidden?cpOpen():cpClose();return;}" in src
     assert "function cpOpen(){" in src and "function cpClose(){" in src
-    # 打开即聚焦输入框；文章未载先补拉（复用既有 /api/articles）
-    assert "$('cp-input').focus();" in src
+    # 打开即聚焦输入框（UIX-3：经 openDlg 定焦 + 关闭还焦）；文章未载先补拉（复用既有 /api/articles）
+    assert "openDlg('cp','#cp-input');" in src
     assert "if(!state.articlesLoaded)loadArticles()" in src
     # 遮罩点击关闭 + 底部键盘提示
     assert "$('cp').addEventListener('click',function(e){if(e.target===this)cpClose();});" in src
@@ -1605,17 +1626,20 @@ def test_ime_guards_on_all_editor_and_compose_keydown_handlers() -> None:
     FEAT-2 智能组稿批（2026-11-22）+2 处：向导主题输入（Enter=下一步）与手动
     追加搜索框（Enter=搜索）两内联监听（IME 选词的 Enter 不得误触向导推进/
     追加搜索）——内联 18 处。
+    UIX-3 无障碍批（2026-11-23）+4 处：源详情抽屉 Esc、素材详情抽屉 Esc
+    （material-drawer 子段）、插件卡 Enter/Space 激活（plugins 段）、创作工坊
+    ⌘⏎ 再生成（compose 段）——内联 22 处。
     """
     src = _js()
     guard = "if(e.isComposing||e.keyCode===229)return;"
     head = "addEventListener('keydown',function(e){\n"
-    assert src.count(head + guard) == 18, (
-        f"内联 keydown 处理器首行 IME 守卫应为 18 处，实为 {src.count(head + guard)}"
+    assert src.count(head + guard) == 22, (
+        f"内联 keydown 处理器首行 IME 守卫应为 22 处，实为 {src.count(head + guard)}"
     )
-    # 第 19 处：askConfirm 弹层 onKey（具名函数，removeEventListener 需具名引用）
+    # 第 23 处：askConfirm 弹层 onKey（具名函数，removeEventListener 需具名引用）
     assert "function onKey(e){ " + guard in src
-    assert src.count(guard) == 19, (
-        f"IME 守卫总数（内联 18 + onKey 1）应为 19 处，实为 {src.count(guard)}"
+    assert src.count(guard) == 23, (
+        f"IME 守卫总数（内联 22 + onKey 1）应为 23 处，实为 {src.count(guard)}"
     )
 
 
@@ -1878,7 +1902,7 @@ def test_material_routing_and_palette_entry() -> None:
         "fillMatType();\n"
         "renderCollRail();\n"
         "renderMaterials();\n"
-        "if(mid)await openMatDrawer(mid);"
+        "if(mid){await matPart('drawer');await openMatDrawer(mid);}"
         in src
     )
     assert "href=\"#material\"" in src
@@ -2381,7 +2405,7 @@ def test_material_ai_summary_hook() -> None:
     """
     src = _js()
     assert "</button><button class=\"btn\" data-mai=\"'+esc(m.id)+'\">AI 摘要</button><button class=\"btn mat-del\"" in src
-    assert "if(el.hasAttribute('data-mai'))return matAI(id);" in src
+    assert "if(el.hasAttribute('data-mai'))return matPart('drawer').then(function(){matAI(id);});" in src  # UIX-3：matAI 落 drawer 子文件，列表首触经门装载
     # preview 真调用 + 预览卡（可编辑）+ adopt 回传编辑后文本
     assert "postJSON('/api/action/refine',{action:'preview',id:id,confirm:true})" in src
     assert 'id="refine-area"' in src
@@ -2484,8 +2508,9 @@ def test_d3_nav_active_state_toggle() -> None:
     showView→renderNav 按 data-nav 切 class，hashchange→renderRoute 驱动。
     """
     src = _js()
-    # renderNav 按 data-nav 精确匹配切 is-active（aria 语义由 is-active 样式承载）
-    assert "el.classList.toggle('is-active',el.getAttribute('data-nav')===view);" in src
+    # renderNav 按 data-nav 精确匹配切 is-active + aria-current=page（UIX-3 无障碍批）
+    assert "el.classList.toggle('is-active',on);" in src
+    assert "if(on)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');" in src
     # showView 收口调用 renderNav（视图显隐与激活态同步）
     assert "renderNav(view);" in src
     # 路由驱动：hashchange 重跑 renderRoute（切换视图即触发激活态更新）
@@ -3250,12 +3275,17 @@ def test_tag_suggest_uses_only_existing_endpoints() -> None:
 
 
 def _sel_src() -> str:
-    """入口 A 主体（sel 工具条 + syn 面板状态机 + 绑定）。"""
-    src = _js()
+    """入口 A 主体（sel 工具条 + syn 面板状态机 + 绑定）。
+
+    UIX-3（2026-11-22）起 syn 族落 material-media 子段——切片改在该子段内
+    （selSync 到 bindMatMedia 之间，覆盖 selSync/selToggle/synSteps/renderSyn/
+    synPoll/synRun/synAdopt 全族，与拆分前等价域一致）。
+    """
+    src = _mat_part("media")
     # M1 分域读取后，否向断言的检查域回到全产物并集（=单文件时代的
     # 等价语料）：退役文案/旧类名从任一产物回流都必须被抓到。
     all_src = _all()
-    return src[src.index("function selSync(){"):src.index("function matById(id){")]
+    return src[src.index("function selSync(){"):src.index("function bindMatMedia(){")]
 
 
 def test_material_view_sel_bar_and_syn_panel_structure() -> None:
@@ -3296,7 +3326,7 @@ def test_syn_multiselect_has_no_mode_switch() -> None:
     # M1 分域读取后，否向断言的检查域回到全产物并集（=单文件时代的
     # 等价语料）：退役文案/旧类名从任一产物回流都必须被抓到。
     all_src = _all()
-    assert "(e.metaKey||e.ctrlKey))return selToggle(id)" in src
+    assert "(e.metaKey||e.ctrlKey))return matPart('media').then(function(){selToggle(id)" in src  # UIX-3：selToggle 落 media 子文件
     body = _sel_src()
     assert "localStorage.mdpubSynTip" in body
     assert "toast('已进入多选，选中 2-8 篇后点 AI 综合',OK)" in body
@@ -3379,9 +3409,10 @@ def test_syn_ai_indigo_marker_and_zero_autowrite() -> None:
 
 
 def _gen_src() -> str:
-    # matIngest 已随 2026-11-20 修红迁 core 段（跨视图共享），切片端标记改用
-    # material 块内 gAdopt 之后的下一个函数 bindMaterial（覆盖 gPaint/gGo/gAdopt 不变）
-    return _src_of("function gPaint(", "function bindMaterial(){")
+    # matIngest 已随 2026-11-20 修红迁 core 段；UIX-3（2026-11-22）起 gen 族落
+    # material-media 子段——切片端标记改用同段 bindMatMedia（覆盖 gPaint/gGo/gAdopt 不变）
+    body = _mat_part("media")
+    return body[body.index("function gPaint("):body.index("function bindMatMedia(){")]
 
 
 def _src_of(start: str, end: str) -> str:
@@ -3529,7 +3560,7 @@ def test_fa_drawer_media_by_type() -> None:
     # 分流兜底：其余类型维持 pre 正文（media 为空时渲染）
     assert "(media||'<pre class=\"drawer-preview\">'+esc(prev)+'</pre>')+" in body
     # 灯箱按钮复用既有委托（data-mlight → lbOpen）
-    assert "if(el.hasAttribute('data-mlight'))return lbOpen(" in src
+    assert "if(el.hasAttribute('data-mlight'))return matPart('media').then(function(){lbOpen(" in src  # UIX-3：lbOpen 落 media 子文件
 
 
 def test_fb_swatch_colors_and_recent() -> None:
@@ -3760,14 +3791,17 @@ def test_books_search_subs_placeholder_and_engine_lamp() -> None:
 
 
 def test_m3_view_products_exist() -> None:
-    """视图产物齐全且非空（core+views 拆分的物理证据；PL-3 批起 11 视图）。"""
-    expected = {"sources", "material", "books", "compose", "design",
+    """视图产物齐全且非空（core+views 拆分的物理证据；PL-3 批起 11 视图；
+    UIX-3 起 material 为三子段产物 material-core/drawer/media，单文件退役）。"""
+    expected = {"sources", "books", "compose", "design",
                 "publish", "insight", "article", "settings",
-                "plugins", "plugin-run"}
+                "plugins", "plugin-run"} | {"material-core", "material-drawer",
+                                            "material-media"}
     # ARCH-1：views/ 另有 <view>.html.js 骨架注入器（stem 带 .html 后缀）——排除
     actual = {p.stem for p in VIEWS_JS.glob("*.js")
               if not p.name.endswith(".html.js")}
     assert actual == expected, f"视图产物集合不符: {actual}"
+    assert not (VIEWS_JS / "material.js").exists(), "单文件 material.js 应已退役"
     for name in expected:
         assert (VIEWS_JS / f"{name}.js").stat().st_size > 1000, name
 
@@ -3785,8 +3819,9 @@ def test_m3_view_render_functions_in_own_file() -> None:
     }
     core = _core_js()
     for view, decl in mapping.items():
-        own = _view_js(view)
-        assert decl in own, f"{decl} 不在 views/{view}.js"
+        # UIX-3：material 的主渲染落 material-core 子段
+        own = _mat_part("core") if view == "material" else _view_js(view)
+        assert decl in own, f"{decl} 不在 views/{view} 的产物"
         assert decl not in core, f"{decl} 不应残留 core.js"
     # design/sources 的入口是 dvEnter / renderSources（非 render* 命名）
     assert "function dvEnter(){" in _view_js("design")
@@ -3816,13 +3851,18 @@ def test_m3_lazy_load_wiring() -> None:
     assert "__viewPromises" in core
     # ARCH-1 两步装载：html.js（innerHTML 填充壳内空占位）→ <view>.js（行为脚本）
     assert '__loadScript("assets/views/"+view+".html.js")' in core
-    assert '__loadScript("assets/views/"+view+".js")' in core
+    # UIX-3：JS 首载名经 VJS 映射（material→material-core.js，余视图原名单文件）
+    assert '__loadScript("assets/views/"+(VJS[view]||view+".js"))' in core
     assert "__onViewHtml" in core
     assert "await ensureView(view)" in core
     # 至少 3 个视图脚本用顶层函数声明（零 import/export）
     for view in ("publish", "article", "material"):
-        assert re.search(r"^function \w+\(", _view_js(view), re.MULTILINE), view
-        assert "import " not in _view_js(view) and "export " not in _view_js(view)
+        own = _mat_part("core") if view == "material" else _view_js(view)
+        assert re.search(r"^function \w+\(", own, re.MULTILINE), view
+        assert "import " not in own and "export " not in own
+    # UIX-3：material 懒加载链——首载 -core（VJS 映射），drawer/media 由 matPart 按需拉
+    assert "VJS={material:'material-core.js'}" in core
+    assert "assets/views/material-'+name+'.js" in _mat_part("core")
 
 
 def test_all_negative_gate_covers_lazy_assets() -> None:
@@ -3942,8 +3982,9 @@ def test_feat5_kbd_help_modal_shell_and_bindings() -> None:
         assert f'id="{i}"' in shell, f"壳缺 #{i}"
     assert '<kbd>?</kbd> 全部快捷键' in shell  # 命令面板底注可发现性
     core = _core_js()
-    assert "function kbdOpen(){kbdPaint();$('kbd-modal').hidden=false;" in core
-    assert "function kbdClose(){$('kbd-modal').hidden=true;}" in core
+    # UIX-3 无障碍批：kbdOpen/kbdClose 走 openDlg/closeDlg（焦点入弹 + 关闭还焦）
+    assert "function kbdOpen(){kbdPaint();openDlg('kbd-modal','#kbd-close');}" in core
+    assert "function kbdClose(){closeDlg('kbd-modal');}" in core
     assert "function kbdPaint(){" in core
     # ? 唤起（输入框外守卫，与 g 序列同款）；/ 聚焦当前视图搜索框
     assert "if(e.key==='?'){e.preventDefault();kbdOpen();return;}" in core
@@ -4007,8 +4048,8 @@ def test_feat5_skeleton_on_first_visit() -> None:
     assert "if(view==='sources'&&!matSrcs().length){var sr=$('src-rows');if(sr)sr.innerHTML='<tr><td colspan=\"9\"><div class=\"skel\">'+skelRows(4)+'</div></td></tr>';}" in core
     vp = _view_js("plugins")
     assert "if(!PG.list.length&&!PG.err){$('pg-grid').innerHTML=skelCards(4);$('pg-grid').hidden=false;$('pg-empty').hidden=true;}" in vp
-    # material 视图产物未因此增重（骨架逻辑归 core 的判例锚）
-    assert "skelCards" not in _view_js("material")
+    # material 视图产物未因此增重（骨架逻辑归 core 的判例锚；UIX-3 域=三子段并集）
+    assert "skelCards" not in _mat_js()
 
 
 def test_feat5_dark_mode_live_preview_and_tokens() -> None:
@@ -4023,8 +4064,8 @@ def test_feat5_dark_mode_live_preview_and_tokens() -> None:
     # applyTheme 末尾同步 live 预览——经 VAPI 触达（跨视图治理：core 不直呼视图函数）
     assert "if(va&&va.live&&!$('view-article').hidden)va.live();" in core
     assert ",repaint:renderDetail,setTab:setTab,live:renderLive}" in _view_js("article")
-    vm = _view_js("material")
-    assert 'color:var(--crimson)' in vm and "#ff7b89" not in vm
+    vm = _mat_part("drawer")  # UIX-3：crimson 落 bkOrigToggle（详情抽屉子段）
+    assert 'color:var(--crimson)' in vm and "#ff7b89" not in _mat_js()
     css = _css()
     for sel in (".kbd-modal{", ".kbd-row{", ".skel-row{", ".empty-actions{"):
         assert sel in css
