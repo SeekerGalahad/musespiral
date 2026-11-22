@@ -8,6 +8,7 @@ detailPath:'',
 tab:'preview',
 platforms:[],
 stats:null,
+writing:null,
 meta:null,
 jobs:[],
 nonce: 0,
@@ -353,6 +354,16 @@ try{
 state.stats=await getJSON('/api/stats');
 }catch(err){
 state.stats=null;
+}
+}
+// FEAT-P1B：写作节奏读面（纯读）；真身归 core 段（A 类专项：load* 工具归 core，
+// 消费点=@view:insight 的 renderWriting；失败置 null 由视图走空态引导不报错）。
+async function loadWriting(force){
+if(state.writing&&!force) return;
+try{
+state.writing=await getJSON('/api/writing_stats');
+}catch(err){
+state.writing=null;
 }
 }
 async function loadDetail(path,force){

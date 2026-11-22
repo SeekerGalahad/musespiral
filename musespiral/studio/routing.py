@@ -54,6 +54,7 @@ from .payload import (
     _plan_payload,
     _platforms_payload,
     _stats_payload,
+    _writing_stats_payload,  # FEAT-P1B：写作节奏读面（纯读）
 )
 from .plugin_actions import _pipeline_run_audio_response  # E-4（PL-6 批）：裁段音频 wav 字节流
 from .plugin_actions import (
@@ -177,6 +178,9 @@ _GET_ROUTES = _RouteSet(
             "/api/sources",  # 第二十期 F53（M4）：源清单+素材计数（设置「源连接」域同源）
             "/api/compose",  # 第十八期 F48：创作台会话清单（M2；UI 归 M3）
             "/api/compose/session",  # 第十八期 F48：单会话详情（素材/当前稿/轮次）
+            # FEAT-P1B（2026-11-23）：写作节奏读面——近 30 天字数增量/连续天数/
+            # 周目标进度，纯读零写（数据源=各 .compose 的 rounds 历史）。
+            "/api/writing_stats",
             "/api/plan",  # P4 排期周历（契约 §3.2-2）：plan_service 只读文字周历
             "/api/ingest/status",  # B 采集扩展（第二十一期）：源健康/pending 待决区/锁占用
             "/api/visual/design",  # Phase C F70-F74：设计稿详情（SVG 载入重过白名单）
@@ -273,6 +277,8 @@ def _get_response(
         return 200, _JSON_CTYPE, _json_bytes(_compose_sessions_payload(ctx))
     if path == "/api/compose/session":
         return 200, _JSON_CTYPE, _json_bytes(_compose_session_payload(ctx, query))
+    if path == "/api/writing_stats":  # FEAT-P1B：写作节奏读面（纯读）
+        return 200, _JSON_CTYPE, _json_bytes(_writing_stats_payload(ctx, query))
     if path == "/api/plan":
         return 200, _JSON_CTYPE, _json_bytes(_plan_payload(ctx, query))
     if path == "/api/ingest/status":

@@ -84,6 +84,8 @@ CONTRACT_PATHS = {
     "/api/action/batch_adapt",
     "/api/health",
     "/api/action/fetch",
+    # FEAT-P1B 写作节奏（2026-11-23）：洞察「写作节奏」卡数据面（纯读 GET）
+    "/api/writing_stats",
     "/api/discover",
     "/api/action/discover_draft",
     "/api/action/sync_stats",
@@ -1218,7 +1220,8 @@ def test_dashboard_stat_tiles_data_sources() -> None:
     assert "var st=state.stats||{},pub=st.total_publish||0;" in src
     assert "[['已发布',pub],['待审',pendingCount()],['总阅读',st.total_reads||0],['平台数',state.platforms.length]]" in src
     # 仪表盘路由补拉文章列表（待审瓷砖数据面），复用既有 '/api/articles' 字面量
-    assert "await Promise.all([loadStats(),loadPlatforms(),loadArticles(),loadMaterials(),loadCompose(true),refreshJobs(),renderHealth(),loadRadar()]);" in src
+    # FEAT-P1B：写作节奏卡数据面随路由并行拉取（loadWriting）
+    assert "await Promise.all([loadStats(),loadPlatforms(),loadArticles(),loadMaterials(),loadCompose(true),refreshJobs(),renderHealth(),loadRadar(),loadWriting(true)]);" in src
     # 待审口径与队列 pending 档逐条件一致（无 FAIL/WARN 且 draft 且未发布）
     assert "function pendingCount(){" in src
     assert "return (c.fail||0)===0&&(c.warn||0)===0&&articleStatus(a)==='draft'&&!f.published;}).length;" in src
@@ -3962,8 +3965,8 @@ def test_feat3_stats_trend_logic_in_view_js() -> None:
     assert "st-legend" in src
     # 空态引导（不是空白闪烁）
     assert "发表并回填数据后，此处显示趋势" in src
-    # 接进 renderInsight 渲染链 + 周/月 chip 委托
-    assert "renderTrend();renderStatsTrend();renderPlatformBars()" in src
+    # 接进 renderInsight 渲染链 + 周/月 chip 委托（FEAT-P1B：renderWriting 同链）
+    assert "renderTrend();renderStatsTrend();renderWriting();renderPlatformBars()" in src
     assert "state.srange=c.getAttribute('data-srange')" in src
     assert "renderStatsTrend();" in src
 

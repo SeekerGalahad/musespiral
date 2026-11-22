@@ -176,7 +176,31 @@ def test_css_split_rule_multiset_equivalent_to_head() -> None:
                    # 规则（1 条多选择器——nav-item/coll-item/cp-item/[role=button]/
                    # nav-badge/switch input/im-exp/mat-thumb 键盘焦点环）——
                    # 基线锚早于本批，合法新增登记。
-                   b".nav-item:focus-visible,.coll-item:focus-visible,.cp-item:focus-visible,[role=\"button\"]:focus-visible,.nav-badge:focus-visible,.switch input:focus-visible,.im-exp:focus-visible,.mat-thumb:focus-visible{outline:2px solid var(--vermilion);outline-offset:1px}"}
+                   b".nav-item:focus-visible,.coll-item:focus-visible,.cp-item:focus-visible,[role=\"button\"]:focus-visible,.nav-badge:focus-visible,.switch input:focus-visible,.im-exp:focus-visible,.mat-thumb:focus-visible{outline:2px solid var(--vermilion);outline-offset:1px}",
+                   # FEAT-P1B（2026-11-23）：大纲拖拽排序在 ui.views/compose.css
+                   # 新增 .ol-* 8 条 + 写作节奏在 ui.views/insight.css 新增
+                   # .wr-*/.streak-badge/.writing-* 13 条——基线锚早于本批，合法登记。
+                   b".ol-handle{cursor:grab;border:1px solid var(--line-1);background:var(--paper-2);color:var(--ink-3);border-radius:var(--radius-btn);width:22px;height:22px;line-height:1;font-size:13px;flex:none;touch-action:none}",
+                   b".ol-handle:hover{color:var(--vermilion);border-color:var(--vermilion)}",
+                   b".ol-handle:active{cursor:grabbing}",
+                   b".ol-handle:focus-visible{outline:2px solid var(--vermilion);outline-offset:1px}",
+                   b".cm-outline-row.ol-drag-src{opacity:.45}",
+                   b".cm-outline-row.ol-drop-before{box-shadow:inset 0 3px 0 -1px var(--vermilion)}",
+                   b".cm-outline-row.ol-drop-after{box-shadow:inset 0 -3px 0 -1px var(--vermilion)}",
+                   b".ol-placeholder{height:0;border-top:2px dashed var(--vermilion);margin:2px 0;opacity:.8;pointer-events:none}",
+                   b"#writing-card .action-row{align-items:baseline}",
+                   b".writing-chart svg{display:block;width:100%;height:120px;overflow:visible}",
+                   b".writing-chart .wr-grid{stroke:var(--line-1);stroke-width:1}",
+                   b".writing-chart .wr-axis{fill:var(--ink-3);font-size:10px;font-variant-numeric:tabular-nums}",
+                   b".writing-chart .wr-bar{fill:color-mix(in srgb,var(--ink-1) 10%,transparent)}",
+                   b".writing-chart .wr-bar.on{fill:var(--viz-3)}",
+                   b".streak-badge{font-size:var(--fs-caption);color:var(--ink-2);margin-left:auto;font-variant-numeric:tabular-nums}",
+                   b".streak-badge.hot{color:var(--vermilion);font-weight:600}",
+                   b".writing-goal{margin-top:8px}",
+                   b".wr-goal-row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:var(--space-sm);font-size:var(--fs-caption)}",
+                   b".wr-goal-lab{color:var(--ink-2);white-space:nowrap}",
+                   b".wr-goal-n{color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}",
+                   b".wr-empty{padding:var(--space-md) 0}"}
     assert set(missing) <= known_missing, f"有非预期规则丢失: {list(set(missing) - known_missing)[:3]}"
     assert set(extra) <= known_extra, f"有非预期规则新增: {list(set(extra) - known_extra)[:3]}"
 

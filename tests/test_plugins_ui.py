@@ -97,7 +97,15 @@ CORE_MAX = 163_840            # 160KiB
 # test_build_ui.py ASSETS_TOTAL_GREEN_MAX 注释档本批行）。本硬门按既有「随批
 # 对齐实际水位」协议上移 576,000→581,000（实际 580,788 + ~0.2K 锚距；权威判定
 # 仍在 test_build_ui 三档，距红线 600,000 尚余 ~19KB）。
-TOTAL_MAX = 581_000
+# FEAT-P1B 批增长归因（2026-11-23，深黄段续增，+10,055B）：大纲拖拽排序 + 写作
+# 统计仪表盘——outline.js +4,896B（手柄/指示线/占位条/键盘重排 + olMove/olCommit）、
+# insight.js +2,721B（writingBars/renderWriting SVG 柱图+徽章+目标条）、insight.css
+# +902B（.wr-*/.streak-badge 族）、compose.css +687B（.ol-* 拖拽样式）、core.js
+# +384B（loadWriting + state.writing）、insight.html.js +399B（写作节奏卡骨架）；
+# 壳零增量（全走懒加载视图）。总交付面 580,788→590,843B，仍在深黄段（距红线
+# 600,000 余 ~9KB）；本硬门按同协议 581,000→592,000 对齐（591,020B + ~1K 锚距）（距黄上限 570,000 已越，
+# 权威判定在 test_build_ui 三档深黄带）。
+TOTAL_MAX = 592_000
 FIRST_SCREEN_MAX = 245_760    # 240KiB
 
 

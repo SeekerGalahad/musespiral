@@ -360,6 +360,8 @@ CONTRACT_GET_EXACT = {
     "/api/meta", "/api/health", "/api/jobs", "/api/discover", "/api/discover/star",
     "/api/materials", "/api/materials/detail", "/api/settings", "/api/sources",
     "/api/compose", "/api/compose/session", "/asset",
+    # §3.23 新增（FEAT-P1B 2026-11-23：写作节奏读面——纯读，rounds 历史现算）
+    "/api/writing_stats",
     # §3.2-2 新增（P4 排期周历）
     "/api/plan",
     # §3.3 新增（B 采集扩展 F68/F69：采集面状态只读端点）

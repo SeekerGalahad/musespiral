@@ -9,6 +9,7 @@ detailPath:'',
 tab:'preview',
 platforms:[],
 stats:null,
+writing:null,
 meta:null,
 jobs:[],
 nonce: 0,
@@ -366,6 +367,16 @@ try{
 state.stats=await getJSON('/api/stats');
 }catch(err){
 state.stats=null;
+}
+}
+// FEAT-P1B：写作节奏读面（纯读）；真身归 core 段（A 类专项：load* 工具归 core，
+// 消费点=@view:insight 的 renderWriting；失败置 null 由视图走空态引导不报错）。
+async function loadWriting(force){
+if(state.writing&&!force) return;
+try{
+state.writing=await getJSON('/api/writing_stats');
+}catch(err){
+state.writing=null;
 }
 }
 async function loadDetail(path,force){
@@ -4028,7 +4039,7 @@ if(!pub)$('stat-tiles').innerHTML='<div class="empty"><div class="empty-icon" da
 else $('stat-tiles').innerHTML=[['已发布',pub],['待审',pendingCount()],['总阅读',st.total_reads||0],['平台数',state.platforms.length]].map(function(t){
 return '<div class="tile"><div class="tile-value">'+esc(t[1])+D+'<div class="tile-label">'+esc(t[0])+'</div></div>';}).join('');
 QA('[data-irange]').forEach(function(el){el.classList.toggle('is-active',+el.getAttribute('data-irange')===state.irange);});
-renderIdeaFunnel();renderTrend();renderStatsTrend();renderPlatformBars();renderContrib();renderScoreDist();renderAiUsage();renderComposeAct();renderRadar();
+renderIdeaFunnel();renderTrend();renderStatsTrend();renderWriting();renderPlatformBars();renderContrib();renderScoreDist();renderAiUsage();renderComposeAct();renderRadar();
 }
 // 入口 C §五 选题雷达（纯只读 GET /api/topic_radar）。零落库零 POST——刷新/立即生成只弹
 // CLI 引导 toast；kind 徽三色 radar=viz-1 青黛/kb=viz-5 石板/star=jade；AI 角度行青黛左边线
@@ -4112,11 +4123,42 @@ $('compose-act').innerHTML=days.map(function(k){
 return '<i class="act-dot'+(seen[k]?' on':'')+'" title="'+k+(seen[k]?' · '+seen[k]+' 次再生成':' · 无')+'"></i>';}).join('');
 $('compose-act-note').textContent='近 30 天再生成 '+total+' 次 · 会话 '+(state.cs||[]).length+' 个';
 }
+// FEAT-P1B 写作节奏（写作统计仪表盘）：近 30 天每日字数增量柱状图（SVG 自绘，
+// 沿 renderStatsTrend 模式）+ 连续天数徽章 + 周目标进度条。数据源=/api/writing_stats
+// （rounds 历史按日增量，pure-read）；空数据/无 session → 引导文案，不报错。
+function writingBars(daily){
+var W=300,H=100,PL=34,PR=6,PT=8,PB=18,n=daily.length,bw,ma=1,i;
+if(!n)return '';
+for(i=0;i<n;i++)if(daily[i].chars_added>ma)ma=daily[i].chars_added;
+bw=Math.max(1,(W-PL-PR)/n-1);
+function y(v){return PT+(1-v/ma)*(H-PT-PB);}
+var grid=[0,.5,1].map(function(f){var yy=y(ma*f).toFixed(1);return '<line class="wr-grid" x1="'+PL+'" y1="'+yy+'" x2="'+(W-PR)+'" y2="'+yy+'"></line><text class="wr-axis" x="'+(PL-4)+'" y="'+yy+'" text-anchor="end">'+Math.round(ma*f)+'</text>';}).join('');
+var bars=daily.map(function(x,k){
+var h=x.chars_added?Math.max(2,Math.round(x.chars_added/ma*(H-PT-PB))):0,xx=(PL+k*(bw+1)).toFixed(1);
+return '<rect class="wr-bar'+(h?' on':'')+'" x="'+xx+'" y="'+(H-PB-h).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.max(h,1)+'" rx="1"><title>'+esc(x.date)+' · '+x.chars_added+' 字'+(x.sessions?' · '+x.sessions+' 个会话':'')+'</title></rect>';}).join('');
+var labs=daily.map(function(x,k){return k%5?'':'<text class="wr-axis" x="'+(PL+k*(bw+1)+bw/2).toFixed(1)+'" y="'+(H-4)+'" text-anchor="middle">'+esc(x.date.slice(5))+'</text>';}).join('');
+return '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="近 30 天每日字数增量">'+grid+bars+labs+'</svg>';
+}
+function renderWriting(){
+var w=state.writing,c=$('writing-chart'),g=$('writing-goal'),b=$('writing-streak'),n=$('writing-note');
+if(!c)return;
+var daily=(w&&w.daily)||[],st=(w&&w.streak)||{},wk=(w&&w.weekly)||{},cur=st.current||0,i,sum=0,act=0,wrote=wk.written||0,tgt=wk.target||0,pct=wk.pct||0;
+if(!w||w.empty||!daily.length){
+c.innerHTML='<div class="empty wr-empty"><div class="empty-title">还没有写作记录</div><div class="empty-text">在创作工坊生成第一轮草稿后，这里会按天累计你的字数节奏。</div><a class="btn btn-primary empty-action" href="#compose">去创作工坊</a></div>';
+if(g)g.innerHTML='';if(b){b.textContent='';b.className='streak-badge';}if(n)n.textContent='近 30 天暂无字数增量（无会话/无轮次历史）';
+return;
+}
+c.innerHTML=writingBars(daily);
+if(b){b.textContent=cur?('🔥 '+cur+' 天连续'):('最长 '+(st.longest||0)+' 天');b.className='streak-badge'+(cur>=3?' hot':'');}
+if(g)g.innerHTML='<div class="wr-goal-row"><span class="wr-goal-lab">本周目标</span><span class="pbar-track"><span class="pbar-fill" style="width:'+(tgt>0?Math.min(100,pct):0)+'%"></span></span><span class="wr-goal-n">'+wrote+' / '+tgt+' 字'+(pct>=100?' ✓':'')+'</span></div>';
+for(i=0;i<daily.length;i++){sum+=daily[i].chars_added;if(daily[i].chars_added>0)act++;}
+if(n)n.textContent='近 30 天共 '+sum+' 字 · 活跃 '+act+' 天 · 历史最长连续 '+(st.longest||0)+' 天';
+}
 // 路由入口（原 renderRoute insight 分支整体迁入——A 类专项：分支归视图）
 VAPI.insight={enter:async function(route){
 var rg=route.params.get('range');
 if(rg==='30'||rg==='90')state.irange=+rg;
-await Promise.all([loadStats(),loadPlatforms(),loadArticles(),loadMaterials(),loadCompose(true),refreshJobs(),renderHealth(),loadRadar()]);
+await Promise.all([loadStats(),loadPlatforms(),loadArticles(),loadMaterials(),loadCompose(true),refreshJobs(),renderHealth(),loadRadar(),loadWriting(true)]);
 renderInsight();
 },repaint:renderInsight};
 function bindInsight(){

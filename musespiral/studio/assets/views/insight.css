@@ -25,6 +25,19 @@
 .act-dots{display:flex;flex-wrap:wrap;gap:4px}
 .act-dot{width:12px;height:12px;border-radius:3px;background:var(--paper-2);border:1px solid var(--line-1)}
 .act-dot.on{background:var(--viz-2);border-color:var(--viz-2)}
+#writing-card .action-row{align-items:baseline}
+.writing-chart svg{display:block;width:100%;height:120px;overflow:visible}
+.writing-chart .wr-grid{stroke:var(--line-1);stroke-width:1}
+.writing-chart .wr-axis{fill:var(--ink-3);font-size:10px;font-variant-numeric:tabular-nums}
+.writing-chart .wr-bar{fill:color-mix(in srgb,var(--ink-1) 10%,transparent)}
+.writing-chart .wr-bar.on{fill:var(--viz-3)}
+.streak-badge{font-size:var(--fs-caption);color:var(--ink-2);margin-left:auto;font-variant-numeric:tabular-nums}
+.streak-badge.hot{color:var(--vermilion);font-weight:600}
+.writing-goal{margin-top:8px}
+.wr-goal-row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:var(--space-sm);font-size:var(--fs-caption)}
+.wr-goal-lab{color:var(--ink-2);white-space:nowrap}
+.wr-goal-n{color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.wr-empty{padding:var(--space-md) 0}
 .score-dist{display:flex;align-items:flex-end;gap:var(--space-sm);height:110px;padding:0 4px}
 .sd-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;height:100%}
 .sd-bar{width:100%;max-width:48px;background:var(--viz-1);border-radius:4px 4px 0 0;min-height:2px}

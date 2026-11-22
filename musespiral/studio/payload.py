@@ -613,6 +613,25 @@ def _compose_session_payload(ctx: _StudioContext, query: dict[str, list[str]]) -
     return detail
 
 
+def _writing_stats_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> dict[str, Any]:
+    """GET /api/writing_stats：写作节奏读面（FEAT-P1B，纯读）。
+
+    daily（近 30 天按日增量）+ streak（连续天数）+ weekly（周目标进度）
+    + empty（无历史时前端走空态引导）。增量口径见 writing_stats 模块 docstring。
+    """
+    from ..services import writing_stats  # 函数体内导入（与 compose 载荷同纪律）
+
+    target_raw = _query_str(query, "target")
+    if target_raw is None:
+        target = writing_stats.DEFAULT_WEEKLY_TARGET
+    else:
+        try:
+            target = int(target_raw)
+        except ValueError:
+            raise _HttpError(400, "target 必须是整数") from None
+    return writing_stats.dashboard(ctx.root, target=target)
+
+
 def _plan_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> dict[str, Any]:
     """GET /api/plan：排期周历只读（契约 §3.2-2；plan_service 唯一读面）。
 

@@ -221,6 +221,18 @@ SHELL_MAX_BYTES = 20 * 1024   # 20,480B（ARCH-1 ③；原 48KiB）
 # 576,000→581,000 对齐。⚠ article 视图两锚水位：article.js 32,136B（40KiB
 # 锚余 ~8.8KB）与 article.html.js 7,847B（8KiB 锚仅余 345B）——下批再动
 # article 视图 HTML 须先瘦身措辞或拆分骨架。
+# **FEAT-P1B 批增长归因（2026-11-23，深黄段续增，+10,055B）**：两项 P1 创作体验
+# 增强——①大纲拖拽排序（HTML5 D&D 零依赖，仅手柄可拖）+ 键盘重排（手柄聚焦 ↑↓）+
+# 指示线/占位条 + action=replace 持久化；②写作统计仪表盘（writing_stats.py 纯读
+# rounds 历史→按日增量/连续天数/周目标 + 洞察 SVG 柱图/徽章/进度条，空数据引导）。
+# 增量分布：assets/outline.js +5,126B（手柄 data-ol-handle+aria-label/olDnd 五式/
+# olMove 排序/olCommit replace/键盘 ↑↓+焦点回归）、views/insight.js +2,701B
+# （writingBars/renderWriting）、views/insight.css +902B（.wr-*/.streak-badge）、
+# views/compose.css +707B（.ol-*）、core.js +384B（loadWriting+state.writing）、
+# views/insight.html.js +399B（写作节奏卡骨架）。壳零增量（10,663B 不变，全落
+# 懒加载视图/独立产物）。总交付面 580,788→591,007B（+10,219B），仍在深黄段
+# （距红线 600,000 余 ~9KB）；test_plugins_ui TOTAL_MAX 随批 581,000→592,000
+# 对齐。⚠ 深黄余量已不足 10KB——下批前端须走瘦身或独立产物判例，勿再放宽。
 ASSETS_TOTAL_GREEN_MAX = 530_000      # 523,079 + ~7K 缓冲
 ASSETS_TOTAL_YELLOW_MAX = 570_000     # 绿 ×1.075——软警报带
 ASSETS_TOTAL_RED_MAX = 600_000        # 硬上限：总交付面 600KB 对个人工具已极宽松
