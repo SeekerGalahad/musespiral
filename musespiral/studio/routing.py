@@ -7,6 +7,7 @@
     未知路由 404
   - 405（方法不符）由 server.py 的 Handler 方法表负责。
 """
+
 from __future__ import annotations
 
 from typing import Iterator
@@ -15,38 +16,20 @@ from .actions import _discover_star_payload
 from .agent_payload import _agent_runs_payload  # Phase D F75.4：/api/agent/runs 读面
 from .ai_payload import _ai_budget_payload, _ai_usage_payload  # G1 批 F1：AI 治理两读面
 from .assets import _asset_response, _meta_payload
+from .book_actions import (  # R3 书源接驳+R3.5 提炼（契约 §3.10）：三读面
+    _book_info_payload,
+    _book_original_payload,
+    _book_toc_payload,
+)
 from .booksource_actions import (  # R0 书源功能（契约 §3.9）：四读面
     _booksource_engine_payload,
     _booksource_one_payload,
     _booksource_payload,
     _booksource_subs_payload,
 )
-from .book_actions import (  # R3 书源接驳+R3.5 提炼（契约 §3.10）：三读面
-    _book_info_payload,
-    _book_original_payload,
-    _book_toc_payload,
-)
 from .health import _health_payload
 from .ingest_actions import _ingest_status_payload  # B 采集扩展：采集面状态（只读）
-from .plugin_actions import (  # PL-3 接驳批（2026-11-20 复核修复）：插件/流水线读面
-    _pipeline_detail_payload,
-    _pipeline_run_payload,
-    _pipeline_run_audio_response,  # E-4（PL-6 批）：裁段音频 wav 字节流
-    _pipeline_run_segments_payload,  # E-4（PL-6 批）：转写段落+ranges（编辑版优先）
-    _pipeline_run_versions_payload,  # AI-3 复核 fix-4：run 域版本链清单+两版 diff
-    _pipelines_payload,
-    _plugin_check_payload,
-    _plugins_payload,
-)
 from .media_actions import _media_preview_response  # G1 文生图：预览字节流（A-2）
-from .tts_actions import _tts_file_response  # G-T5 朗读：MP3 字节流（内嵌 <audio> 播放面）
-from .topic_radar_payload import _topic_radar_payload  # Phase D F78.4：/api/topic_radar 读面
-from .version_actions import _article_diff_payload  # E-6 §3.7：版本池清单 + 两版 diff（纯读）
-from .visual_payload import (  # Phase C F70-F74：/api/visual 族 GET 载荷
-    _visual_design_payload,
-    _visual_presets_payload,
-    _visual_templates_payload,
-)
 from .payload import (
     _annotations_payload,
     _article_body_payload,
@@ -65,20 +48,45 @@ from .payload import (
     _material_file_response,
     _material_iterations_diff_payload,
     _material_iterations_payload,
+    _material_search_payload,
     _material_tags_payload,
     _materials_payload,
     _plan_payload,
     _platforms_payload,
     _stats_payload,
 )
-from .settings import _settings_payload
-from .settings import _sources_domain as _sources_list
+from .plugin_actions import _pipeline_run_audio_response  # E-4（PL-6 批）：裁段音频 wav 字节流
+from .plugin_actions import (
+    _pipeline_run_segments_payload,  # E-4（PL-6 批）：转写段落+ranges（编辑版优先）
+)
+from .plugin_actions import (
+    _pipeline_run_versions_payload,  # AI-3 复核 fix-4：run 域版本链清单+两版 diff
+)
+from .plugin_actions import (  # PL-3 接驳批（2026-11-20 复核修复）：插件/流水线读面
+    _pipeline_detail_payload,
+    _pipeline_run_payload,
+    _pipelines_payload,
+    _plugin_check_payload,
+    _plugins_payload,
+)
 from .security import (
     _HTML_CTYPE,
-    _HttpError,
     _JSON_CTYPE,
-    _StudioContext,
+    _HttpError,
     _json_bytes,
+    _StudioContext,
+)
+from .settings import _settings_payload
+from .settings import _sources_domain as _sources_list
+from .topic_radar_payload import (
+    _topic_radar_payload,  # Phase D F78.4：/api/topic_radar 读面
+)
+from .tts_actions import _tts_file_response  # G-T5 朗读：MP3 字节流（内嵌 <audio> 播放面）
+from .version_actions import _article_diff_payload  # E-6 §3.7：版本池清单 + 两版 diff（纯读）
+from .visual_payload import (  # Phase C F70-F74：/api/visual 族 GET 载荷
+    _visual_design_payload,
+    _visual_presets_payload,
+    _visual_templates_payload,
 )
 
 
@@ -108,10 +116,7 @@ class _RouteSet:
             return False
         if path in self._exact:
             return True
-        return any(
-            path.startswith(prefix) and len(path) > len(prefix)
-            for prefix in self._prefixes
-        )
+        return any(path.startswith(prefix) and len(path) > len(prefix) for prefix in self._prefixes)
 
     def __iter__(self) -> Iterator[str]:
         return iter(self._exact)
@@ -120,8 +125,8 @@ class _RouteSet:
 # 动态 GET 前缀族（_RouteSet prefixes 的唯一权威；对拍锁
 # test_frontend_api_literals_covered_by_backend_surface 消费——改这里须同步门）
 GET_DYNAMIC_PREFIXES: tuple[str, ...] = (
-    "/api/jobs/",       # R4：单任务读面
-    "/api/plugins/",    # §3.19：/api/plugins/<id>/check
+    "/api/jobs/",  # R4：单任务读面
+    "/api/plugins/",  # §3.19：/api/plugins/<id>/check
     "/api/pipelines/",  # §3.19：/api/pipelines/<id> 与 /api/pipelines/runs/<run_id>
 )
 
@@ -156,6 +161,12 @@ _GET_ROUTES = _RouteSet(
             "/api/materials/file",  # 第二十一期 F60：素材文件字节流（三道门；与 /asset 同构不同域）
             "/api/materials/tags",  # 第二十一期 F63：标签频次表（全库现算 count 降序）
             "/api/materials/collections",  # 第二十一期 F62：手工集合清单（GET/POST 双态路径）
+            # ARCH-5 新增（2026-11-22 语义基础设施，正典=《musespiral-极限架构
+            # 与功能扩展总规划-2026-11-21》§ARCH-5）：统一搜索读面
+            # （q + mode=keyword|semantic|hybrid；语义缺位自动降级为关键词+
+            # 标签——search_service 降级承诺；FEAT-1 的后端数据面，UI 归
+            # FEAT-1 批）。GET 47→48。
+            "/api/materials/search",
             # §3.20 新增（P2 素材再加工循环 2026-11-20，正典=《musespiral-格式生态
             # 与素材流转能力分析-2026-11-20》§3.3）：derived 素材打磨版本列表
             # + 同链两版对比（纯读；diff 复用 E-6 版本 diff 引擎，红删绿增
@@ -177,11 +188,15 @@ _GET_ROUTES = _RouteSet(
             "/api/ai/budget",  # G1 批 F1：三层预算读（全局两键+per_task 覆盖）
             "/api/media/preview",  # G1 文生图：预览字节流（A-2 服务端临时文件的消费面）
             # §3.9 新增（R0 书源功能 2026-11-18：四读面——索引/单源详情/订阅清单/引擎状态）
-            "/api/booksource", "/api/booksource/one", "/api/booksource/subs",
+            "/api/booksource",
+            "/api/booksource/one",
+            "/api/booksource/subs",
             "/api/booksource/engine",
             # §3.10 新增（R3 书源接驳+R3.5 提炼 2026-11-18：三读面——详情/目录/
             # 章节原文（素材详情「查看原始章节」按需加载面））
-            "/api/book/info", "/api/book/toc", "/api/book/original",
+            "/api/book/info",
+            "/api/book/toc",
+            "/api/book/original",
             # §3.16 新增（G-T5 TTS 朗读 2026-11-19，调研吸收 §六）：朗读产物
             # MP3 字节流（内嵌 <audio src> 直指，仅 .mp3 + 魔数复核）
             "/api/tts/file",
@@ -233,6 +248,8 @@ def _get_response(
         return 200, _JSON_CTYPE, _json_bytes(_discover_payload(ctx, query))
     if path == "/api/materials":
         return 200, _JSON_CTYPE, _json_bytes(_materials_payload(ctx, query))
+    if path == "/api/materials/search":  # ARCH-5：统一搜索（关键词/语义/三路合并）
+        return 200, _JSON_CTYPE, _json_bytes(_material_search_payload(ctx, query))
     if path == "/api/materials/detail":
         return 200, _JSON_CTYPE, _json_bytes(_material_detail_payload(ctx, query))
     if path == "/api/materials/file":
@@ -300,7 +317,7 @@ def _get_response(
     if path == "/api/plugins":
         return 200, _JSON_CTYPE, _json_bytes(_plugins_payload())
     if path.startswith("/api/plugins/") and path.endswith("/check"):
-        plugin_id = path[len("/api/plugins/"):-len("/check")]
+        plugin_id = path[len("/api/plugins/") : -len("/check")]
         if not plugin_id or "/" in plugin_id:
             raise _HttpError(404, f"未知路由: {path}")
         return 200, _JSON_CTYPE, _json_bytes(_plugin_check_payload(ctx, plugin_id))
@@ -310,29 +327,27 @@ def _get_response(
     # ——segments（编辑版优先）/ audio（裁段 wav 字节流，tts 文件流同先例）。
     # 须先于通用 runs/<run_id> 分支；run_id 拒斜杠（白名单正则在载荷侧复检）。
     if path.startswith("/api/pipelines/runs/") and path.endswith("/segments"):
-        run_id = path[len("/api/pipelines/runs/"):-len("/segments")]
+        run_id = path[len("/api/pipelines/runs/") : -len("/segments")]
         if not run_id or "/" in run_id:
             raise _HttpError(404, f"未知路由: {path}")
         return 200, _JSON_CTYPE, _json_bytes(_pipeline_run_segments_payload(ctx, run_id))
     if path.startswith("/api/pipelines/runs/") and path.endswith("/audio"):
-        run_id = path[len("/api/pipelines/runs/"):-len("/audio")]
+        run_id = path[len("/api/pipelines/runs/") : -len("/audio")]
         if not run_id or "/" in run_id:
             raise _HttpError(404, f"未知路由: {path}")
         return _pipeline_run_audio_response(ctx, run_id, query)
     # AI-3 复核 fix-4：run 域版本链读面（归档 outputs.vN 的清单+两版 diff）——
     # 动态段 runs/<id>/versions，须先于通用 runs/<id> 分支（同 segments/audio）。
     if path.startswith("/api/pipelines/runs/") and path.endswith("/versions"):
-        run_id = path[len("/api/pipelines/runs/"):-len("/versions")]
+        run_id = path[len("/api/pipelines/runs/") : -len("/versions")]
         if not run_id or "/" in run_id:
             raise _HttpError(404, f"未知路由: {path}")
-        return 200, _JSON_CTYPE, _json_bytes(
-            _pipeline_run_versions_payload(ctx, run_id, query)
-        )
+        return 200, _JSON_CTYPE, _json_bytes(_pipeline_run_versions_payload(ctx, run_id, query))
     if path.startswith("/api/pipelines/runs/"):
-        run_id = path[len("/api/pipelines/runs/"):]
+        run_id = path[len("/api/pipelines/runs/") :]
         return 200, _JSON_CTYPE, _json_bytes(_pipeline_run_payload(ctx, run_id))
     if path.startswith("/api/pipelines/"):
-        pid = path[len("/api/pipelines/"):]
+        pid = path[len("/api/pipelines/") :]
         if not pid or "/" in pid:
             raise _HttpError(404, f"未知路由: {path}")
         return 200, _JSON_CTYPE, _json_bytes(_pipeline_detail_payload(ctx, pid))

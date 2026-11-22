@@ -26,6 +26,7 @@ from ...core.composition import (
 from ...infra.ai import chat as _chat
 from ...infra.ai.habits_inject import load_style_samples, style_block
 from .characters import _session_characters, characters_block, scan_conflicts
+from .foreshadowing import foreshadowing_block, open_foreshadowing
 from .prompt import _fill_slots, _load_habits_for_style
 from .store import (
     ComposeError,
@@ -65,6 +66,8 @@ OUTLINE_EXPAND_TEMPLATE = """你是资深公众号作者，正在逐节展开一
 {{novel}}
 
 {{characters}}
+
+{{foreshadowing}}
 
 {{rolling}}
 
@@ -281,6 +284,9 @@ def expand_section(
             # 「此前各章 + 角色一致性」，旁路掉会让长文越写越散
             "novel": novel_block(session.novel_summary),
             "characters": characters_block(_session_characters(session)),
+            # FEAT-4：未回收伏笔同款注入（展开也是一次 compose 生成——伏笔
+            # 恰恰常埋在逐节展开的长文里）
+            "foreshadowing": foreshadowing_block(session.foreshadowing),
             "prior": prior,
             "style": style_block(_load_habits_for_style(), load_style_samples()),
         },
@@ -312,4 +318,6 @@ def expand_section(
         "outline": outline_to_json(sections),
         # E-5（§3.6）：展开产出同样过冲突检测（只提示不拦截）
         "conflicts": scan_conflicts(session, blocks),
+        # FEAT-4：展开产出同样带未回收伏笔提示（与 generate 同口径）
+        "foreshadowing": open_foreshadowing(session.foreshadowing),
     }

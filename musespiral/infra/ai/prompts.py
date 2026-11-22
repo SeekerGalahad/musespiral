@@ -20,9 +20,12 @@ PROMPTS_DIR = "prompts.d"
 # 任务底座模板可用插槽（创作台 §2.3；展示与编辑提示用，不做强校验——
 # 模板是自由文本，缺槽走消费方缺省）。{{rolling}} 为 G-T4 滚动摘要槽
 # （设计 §五；空摘要整节缺席，缺槽回补仍注入）；{{novel}}/{{characters}}
-# 为 E-5 小说模式两槽（评审 §3.6：前情提要 + 人物卡，空则整节缺席）。
+# 为 E-5 小说模式两槽（评审 §3.6：前情提要 + 人物卡，空则整节缺席）；
+# {{foreshadowing}} 为 FEAT-4 未回收伏笔槽（session.foreshadowing 的
+# planted/escalated 清单，空账本整节缺席）。
 PROMPT_SLOTS: tuple[str, ...] = (
-    "{{style}}", "{{sources}}", "{{novel}}", "{{characters}}", "{{rolling}}",
+    "{{style}}", "{{sources}}", "{{novel}}", "{{characters}}",
+    "{{foreshadowing}}", "{{rolling}}",
     "{{draft}}", "{{decisions}}",
 )
 

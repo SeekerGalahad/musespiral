@@ -103,9 +103,12 @@ if(bar)bar.hidden=true;
 ttsNote('');
 }
 
+var ttsBound=false; // ARCH-1 幂等门（#view-article 骨架懒注入后 __onViewHtml 重调 ttsBoot；防双绑）
 function ttsBoot(){
+if(ttsBound)return;
 var btn=ttsEl('tts-btn');
 if(!btn)return;
+ttsBound=true;
 btn.addEventListener('click',function(){ttsGenerate(btn);});
 var close=ttsEl('tts-close');
 if(close)close.addEventListener('click',ttsClose);
@@ -114,5 +117,5 @@ window.addEventListener('hashchange',function(){if(!ttsEl('tts-bar').hidden)ttsC
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ttsBoot);
 else ttsBoot();
-window.__mdpubTts={ttsPath:ttsPath,ttsUrl:ttsUrl,ttsSummary:ttsSummary,ttsBtnState:ttsBtnState};
+window.__mdpubTts={ttsPath:ttsPath,ttsUrl:ttsUrl,ttsSummary:ttsSummary,ttsBtnState:ttsBtnState,boot:ttsBoot};
 })();

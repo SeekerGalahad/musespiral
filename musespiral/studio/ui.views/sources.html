@@ -27,8 +27,9 @@
 <table class="set-table src-table"><thead><tr><th>健康</th><th>源</th><th>类型</th><th>订阅</th><th>素材（未读）</th><th>上次正常</th><th>近 7 次失败</th><th>启停</th><th></th></tr></thead><tbody id="src-rows"></tbody></table>
 <div class="empty" id="src-empty" hidden>
 <div class="empty-icon" data-icon="settings"></div>
-<div class="empty-title">暂无源</div>
-<div class="empty-text">源在 settings.json / POST /api/sources 注册（radar_hub / kb / dir / rss 四型）。</div>
+<div class="empty-title">还没有内容源</div>
+<div class="empty-text">源是采集的起点：注册源（radar_hub / kb / dir / rss 四型）后点「刷新全部」，素材会汇入素材库供综合与创作引用。健康灯只在手动验证或刷新时回写。</div>
+<button class="btn btn-primary empty-action" id="src-empty-add">注册第一个源</button>
 </div>
 <aside class="drawer" id="src-drawer" hidden aria-label="源详情">
 <div class="drawer-head"><b id="src-drawer-title">源</b><button class="btn btn-ghost btn-icon" id="src-drawer-close" type="button" aria-label="关闭"><span data-icon="close"></span></button></div>

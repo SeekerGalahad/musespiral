@@ -15,6 +15,37 @@ for(var j2=0;j2<days.length;j2++)if(days[j2].k===k){days[j2].n++;if(r.action==='
 days.forEach(function(x){if(x.n>max)max=x.n;});
 $('trend-chart').innerHTML=days.map(function(x){
 return '<i'+(x.n?' class="on"':'')+' style="height:'+(x.n?Math.max(8,Math.round(x.n/max*100)):4)+'%" title="'+x.k+' · '+(x.n?x.n+' 条（发表 '+x.p+' · 草稿 '+x.g+'）':'无记录')+'"></i>';}).join('');}
+function statsBuckets(mode){
+var rows=(state.stats&&state.stats.recent)||[],m={},order=[];
+rows.forEach(function(r){
+if(!r||r.action!=='publish'||!r.ts)return;
+var d=String(r.ts).slice(0,10),k;
+if(mode==='month')k=d.slice(0,7);
+else{var dt=new Date(d+'T00:00:00'),wd=(dt.getDay()+6)%7;dt.setDate(dt.getDate()-wd);k=dkey(dt);}
+var s=r.stats||{},rd=+(s.reads!=null?s.reads:r.reads)||0,zk=+s.zaikan||0,sh=+(s.shares!=null?s.shares:r.shares)||0;
+if(!m[k]){m[k]={reads:0,zaikan:0,shares:0};order.push(k);}
+m[k].reads+=rd;m[k].zaikan+=zk;m[k].shares+=sh;});
+order.sort();return order.map(function(k){return{k:k,reads:m[k].reads,zaikan:m[k].zaikan,shares:m[k].shares};});}
+function renderStatsTrend(){
+var el=$('stats-trend');if(!el)return;
+var mode=state.srange==='month'?'month':'week';
+QA('[data-srange]').forEach(function(e){e.classList.toggle('is-active',e.getAttribute('data-srange')===mode);});
+var b=statsBuckets(mode).slice(-8),n=b.length,note=$('stats-trend-note');
+if(!n){el.innerHTML='<svg viewBox="0 0 300 150" role="img" aria-label="阅读在看分享趋势"><text class="st-empty" x="150" y="75" text-anchor="middle">发表并回填数据后，此处显示趋势</text></svg>';
+if(note)note.textContent='暂无回填数据（发表后自动回采，或点健康卡「回采」）';return;}
+var W=300,H=150,PL=32,PR=8,PT=10,PB=24,max=1;
+b.forEach(function(x){max=Math.max(max,x.reads,x.zaikan,x.shares);});
+function SX(i){return PL+(n===1?0.5:i/(n-1))*(W-PL-PR);}
+function SY(v){return PT+(1-v/max)*(H-PT-PB);}
+function line(key){return b.map(function(x,i){return(i?'L':'M')+SX(i).toFixed(1)+' '+SY(x[key]).toFixed(1);}).join(' ');}
+function dots(key,cls){return b.map(function(x,i){return'<circle class="st-dot '+cls+'" cx="'+SX(i).toFixed(1)+'" cy="'+SY(x[key]).toFixed(1)+'" r="2.5"><title>'+esc(x.k)+' · '+x[key]+'</title></circle>';}).join('');}
+var grids=[0,0.5,1].map(function(f){var y=SY(max*f);return'<line class="st-grid" x1="'+PL+'" y1="'+y+'" x2="'+(W-PR)+'" y2="'+y+'"></line><text class="st-axis" x="'+(PL-4)+'" y="'+(y+3)+'" text-anchor="end">'+Math.round(max*f)+'</text>';}).join('');
+var labels=b.map(function(x,i){return'<text class="st-axis" x="'+SX(i).toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle">'+esc(x.k.slice(5))+'</text>';}).join('');
+el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="阅读在看分享趋势">'+grids+
+'<path class="st-line st-reads" d="'+line('reads')+'"></path><path class="st-line st-zaikan" d="'+line('zaikan')+'"></path><path class="st-line st-shares" d="'+line('shares')+'"></path>'+
+dots('reads','st-reads')+dots('zaikan','st-zaikan')+dots('shares','st-shares')+labels+'</svg>'+
+'<div class="st-legend"><span><i class="st-reads"></i>阅读</span><span><i class="st-zaikan"></i>在看</span><span><i class="st-shares"></i>分享</span></div>';
+if(note)note.textContent=(mode==='month'?'按月':'按周')+'聚合 · 最近 '+n+' 个'+(mode==='month'?'月':'周')+' · 阅读 '+b.reduce(function(s,x){return s+x.reads;},0)+' / 在看 '+b.reduce(function(s,x){return s+x.zaikan;},0)+' / 分享 '+b.reduce(function(s,x){return s+x.shares;},0);}
 var PNN={mp:'公众号',kuaishou:'快手'};
 function renderPlatformBars(){
 var bp=(state.stats&&state.stats.by_platform)||{};
@@ -48,7 +79,7 @@ if(!pub)$('stat-tiles').innerHTML='<div class="empty"><div class="empty-icon" da
 else $('stat-tiles').innerHTML=[['已发布',pub],['待审',pendingCount()],['总阅读',st.total_reads||0],['平台数',state.platforms.length]].map(function(t){
 return '<div class="tile"><div class="tile-value">'+esc(t[1])+D+'<div class="tile-label">'+esc(t[0])+'</div></div>';}).join('');
 QA('[data-irange]').forEach(function(el){el.classList.toggle('is-active',+el.getAttribute('data-irange')===state.irange);});
-renderIdeaFunnel();renderTrend();renderPlatformBars();renderContrib();renderScoreDist();renderAiUsage();renderComposeAct();renderRadar();
+renderIdeaFunnel();renderTrend();renderStatsTrend();renderPlatformBars();renderContrib();renderScoreDist();renderAiUsage();renderComposeAct();renderRadar();
 }
 var RK={radar:'var(--viz-1)',kb:'var(--viz-5)',star:'var(--jade)'};
 function rr(c){var r=c.refs,s=+c.score||0,q=c.reasons||[],e=c.excluded,
@@ -136,6 +167,13 @@ if(!c)return;
 state.irange=+c.getAttribute('data-irange');
 history.replaceState(null,'','#insight'+(state.irange!==30?'?range='+state.irange:''));
 renderInsight();
+});
+var SR=$('stats-range');
+if(SR)SR.addEventListener('click',function(e){
+var c=e.target.closest('[data-srange]');
+if(!c)return;
+state.srange=c.getAttribute('data-srange');
+renderStatsTrend();
 });
 function radarHint(){toast('请运行 musespiral topic-radar --refresh，或等周一 08:20 自动生成',OK);}
 $('radar-refresh').addEventListener('click',radarHint);

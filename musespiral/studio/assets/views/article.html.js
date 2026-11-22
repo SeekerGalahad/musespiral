@@ -1,0 +1,114 @@
+document.getElementById('view-article').innerHTML=`
+<a class="back-link" href="#publish" id="back-link"><span data-icon="arrow-left"></span>返回发布中心</a>
+<div class="detail-head">
+<h1 class="detail-title" id="detail-title">加载中…</h1>
+<div class="detail-meta" id="detail-meta"></div>
+<button class="btn" id="mark-reviewed-btn" hidden><span data-icon="check"></span>标记已审</button>
+<button class="btn" id="tts-btn" title="把正文朗读成 MP3（edge-tts 微软免费端点，零 API key）">🔊 朗读</button>
+</div>
+<div class="tts-bar" id="tts-bar" hidden>
+<audio id="tts-audio" controls preload="none" aria-label="文章朗读音频"></audio>
+<span class="tts-note" id="tts-note"></span>
+<button class="btn btn-ghost" id="tts-close" type="button" aria-label="收起朗读栏">✕</button>
+</div>
+<div class="tabs" id="detail-tabs" role="tablist">
+<button class="tab is-active" data-tab="edit" role="tab"><span data-icon="edit"></span>编辑</button>
+<button class="tab" data-tab="variants" role="tab"><span data-icon="star"></span>平台适配</button>
+<button class="tab" data-tab="checks" role="tab"><span data-icon="check"></span>检查</button>
+<button class="tab" data-tab="preview" role="tab"><span data-icon="eye"></span>预览</button>
+<button class="tab" data-tab="review" role="tab"><span data-icon="file"></span>对照</button>
+<button class="tab" data-tab="versions" role="tab"><span data-icon="clock"></span>版本历史</button>
+<button class="tab" data-tab="actions" role="tab"><span data-icon="settings"></span>操作<span class="tab-gap" id="actions-gap" hidden>0</span></button>
+</div>
+<div class="tab-panel" id="panel-edit" data-panel="edit">
+<div class="edit-layout">
+<div class="ed-col">
+<div class="edit-stage">
+<pre id="edit-gutter"></pre>
+<div class="ed-stack" id="ed-stack">
+<pre id="edit-hl" aria-hidden="true"></pre>
+<textarea id="edit-area" wrap="off" spellcheck="false" aria-label="Markdown 正文编辑器"></textarea>
+<div class="annot-bubble" id="annot-bubble" hidden>
+<div class="ab-title"><span data-icon="comment"></span>添加批注 <span class="muted" id="ab-lines"></span></div>
+<input id="annot-input" class="input" placeholder="批注意见…" aria-label="批注内容">
+<div class="ab-row"><button class="btn" id="annot-cancel" type="button">取消</button><button class="btn btn-primary" id="annot-ok" type="button">添加批注</button></div>
+</div>
+</div>
+</div>
+<div class="ed-status">
+<span>字数 <b id="ed-chars">0</b></span>
+<span id="ed-saved">未保存</span>
+<span class="st-ai">AI 档案 <b id="ed-ai">…</b></span>
+<button class="btn btn-primary" id="edit-save-btn" style="margin-left:auto" title="⌘S / Ctrl+S"><span data-icon="check"></span>保存正文</button>
+</div>
+</div>
+<div class="pv-stage"><iframe id="live-frame" title="实时预览" sandbox="allow-same-origin"></iframe></div>
+<div class="annot-side" id="annot-side">
+<p class="action-title" id="annot-title">批注（0）</p>
+<div class="action-row" style="margin-bottom:10px">
+<button class="btn" id="edit-annotate-toggle">批注栏：开</button>
+<button class="btn" id="edit-annotate-ai"><span data-icon="edit"></span>按批注 AI 修改</button>
+</div>
+<div id="annot-list"></div>
+</div>
+</div>
+</div>
+<div class="tab-panel" id="panel-variants" data-panel="variants" hidden>
+<div class="vgrid" id="variant-grid"></div>
+<div style="margin-top:var(--space-md)"><button class="btn btn-primary" id="variants-batch-btn"><span data-icon="arrow-right"></span>四平台一键生成变体</button></div>
+</div>
+<div class="tab-panel" id="panel-checks" data-panel="checks" hidden>
+<div class="check-summary" id="check-summary"></div>
+<div class="check-list" id="check-list"></div>
+</div>
+<div class="tab-panel" id="panel-preview" data-panel="preview" hidden>
+<div class="preview-stage" id="preview-stage">
+<iframe class="preview-frame" id="preview-frame" title="渲染预览"></iframe>
+</div>
+<div class="empty" id="preview-empty" hidden>
+<div class="empty-icon" data-icon="eye"></div>
+<div class="empty-title">暂不可渲染</div>
+<div class="empty-text">解析或渲染失败，先运行 musespiral check 排查。</div>
+</div>
+</div>
+<div class="tab-panel" id="panel-review" data-panel="review" hidden>
+<div id="review-stage"></div>
+<div class="empty" id="review-empty" hidden>
+<div class="empty-icon" data-icon="file"></div>
+<div class="empty-title">无配对笔记</div>
+<div class="empty-text">没有配对原笔记。用 musespiral review 生成对照后刷新。</div>
+</div>
+</div>
+<div class="tab-panel" id="panel-versions" data-panel="versions" hidden>
+<div class="ver-bar">
+<label class="field">旧版 <select class="input" id="ver-a" aria-label="对比旧版"></select></label>
+<label class="field">新版 <select class="input" id="ver-b" aria-label="对比新版"></select></label>
+<button class="btn btn-primary" id="ver-diff-btn">对比</button>
+</div>
+<p class="action-hint" id="ver-note">版本池由每次保存自动留档（滚动保留 5 份，MUSESPIRAL_BAK_KEEP 可调）。选两版对比；diff 底部可按版恢复（恢复可再恢复）。</p>
+<div id="ver-stage"></div>
+</div>
+<div class="tab-panel" id="panel-actions" data-panel="actions" hidden>
+<div class="action-group"><h3 class="action-title">一键到物料</h3><button class="btn btn-primary" id="pipe-run">一键到物料</button><div id="pipe-progress"></div></div>
+<div class="action-group">
+<h3 class="action-title">生成平台变体</h3>
+<p class="action-hint">adapt · 同目录生成 &lt;stem&gt;.&lt;平台&gt;.md 变体；同名已存在拒绝覆盖。</p>
+<div class="action-buttons" id="adapt-buttons"></div>
+<button class="btn" id="batch-btn"><span data-icon="arrow-right"></span>四平台一键生成变体</button>
+</div>
+<div class="action-group">
+<h3 class="action-title">生成物料包</h3>
+<p class="action-hint">pack · 生成 README / payload / checks / cover 四件套。</p>
+<div class="action-row">
+<label class="field">平台 <select id="pack-platform"></select></label>
+<label class="field">变体 <select id="pack-variant"></select></label>
+<button class="btn" id="pack-btn">生成物料包</button>
+</div>
+</div>
+<div class="action-group">
+<h3 class="action-title">创建草稿</h3>
+<p class="action-hint">publish · 仅创建草稿，绝不提交发表；需已配置凭证与封面。</p>
+<button class="btn btn-primary" id="publish-btn"><span data-icon="plus"></span>创建草稿</button>
+</div>
+</div>
+`;

@@ -8,7 +8,7 @@
 旧路径 musespiral/token.py / musespiral/publisher.py / musespiral/analytics.py /
 musespiral/uploader.py 为兼容垫片（Phase C 收尾删除），消费方 import 零改动。
 """
-from .analytics import AnalyticsError, fetch_article_stats, sync_reads
+from .analytics import AnalyticsError, backfill_published_stats, fetch_article_stats, sync_reads
 from .publisher import PublishError, check_publish_status, create_draft, submit_publish
 from .token import TokenError, get_access_token
 from .uploader import ImageUploader, UploadError, WeChatHost
@@ -16,6 +16,7 @@ from .uploader import ImageUploader, UploadError, WeChatHost
 __all__ = [
     "AnalyticsError",
     "ImageUploader",
+    "backfill_published_stats",
     "PublishError",
     "TokenError",
     "UploadError",

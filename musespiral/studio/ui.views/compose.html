@@ -2,7 +2,7 @@
 <div class="amb amb-compose" aria-hidden="true"></div>
 <div class="view-head">
 <div><h1 class="view-title">创作工坊</h1><p class="view-sub" id="compose-sub">加载中…</p></div>
-<div class="action-row"><input id="cm-new-slug" class="input" placeholder="slug（英文短名）"><input id="cm-new-title" class="input" placeholder="标题（可空）"><button class="btn btn-primary" id="cm-new-btn"><span data-icon="plus"></span>建会话</button></div>
+<div class="action-row"><input id="cm-new-slug" class="input" placeholder="slug（英文短名）"><input id="cm-new-title" class="input" placeholder="标题（可空）"><button class="btn" id="cm-smart-btn">✨ 智能组稿</button><button class="btn btn-primary" id="cm-new-btn"><span data-icon="plus"></span>建会话</button></div>
 </div>
 <div class="chips" id="cm-sessions" style="margin-bottom:var(--space-md)"></div>
 <div class="empty" id="cm-empty" hidden>
@@ -31,6 +31,14 @@
 </div>
 <div class="cm-col action-group">
 <div id="cm-novel"></div>
+<details class="action-group" id="cm-rel" hidden>
+<summary class="health-sum">🕸 人物关系图 · 挂卡关系力导向</summary>
+<div id="cm-rel-view"></div>
+</details>
+<details class="action-group" id="cm-fore" hidden>
+<summary class="health-sum">📌 伏笔账本 · 埋设/推进/回收</summary>
+<div id="cm-fore-view"></div>
+</details>
 <h3 class="action-title">轮次</h3>
 <div class="chips" id="cm-rounds" style="margin-bottom:10px"></div>
 <div id="cm-diff"></div>
@@ -77,4 +85,22 @@
 </div>
 </div>
 <div class="modal-overlay" id="cv-pm" hidden><div class="modal"><h3 class="modal-title">存为我的模板</h3><div class="cv-col"><input class="input" id="cv-pid" placeholder="模板 id（kebab，如 my-cover）"><input class="input" id="cv-pl" placeholder="显示名（选填）"></div><div class="modal-actions"><button class="btn" id="cv-pm-x">取消</button><button class="btn btn-primary" id="cv-pm-ok">保存</button></div></div></div>
+<div class="modal-overlay" id="sc-modal" hidden><div class="modal sc-modal">
+<h3 class="modal-title">✨ 智能组稿</h3>
+<div class="sc-steps" id="sc-steps"><span class="sc-step">1 · 主题</span><span class="sc-step">2 · 素材</span><span class="sc-step">3 · 大纲与会话</span></div>
+<div class="sc-pane" id="sc-pane1">
+<textarea class="input set-area" id="sc-topic" rows="3" style="min-height:72px;font-family:var(--font-body)" placeholder="一句话描述想写什么，如「写一篇关于 Transformer 架构演进的科普」"></textarea>
+<p class="action-hint">描述越具体，搜到的素材越相关。确认后自动建会话并把选中素材全部入池。</p>
+</div>
+<div class="sc-pane" id="sc-pane2" hidden>
+<div class="action-row"><input class="input" id="sc-q" style="flex:1;min-width:120px" placeholder="手动追加搜索素材…"><button class="btn" id="sc-search-btn">搜索</button></div>
+<div class="action-row"><button class="btn" id="sc-all">全选</button><button class="btn" id="sc-none">取消全选</button><button class="btn" id="sc-sort">相似度排序</button><span class="muted" id="sc-count" style="align-self:center;font-size:12px"></span></div>
+<div class="sc-list" id="sc-list"></div>
+</div>
+<div class="sc-pane" id="sc-pane3" hidden>
+<p class="action-hint" id="sc-hint3"></p>
+<div id="sc-outline"></div>
+</div>
+<div class="modal-actions"><button class="btn" id="sc-back">← 上一步</button><button class="btn" id="sc-cancel">取消</button><button class="btn btn-primary" id="sc-next">下一步</button></div>
+</div></div>
 </section>

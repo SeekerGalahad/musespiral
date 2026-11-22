@@ -1273,9 +1273,12 @@ def test_articles_and_detail_carry_status_field(
 
 
 def test_ui_has_job_panel_status_badges_and_resend() -> None:
-    """壳+core.js+core.css：顶栏铃铛+角标+下拉、失败重发按钮、状态徽章、标记已审与 job 轮询。"""
+    """壳+core.js+core.css：顶栏铃铛+角标+下拉、失败重发按钮、状态徽章、标记已审与 job 轮询。
+    ARCH-1：标记已审/详情面骨架源在 ui.views/article.html（壳内为懒注入占位），
+    并入语料保持等价域。"""
     src = (_UI_HTML.read_text(encoding="utf-8") + "\n" + _CORE_JS.read_text(encoding="utf-8")
-           + "\n" + _CORE_CSS.read_text(encoding="utf-8"))
+           + "\n" + _CORE_CSS.read_text(encoding="utf-8")
+           + "\n" + (_UI_HTML.parent / "ui.views" / "article.html").read_text(encoding="utf-8"))
     for token in (
         "jobs-btn",       # 顶栏铃铛
         "jobs-badge",     # 进行中角标

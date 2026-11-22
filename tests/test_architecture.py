@@ -303,7 +303,7 @@ def test_prompt_overrides_dialect_free() -> None:
 
 
 # ── 后端重构轮（2026-11-16）：去重成果回归锁 + 契约端点全集对齐 ──
-# 依据=docs/项目方案/musespiral-API契约-2026-11-16.md §3.1/§3.2 与后端架构正典
+# 依据=docs/项目方案/mdpub-API契约-2026-11-16.md §3.1/§3.2 与后端架构正典
 # §四 P2/P3；锁死「单一权威实现」不因新代码回涨出第二份副本。
 
 
@@ -403,6 +403,11 @@ CONTRACT_GET_EXACT = {
     # diff（纯读双态；diff 复用 E-6 引擎；残包 200 available:false 不 400；
     # POST 零新增）。GET 46→47。
     "/api/article/pack",
+    # ARCH-5 新增（2026-11-22 语义基础设施，正典=《musespiral-极限架构与
+    # 功能扩展总规划-2026-11-21》§ARCH-5）：统一搜索读面——q +
+    # mode=keyword|semantic|hybrid（语义缺位自动降级为关键词+标签；
+    # FEAT-1 的后端数据面，UI 归 FEAT-1 批）。GET 47→48。
+    "/api/materials/search",
 }
 CONTRACT_POST_EXACT = {
     # §3.1 既有 27 条
@@ -523,6 +528,16 @@ CONTRACT_POST_EXACT = {
     # 扩展）；GET 面零新增（低置信筛选走既有 /api/materials confidence=low
     # 查询参数）。POST 72→73。
     "/api/materials/verify",
+    # ARCH-5 新增（2026-11-22 语义基础设施，正典=《musespiral-极限架构与
+    # 功能扩展总规划-2026-11-21》§ARCH-5）：素材向量索引全量重建（confirm
+    # 闸门；幂等重嵌 + 清理残留行；embedding 缺位 200 ok:false 安装引导）。
+    # POST 73→74。
+    "/api/materials/reindex",
+    # FEAT-2 新增（2026-11-22 智能组稿，正典=《musespiral-极限架构与功能扩展总规划
+    # -2026-11-21》§FEAT-2）：主题描述→语义搜素材→建会话+素材入池+AI 三段式大纲
+    # 统一端点（两形态载荷分流：无 material_ids=搜候选 / 有=建会话；confirm 闸门）。
+    # POST 74→75。
+    "/api/compose/smart-start",
 }
 
 

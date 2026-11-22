@@ -13,7 +13,7 @@ expand_section 强制执行。
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 STATUS_PENDING = "pending"
 STATUS_APPROVED = "approved"
@@ -31,9 +31,13 @@ class OutlineSection:
     direction: str = ""
     status: str = STATUS_PENDING
     summary: str = ""  # 展开后的脉络摘要（供后续节的展开 prompt 携带）
+    # FEAT-2 智能组稿：要点 + 引用素材 id（AI 大纲基于真实素材内容产出，非空泛）
+    # 新字段带默认值 + 只在非空时落键——存量 outline.json 零迁移零回归。
+    points: list[str] = field(default_factory=list)
+    material_ids: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        return {
+        out = {
             "id": self.id,
             "title": self.title,
             "target_chars": self.target_chars,
@@ -41,6 +45,11 @@ class OutlineSection:
             "status": self.status,
             "summary": self.summary,
         }
+        if self.points:
+            out["points"] = list(self.points)
+        if self.material_ids:
+            out["material_ids"] = list(self.material_ids)
+        return out
 
     @classmethod
     def from_dict(cls, data: dict) -> "OutlineSection":
@@ -51,6 +60,8 @@ class OutlineSection:
             direction=str(data.get("direction") or ""),
             status=str(data.get("status") or STATUS_PENDING),
             summary=str(data.get("summary") or ""),
+            points=[str(p) for p in (data.get("points") or []) if isinstance(p, str)],
+            material_ids=[str(m) for m in (data.get("material_ids") or []) if isinstance(m, str)],
         )
 
 

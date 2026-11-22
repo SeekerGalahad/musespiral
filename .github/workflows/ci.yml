@@ -1,0 +1,28 @@
+name: CI
+
+# ARCH-3 工程基础设施（2026-11-21）：push main + PR 触发；
+# 基本链 = 安装（含 test extra）→ 全量测试（带覆盖率）→ 许可证合规门。
+# 后续批次再加 build 确定性检查与类型门（渐进，见总规划 §ARCH-3）。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install package with test extra
+        run: pip install -e ".[test]"
+
+      - name: Test suite (with coverage)
+        run: pytest -q --cov=musespiral --cov-report=term
+
+      - name: License compliance gate
+        run: pytest tests/test_license_compliance.py

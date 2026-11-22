@@ -351,8 +351,10 @@ def test_contract_lock_and_frontend_structure(root: Path) -> None:
 
     assert "/api/compose/outline" in _ACTION_ROUTES
     assert "/api/compose/outline" in CONTRACT_POST_EXACT
-    # 前端：右栏 details#cm-outline + outline.js 独立装载（不塞 core.js）
-    shell = (Path(__file__).resolve().parent.parent / "musespiral" / "studio" / "ui.html").read_text(encoding="utf-8")
+    # 前端：右栏 details#cm-outline + outline.js 独立装载（不塞 core.js）；
+    # ARCH-1：compose 骨架源在 ui.views/compose.html（壳内为懒注入占位）
+    shell = (Path(__file__).resolve().parent.parent / "musespiral" / "studio"
+             / "ui.views" / "compose.html").read_text(encoding="utf-8")
     assert 'id="cm-outline"' in shell
     assert "cm-outline-gen" in shell and "cm-outline-list" in shell and "cm-outline-expand" in shell
     ol_js = (Path(__file__).resolve().parent.parent / "musespiral" / "studio" / "assets" / "outline.js").read_text(encoding="utf-8")

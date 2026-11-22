@@ -3,18 +3,6 @@ var p=m.payload||{},o=m.origin||{},t=p.text||(o&&o.title)||'';
 return String(t).replace(/\s+/g,' ').slice(0,120);
 }
 function hbytes(n){n=+n||0;if(n<1024)return n+' B';if(n<1048576)return(n/1024).toFixed(1)+' KB';return(n/1048576).toFixed(1)+' MB';}
-function hl(raw){
-var s=String(raw==null?'':raw);
-if(!state.mquery)return esc(s);
-var toks=(String(state.mquery).match(/"[^"]+"|\S+/g)||[]).map(function(t){return t.replace(/^"|"$/g,'').replace(/\*+$/,'');}).filter(Boolean);
-if(!toks.length)return esc(s);
-var re;
-try{re=new RegExp('('+toks.map(function(t){return t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}).join('|')+')','gi');}
-catch(err){return esc(s);}
-var out='',last=0,m=re.exec(s);
-while(m){out+=esc(s.slice(last,m.index))+'<mark>'+esc(m[0])+'</mark>';last=m.index+m[0].length;m=re.exec(s);}
-return out+esc(s.slice(last));
-}
 var MEMPTY_T=$('mat-empty-title').textContent,MEMPTY_X=$('mat-empty-text').textContent;
 function matRow(m){
 var s=m.score,t=s==null?-1:s,lv=t>=80?'hi':t>=60?'mid':'lo',b=m.score_breakdown||{},h='',g='',i,tri=m.triage||{},o=m.origin||{},p=m.payload||{},meta=p.meta||{},bk=meta.book,st=tri.starred?'取消收藏':'收藏',tg=tri.tags||[];
@@ -27,7 +15,7 @@ return '<details class="mat-row'+(state.mdens==='full'?' open':'')+'" data-mid="
 '<span class="mat-row-main"><span class="mat-row-title" data-mdrow="'+esc(m.id)+'">'+(tri.read?'':'<i class="unread-dot" title="未读"></i>')+hl(m.title||o.title||o.uri||m.id)+(m.drafted?' <span class="badge pass">已入队</span>'+Z:'')+(tri.enabled?'':' <span class="badge archived">已禁用</span>'+Z)+
 (bk&&!bk.synthesis&&bk.distilled===false?' <span class="badge warn" title="AI 提炼失败，此条为原始文本；可在详情重新提炼">未提炼</span>'+Z:'')+'</span>'+
 '<span class="mat-row-prev">'+hl(matPreview(m)||o.uri||m.id)+'</span>'+
-'<span class="mat-row-meta"><span class="src-badge">'+esc(o.source_id||'—')+'</span>'+
+'<span class="mat-row-meta"><span class="src-badge">'+esc(o.source_id||'—')+'</span>'+simPct(m.similarity)+
 (bk?'<a class="bk-line" href="#books?search='+encodeURIComponent(bk.name||'')+'" title="书籍视图：'+esc(bk.name||'')+(bk.chapter_index?' 第 '+bk.chapter_index+' 章':'')+'">《'+esc(String(bk.name||'').slice(0,20))+'》'+(bk.chapter_index?'第 '+bk.chapter_index+' 章':'')+'</a>':'')+
 (s==null?'':'<span class="dc-bar '+lv+'" title="评分 '+s+'"><i style="width:'+t+'%"></i>'+Z)+
 licBadge(m)+
@@ -68,7 +56,8 @@ else if(tab==='unread')L=L.filter(function(m){return !(m.triage||{}).read;});
 else if(tab==='hiunread')L=L.filter(function(m){return !(m.triage||{}).read&&(m.score||0)>=80;});
 else if(tab==='derived')L=L.filter(function(m){return m.type==='derived';});
 else if(tab==='revisit')L=L.filter(function(m){return (m.triage||{}).starred;}).sort(function(a,b){return String(b.fetched_at||'').localeCompare(String(a.fetched_at||''));});
-if(state.msort==='time')L.sort(function(a,b){return String(b.fetched_at||'').localeCompare(String(a.fetched_at||''));});
+if(state.msort==='relevance')L.sort(function(a,b){return (b.similarity||b.score||0)-(a.similarity||a.score||0);});
+else if(state.msort==='time')L.sort(function(a,b){return String(b.fetched_at||'').localeCompare(String(a.fetched_at||''));});
 else if(state.msort==='title')L.sort(function(a,b){return String(a.title||a.id).localeCompare(String(b.title||b.id),'zh');});
 return L;
 }
@@ -96,14 +85,6 @@ $('mat-coll-exit').hidden=!state.mcoll;
 var cn='';(state.colls||[]).forEach(function(c){if(c.id===state.mcoll)cn=c.name;});
 $('mat-sub').textContent=(state.mquery?'命中 '+(state.mqTotal>state.mats.length&&state.mats.length>=500?'前 '+state.mats.length+' / 共 '+state.mqTotal:state.mqTotal)+' 条':(state.mcoll?'集合「'+(cn||state.mcoll)+'」'+L.length+' 条':'共 '+L.length+' 条素材'))+' · 收藏 '+sn+' · 未读 '+ur+' · 已生成骨架 '+df;
 if(!$('mat-drawer').hidden&&state.mdrawer)paintMatDrawer();
-}
-function lineageHtml(m){
-var refs=m.references||[];
-if(!refs.length)return '<p class="action-hint">血统：原始素材（provenance 空）</p>';
-return '<div class="lineage-chain"><span class="lineage-node self">'+I(MTYI[m.type]||'tag')+esc(m.id)+'</span>'+refs.map(function(r){
-var nid=esc(r.from_id);
-return '<span class="lineage-op">'+esc(r.op||'ref')+Z+(r.deleted?'<span class="badge fail" title="原料已删（墓碑），链接不跳转">素材已删</span>':'<a class="lineage-node" href="#material?m='+nid+'" title="跳到原料详情">'+nid+'</a>');
-}).join('')+'</div>';
 }
 async function openMatDrawer(id){
 try{
@@ -136,6 +117,7 @@ h+
 (meta.book?'<p class="drawer-meta bk-line">来源 <a href="#books?search='+encodeURIComponent(meta.book.name||'')+'">《'+esc(meta.book.name||'')+'》</a> · '+esc(meta.book.author||'')+(meta.book.chapter_index?' · 第 '+meta.book.chapter_index+' 章 '+esc(meta.book.chapter_title||''):'')+(meta.book.synthesis?' · 全书综述（'+(meta.book.chapters||0)+' 章）':'')+'</p>':'')+
 '<div class="action-title" style="font-size:13px">血统链</div>'+lineageHtml(m)+
 (casc.length?'<p class="action-hint">被 '+casc.length+' 条衍生素材引用（删除连坐面）</p>':'')+
+matRelatedHtml(d.related)+
 tsugBox(m)+
 (meta.original_ref?'<div class="action-row"><button class="btn btn-ghost" data-morig="1" style="font-size:var(--fs-caption)">原始章节</button></div>':'')+
 '</div>'+
@@ -378,9 +360,10 @@ $('mat-search').value='';$('mat-search-x').hidden=true;fillMatType();
 syncMatHash();renderCollRail();renderMaterials();loadMaterials().then(renderMaterials);
 });
 function matActsClick(e){
-var el=e.target.closest('[data-mstar],[data-mdraft],[data-mread],[data-moff],[data-mai],[data-mdel],[data-mdetail],[data-mdrow],[data-mlight],[data-mcolladd],[data-mtagdel],[data-mtagf],[data-mmore],[data-tsg],[data-tso],[data-miit],[data-morig]');
+var el=e.target.closest('[data-mrelated],[data-mstar],[data-mdraft],[data-mread],[data-moff],[data-mai],[data-mdel],[data-mdetail],[data-mdrow],[data-mlight],[data-mcolladd],[data-mtagdel],[data-mtagf],[data-mmore],[data-tsg],[data-tso],[data-miit],[data-morig]');
 if(!el)return;
 e.preventDefault();
+if(el.hasAttribute('data-mrelated'))return openMatDrawer(el.getAttribute('data-mrelated'));
 if(el.hasAttribute('data-morig'))return bkOrigToggle();
 if(el.hasAttribute('data-miit'))return window.__mdpubMatIter&&__mdpubMatIter.tab(el.getAttribute('data-miit')==='1',state.mdrawer);
 if(el.hasAttribute('data-tsg')){
@@ -430,7 +413,9 @@ var id=row.getAttribute('data-mid');
 ctxShow(e,matMenu(id));
 });
 var sDb=null;
-function matRefetch(){syncMatHash();renderCollRail();return loadMaterials().then(renderMaterials);}
+function matRefetch(){syncMatHash();renderCollRail();
+if(state.mquery)return matSearch(state.mquery);
+return loadMaterials().then(renderMaterials);}
 $('mat-search').addEventListener('input',function(){
 state.mquery=this.value.trim();$('mat-search-x').hidden=!this.value;
 if(sDb)clearTimeout(sDb);sDb=setTimeout(matRefetch,300);
@@ -438,9 +423,14 @@ if(sDb)clearTimeout(sDb);sDb=setTimeout(matRefetch,300);
 $('mat-search').addEventListener('keydown',function(e){
 if(e.isComposing||e.keyCode===229)return;
 if(e.key==='Escape'){e.stopPropagation();
-if(this.value){this.value='';state.mquery='';$('mat-search-x').hidden=true;matRefetch();}else this.blur();}
+if(this.value){this.value='';state.mquery='';$('mat-search-x').hidden=true;hideMatHint();matRefetch();}else this.blur();}
 });
-on2('mat-search-x',function(){$('mat-search').value='';state.mquery='';this.hidden=true;matRefetch();$('mat-search').focus();});
+on2('mat-search-x',function(){$('mat-search').value='';state.mquery='';this.hidden=true;hideMatHint();matRefetch();$('mat-search').focus();});
+var mm=$('mat-modes');if(mm)mm.addEventListener('click',function(e){
+var b=e.target.closest('[data-searchmode]');if(!b)return;
+state.searchMode=b.getAttribute('data-searchmode');syncMatModes();hideMatHint();
+if(state.mquery)matSearch(state.mquery);
+});
 $('mat-type').addEventListener('change',function(){state.mtype=this.value;syncMatHash();renderMaterials();});
 $('mat-sort').addEventListener('change',function(){state.msort=this.value;renderMaterials();});
 on2('mat-ingest-btn',function(){matIngest('');});
@@ -507,7 +497,7 @@ if(!m)return lbClose();
 var im=$('lb-img'),meta=(m.payload||{}).meta||{};
 im.classList.remove('lb-on');
 im.onload=function(){im.classList.add('lb-on');};
-im.onerror=function(){im.classList.remove('lb-on');$('lb-bar').innerHTML='<span style="color:#ff7b89">图片缺失或已删（←→ 仍可导航）</span>';};
+im.onerror=function(){im.classList.remove('lb-on');$('lb-bar').innerHTML='<span style="color:var(--crimson)">图片缺失或已删（←→ 仍可导航）</span>';};
 im.src='/api/materials/file?id='+encodeURIComponent(id)+'&variant=full';
 $('lb-bar').innerHTML=esc(m.title||id)+(meta.width?' · '+meta.width+'×'+meta.height:'')+(meta.bytes?' · '+hbytes(meta.bytes):'')+' · '+licBadge(m)+' · 标签 '+esc(((m.triage||{}).tags||[]).join('、')||'无');
 }

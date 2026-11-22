@@ -77,8 +77,11 @@ body:JSON.stringify({slug:s,summary:String(text||''),confirm:true})});
 await load();}
 catch(e){alert('摘要保存失败：'+e.message);}
 finally{if(btn)btn.disabled=false;}}
+var rsBound=false; // ARCH-1 幂等门（骨架懒注入后 __onViewHtml 重调 boot；防双绑）
 function boot(){
+if(rsBound)return;
 if(!el('cm-rolling'))return;
+rsBound=true;
 el('cm-rolling-refresh').addEventListener('click',function(){refresh(this);});
 el('cm-rolling-edit').addEventListener('click',edit);
 window.addEventListener('hashchange',load);
@@ -87,5 +90,5 @@ if(r&&window.MutationObserver)new MutationObserver(load).observe(r,{childList:tr
 load();}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);
 else boot();
-window.__mdpubRolling={slug:slug,esc:esc,paint:paint};
+window.__mdpubRolling={slug:slug,esc:esc,paint:paint,boot:boot};
 })();

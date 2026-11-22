@@ -47,6 +47,14 @@ def _kind_or_default(value: object) -> str:
     text = str(value or "").strip()
     return text if text in SESSION_KINDS else KIND_ARTICLE
 
+
+def _parse_foreshadowing(value: object) -> list[dict]:
+    """foreshadowing 宽容归一（FEAT-4：存量无键 → []；脏条目跳过——归
+    core.composition.novel.parse_foreshadowing 单一持有者，本模块零第二套规则）。"""
+    from .novel import parse_foreshadowing
+
+    return parse_foreshadowing(value if isinstance(value, list) else None)
+
 # 章节标题行（二级；与 discovery/scanner 的 sections 口径一致——`## `）
 _SECTION_RE = re.compile(r"^(#{1,2})[ \t]+(.+?)[ \t]*$")
 
@@ -126,6 +134,10 @@ class CompositionSession:
     # E-5 人物卡挂载（§3.6「创作工坊会话可挂多张人物卡」）：存素材 id 列表
     # （真值在素材库 sub_type=character 行——本会话只记「挂了哪几张」）。
     characters: list[str] = field(default_factory=list)
+    # FEAT-4 伏笔账本（session.foreshadowing）：list[{id, note, chapter, status}]
+    # ——status ∈ planted/escalated/payoff（core.composition.novel 三态）。
+    # 存量 session.json 无该键 → []（零迁移零回归，from_meta 走 parse_foreshadowing）。
+    foreshadowing: list[dict] = field(default_factory=list)
 
     def to_meta(self) -> dict:
         """session.json 形态（draft 不入——draft.md 是真稿唯一表达）。"""
@@ -141,6 +153,7 @@ class CompositionSession:
             "novel_summary": self.novel_summary,
             "novel_summary_chapters": self.novel_summary_chapters,
             "characters": list(self.characters),
+            "foreshadowing": [dict(x) for x in self.foreshadowing],
         }
 
     @classmethod
@@ -165,6 +178,7 @@ class CompositionSession:
             novel_summary=str(meta.get("novel_summary") or ""),
             novel_summary_chapters=int(meta.get("novel_summary_chapters") or 0),
             characters=[str(x) for x in (meta.get("characters") or []) if isinstance(x, str)],
+            foreshadowing=_parse_foreshadowing(meta.get("foreshadowing")),
         )
 
     def taken_ids(self) -> set[str]:

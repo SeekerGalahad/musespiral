@@ -512,9 +512,19 @@ def create_run(
     built = build_run(plan_name, material_ids, params)
     ai_cfg = built.get("ai_cfg") or {}
     _ensure_ai_ready(built["plan"], ai_cfg)
-    run_id = _make_run_id(built["plan"]["plan"])
-    directory = run_dir(run_id)
-    directory.mkdir(parents=True, exist_ok=False)  # 撞名（同秒同 rand4）即 500 级异常
+    directory = None
+    for _attempt in range(3):
+        # 同秒同 rand4 撞名原为 500 级 FileExistsError（comment 判例 2026-11-22：
+        # 全量套件实测 test_prune_keeps_lru 同秒建 4 run 撞名 1/3 轮红）——
+        # 换新 rand4 重试；run_id 形态与响应契约零变化。
+        run_id = _make_run_id(built["plan"]["plan"])
+        directory = run_dir(run_id)
+        try:
+            directory.mkdir(parents=True, exist_ok=False)
+            break
+        except FileExistsError:
+            if _attempt == 2:
+                raise
     _write_json(
         directory / RUN_FILE,
         _run_meta(

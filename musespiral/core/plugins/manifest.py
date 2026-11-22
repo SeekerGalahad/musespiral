@@ -16,6 +16,13 @@ extra="forbid" 是有意的：manifest 拼错键（permissins）静默忽略是�
 runtime + 可选六键 name/description/requires/permissions/config_schema/
 uses_ai，恰好此 12 键（其中 uses_ai 的**语义**出自 §7.3，键位归 §4.2.1）。
 
+控制流 kind（ARCH-4 §一，2026-11-22）：``kind`` 枚举增 ``control``——
+switch 类插件（输出 ``route`` 供引擎选分支）的契约标记。规则收在
+parse_manifest 一处：kind=control ⇒ outputs 必须含 ``route``（string 型）
+——引擎按该端口取路由值选 branch，缺声明即安装期红而非运行时哑。
+loop 节点不经插件（引擎原生，见 services/pipeline/plan），无 control
+manifest 形态。
+
 端口类型表（校验要求 3）= 契约 10 型（types.CONTRACT_TYPES）∪ ext/ 前缀
 ∪ 标量基元 SCALAR_PORT_TYPES。标量基元必须收录：正典 §4.2 官方示例自身
 就用 string/number/string[]（language/hotwords/duration_s）——它们是
@@ -119,7 +126,7 @@ class Plugin(BaseModel):
 
     id: str
     version: str
-    kind: Literal["source", "process", "sink"]
+    kind: Literal["source", "process", "sink", "control"]
     name: I18nText | None = None
     description: I18nText | None = None
     inputs: dict[str, Port]  # §4.2 必需键——无默认，缺键即红（可显式传 {} 表无端口）
@@ -167,6 +174,22 @@ def _permission_errors(perms: list[str]) -> list[str]:
     ]
 
 
+def _control_kind_errors(plugin: Plugin) -> list[str]:
+    """control kind 契约规则（ARCH-4）：必须声明 route 输出（string 型）。
+
+    引擎按 ``outputs.route`` 的值选 branch（services/pipeline/engine），
+    缺声明会在运行期才哑——收到安装期红。非 control kind 不适用本规则。
+    """
+    if plugin.kind != "control":
+        return []
+    port = plugin.outputs.get("route")
+    if port is None:
+        return ["kind=control 的插件必须声明输出端口 route（string，引擎据此选分支）"]
+    if port.type != "string":
+        return [f"kind=control 的 route 输出端口须为 string 型，实为 {port.type!r}"]
+    return []
+
+
 def parse_manifest(data: Any) -> tuple[Plugin | None, list[str]]:
     """解析并校验一份 manifest dict → (Plugin | None, errors)。
 
@@ -191,6 +214,7 @@ def parse_manifest(data: Any) -> tuple[Plugin | None, list[str]]:
         + _port_type_errors("outputs", plugin.outputs)
         + _runtime_entry_errors(plugin)
         + _permission_errors(plugin.permissions)
+        + _control_kind_errors(plugin)
     )
     if errors:
         return None, errors
@@ -224,7 +248,9 @@ def validate_pipeline_contract(nodes: list[dict[str, Any]]) -> list[str]:
       1. 节点非空、id 非空且唯一（workspace 按 node_id 存取，§5.2——
          重复 id 会让产物互相覆盖）；
       2. kind 位置：source 只能开头、sink 只能结尾（§4.2「三态决定
-         它在流水线里的位置」）；
+         它在流水线里的位置」）；control（ARCH-4 switch 类）无位置约束
+         ——路由节点可出现在任意中间位置，其分支子链的位置规则由
+         plan_pipeline 按链递归校验（本函数吃展平链）；
       3. 供给（正典 §3.2「outputs ∩ inputs 非空」的逐端口收紧 + 传递
          化）：每个 process/sink 节点的**每个必需输入端口**，须有任一
          更早节点存在兼容类型（types_compatible）的输出端口。为什么比

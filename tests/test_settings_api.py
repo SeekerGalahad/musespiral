@@ -112,9 +112,11 @@ def test_settings_get_ai_domain_shape(server) -> None:
     # G-T4 滚动摘要批（2026-11-19）：slots 四槽 → 五槽（增 {{rolling}}，设计 §五）
     # E-5 小说模式批（2026-11-19）：五槽 → 七槽（增 {{novel}}/{{characters}}，
     # 评审 §3.6 前情提要 + 人物卡；空则整节缺席、缺槽回补仍注入）
+    # FEAT-4 小说双件套批（2026-11-22）：七槽 → 八槽（增 {{foreshadowing}} 未
+    # 回收伏笔清单，session.foreshadowing 的 planted/escalated 条目）
     assert set(pr["slots"]) == {
         "{{style}}", "{{sources}}", "{{novel}}", "{{characters}}",
-        "{{rolling}}", "{{draft}}", "{{decisions}}"}
+        "{{foreshadowing}}", "{{rolling}}", "{{draft}}", "{{decisions}}"}
 
 
 def test_settings_get_kb_root_txt_fallback(server, kb, tmp_path) -> None:

@@ -1,8 +1,8 @@
 """compose 包：prompt（prompt 组装——插槽序、_fill_slots、各 block 渲染）。
 
 R-1 六簇拆分的 prompt 簇：任务底座模板（prompts.d 覆盖级联）、固定插槽序
-（style → sources → novel → characters → rolling → draft → decisions）、
-单遍插槽填充、素材节选预算与缺槽回补。
+（style → sources → novel → characters → foreshadowing → rolling → draft →
+decisions）、单遍插槽填充、素材节选预算与缺槽回补。
 """
 from __future__ import annotations
 
@@ -23,6 +23,8 @@ from ...core.composition import (
 from ...core.discovery import scanner
 from ...infra.ai.habits_inject import load_style_samples, style_block
 from .characters import _CHARACTERS_HEADER, _session_characters, characters_block
+from .foreshadowing import FORESHADOWING_HEADER as _FORESHADOWING_HEADER
+from .foreshadowing import foreshadowing_block
 from .summary import _NOVEL_HEADER, _ROLLING_HEADER, novel_block, rolling_block
 
 # prompts.d 覆盖级联（F47 契约）：读侧统一走 infra/ai/prompts.load_override
@@ -48,6 +50,8 @@ DEFAULT_TEMPLATE = """你是资深公众号作者，正在基于素材创作/迭
 {{novel}}
 
 {{characters}}
+
+{{foreshadowing}}
 
 {{rolling}}
 
@@ -94,12 +98,13 @@ def _format_decisions(round_: Round) -> str:
     return "\n".join(lines) if lines else _EMPTY_DECISIONS
 
 
-_SLOT_ORDER = ("style", "sources", "novel", "characters", "rolling", "draft", "decisions")
+_SLOT_ORDER = ("style", "sources", "novel", "characters", "foreshadowing", "rolling", "draft", "decisions")
 _SLOT_HEADERS = {
     "style": "【写作风格】",
     "sources": "【素材节选】",
     "novel": _NOVEL_HEADER,
     "characters": _CHARACTERS_HEADER,
+    "foreshadowing": _FORESHADOWING_HEADER,
     "rolling": _ROLLING_HEADER,
     "draft": "【当前真稿】",
     "decisions": "【上一轮人工裁决】",
@@ -139,6 +144,8 @@ def build_prompt(session: CompositionSession, *, template: str | None = None) ->
     小说模式侧（E-5 §3.6）：{{novel}} = 前情提要整节、{{characters}} = 挂卡
     人物卡渲染行——同款「空则整节缺席」；两者与 rolling 并存互不覆盖
     （正典要求两摘要可并存：rolling 记近期脉络、novel 记此前各章）。
+    伏笔侧（FEAT-4）：{{foreshadowing}} = 未回收伏笔清单（planted/escalated）
+    ——已回收（payoff）不进（AI 只需知道「还有什么没收」）；空账本整节缺席。
     """
     tpl = template if template is not None else load_task_template()
     sources_payload: list[dict] = []
@@ -182,6 +189,8 @@ def build_prompt(session: CompositionSession, *, template: str | None = None) ->
         # E-5（§3.6）：前情提要与人物卡同款「空则整节缺席」
         "novel": novel_block(session.novel_summary) or None,
         "characters": characters_block(_session_characters(session)) or None,
+        # FEAT-4 伏笔账本：未回收清单注入（空账本/全回收 → 整节缺席）
+        "foreshadowing": foreshadowing_block(session.foreshadowing) or None,
         # 空摘要 → None：令牌位清空且不回补（不注入「无摘要」占位）
         "rolling": rolling_block(session.rolling_summary) or None,
         "draft": draft_text,

@@ -23,8 +23,14 @@ developers.weixin.qq.com「数据统计·发表内容发表详细数据」）：
   2. 字段：新接口为「人数」口径（read_user/share_user/like_user 拇指赞），
      URL 键为 content_url——回填按「旧字段名优先、新字段名兜底」双读
      （int_page_read_count/read_user 等），任一缺失一律 0 兜底不虚报；
-     likes 不计 zaikan_user（在看，另一口径，如实区分）。真机首跑（总账
-     ④b）后按实测形态收敛。
+     likes 不计 zaikan_user（在看，另一口径，如实区分——FEAT-3 起在看单列
+     进 stats.zaikan，不混入 likes）。真机首跑（总账④b）后按实测形态收敛。
+
+FEAT-3（2026-11-22）数据回流自动化：
+  - 行内新增 stats 子对象（reads/shares/likes/zaikan/date，含在看），与
+    F17 顶层 reads/shares/likes 并存（旧读侧零改动）；
+  - backfill_published_stats 在 submit 成功后即时回填该篇 stats——best-effort
+    不抛错，失败仅返回 ok=False + 可读 reason，绝不阻塞已完成的发表。
 
 Phase C 自顶层 musespiral/analytics.py 迁入（正典 §八 Phase C），行为零变更——
 相对导入层级调整（config 三层、token 同包）+ 发布日志路径改经
@@ -180,6 +186,54 @@ def _first_int(row: dict[str, Any], *keys: str) -> int:
     return 0
 
 
+def _latest_stats_by_url(
+    begin: str, end: str, account: str | None
+) -> tuple[dict[str, dict[str, Any]], int, int]:
+    """在 [begin, end] 逐日 1 天窗拉取统计，返回每个 url 最新一天的原始行。
+
+    返回 (latest_by_url, windows, fetched)。先拉全量再返回——任何失败抛
+    AnalyticsError，调用方据此保证不落半写文件（红线，见 sync_reads docstring）。
+    """
+    try:
+        token = get_access_token(account)
+    except TokenError as e:
+        raise AnalyticsError(str(e)) from e
+
+    cur = date.fromisoformat(begin)
+    last = date.fromisoformat(end)
+    fetched: list[dict[str, Any]] = []
+    windows = 0
+    while cur <= last:
+        w_end = min(cur + timedelta(days=_MAX_WINDOW_DAYS - 1), last)
+        fetched.extend(fetch_article_stats(token, str(cur), str(w_end)))
+        windows += 1
+        cur = w_end + timedelta(days=1)
+
+    # getarticletotaldetail 是按日累计口径（stat_date 数据 = [发表日-统计日]
+    # 期间新产生数据总和，官方文档）：同一 url 取最新一天为当前值
+    latest_by_url: dict[str, dict[str, Any]] = {}
+    for row in fetched:
+        url = str(row.get("url") or row.get("content_url") or "")  # F41 双读：旧 url / 新 content_url
+        if not url:
+            continue
+        kept = latest_by_url.get(url)
+        if kept is None or str(row.get("date") or "") >= str(kept.get("date") or ""):
+            latest_by_url[url] = row
+    return latest_by_url, windows, len(fetched)
+
+
+def _stats_from_row(row: dict[str, Any]) -> dict[str, Any]:
+    """把摊平后的接口行转成日志 stats 子对象（FEAT-3，含在看；0 兜底不虚报）。"""
+    date_val = str(row.get("date") or "")
+    return {
+        "reads": _first_int(row, "int_page_read_count", "read_user"),
+        "shares": _first_int(row, "share_count", "share_user"),
+        "likes": _first_int(row, "like_count", "like_user"),
+        "zaikan": _first_int(row, "zaikan_user"),
+        "date": date_val,
+    }
+
+
 def sync_reads(log_path: str | Path | None = None, account: str | None = None) -> dict[str, int]:
     """把微信图文统计回填进 publish_log 的 reads/shares/likes（F17 反馈环）。
 
@@ -230,33 +284,11 @@ def sync_reads(log_path: str | Path | None = None, account: str | None = None) -
         return result
     result["candidates"] = len(candidates)
 
-    try:
-        token = get_access_token(account)
-    except TokenError as e:
-        raise AnalyticsError(str(e)) from e
-
     # 先拉全量再落盘（红线：拉取失败不落半写文件）；逐日 1 天窗（官方契约）
     days = sorted({day for _, _, day in candidates})
-    cur = date.fromisoformat(days[0])
-    end = date.fromisoformat(days[-1])
-    fetched: list[dict[str, Any]] = []
-    while cur <= end:
-        w_end = min(cur + timedelta(days=_MAX_WINDOW_DAYS - 1), end)
-        fetched.extend(fetch_article_stats(token, str(cur), str(w_end)))
-        result["windows"] += 1
-        cur = w_end + timedelta(days=1)
-    result["fetched"] = len(fetched)
-
-    # getarticletotaldetail 是按日累计口径（stat_date 数据 = [发表日-统计日]
-    # 期间新产生数据总和，官方文档）：同一 url 取最新一天为当前值
-    latest_by_url: dict[str, dict[str, Any]] = {}
-    for row in fetched:
-        url = str(row.get("url") or row.get("content_url") or "")  # F41 双读：旧 url / 新 content_url
-        if not url:
-            continue
-        kept = latest_by_url.get(url)
-        if kept is None or str(row.get("date") or "") >= str(kept.get("date") or ""):
-            latest_by_url[url] = row
+    latest_by_url, windows, fetched_n = _latest_stats_by_url(days[0], days[-1], account)
+    result["windows"] = windows
+    result["fetched"] = fetched_n
 
     for i, obj, _day in candidates:
         row = latest_by_url.get(str(obj.get("article_url")))
@@ -267,9 +299,107 @@ def sync_reads(log_path: str | Path | None = None, account: str | None = None) -
         new["reads"] = _first_int(row, "int_page_read_count", "read_user")
         new["shares"] = _first_int(row, "share_count", "share_user")
         new["likes"] = _first_int(row, "like_count", "like_user")
+        # FEAT-3：行内 stats 子对象（含在看 zaikan + 统计日期），与顶层三键并存。
+        # 顶层 reads/shares/likes 保持不变——旧读侧（summarize/CLI/仪表盘）零改动。
+        new["stats"] = _stats_from_row(row)
         if new != obj:
             result["updated"] += 1
             lines[i] = json.dumps(new, ensure_ascii=False).encode("utf-8") + line_tail(lines[i])
     if result["updated"]:
         atomic_write_bytes(path, b"".join(lines))
     return result
+
+
+def backfill_published_stats(
+    article_url: str,
+    *,
+    log_path: str | Path | None = None,
+    account: str | None = None,
+    published_day: str | None = None,
+    echo=None,
+) -> dict[str, Any]:
+    """发表后即时回填该篇文章的 stats（FEAT-3 数据回流，best-effort）。
+
+    给已发表文章的 article_url，从发表日（含）到昨天逐日 1 天窗拉取微信统计
+    （官方契约：每篇仅统计发表日起 30 天内、end_date 最大昨日、数据存储起始
+    2025-11-01），取最新一天的累计值，对 publish_log 中 article_url 匹配的
+    action=publish 行回填行内 stats（含在看）与顶层 reads/shares/likes。
+
+    设计取舍：**best-effort 不抛错**——发表是不可撤回动作，统计回填失败不应
+    阻塞/回滚已完成的发表；任何 AnalyticsError/异常都收敛为 {ok: False,
+    reason: 可读消息}。返回 {ok, url, matched, reads, shares, likes, zaikan,
+    date, reason}；未匹配/无数据 ok=False reason 说明，不改写任何文件。
+    echo 可传 click.echo：拉取前输出一行进度提示（CLI 路径），缺省静默。
+
+    时间窗：published_day 缺省取今天；下限取 max(published_day, 2025-11-01)，
+    上限取 min(今天, published_day+29)（30 天口径），再与「最大昨日」取交集。
+    """
+    out: dict[str, Any] = {
+        "ok": False, "url": article_url, "matched": 0,
+        "reads": 0, "shares": 0, "likes": 0, "zaikan": 0, "date": "", "reason": "",
+    }
+    if not article_url:
+        out["reason"] = "无文章链接，跳过数据回填"
+        return out
+    say = echo or (lambda *a, **k: None)
+    say("   正在拉取文章数据（阅读/在看/分享）...")
+    today = date.today()
+    try:
+        pub = date.fromisoformat(published_day) if published_day else today
+    except ValueError:
+        pub = today
+
+    path = Path(log_path) if log_path is not None else default_log_path()
+    if not path.exists():
+        out["reason"] = "发布日志不存在"
+        return out
+    try:
+        lines = path.read_bytes().splitlines(keepends=True)
+        candidates: list[tuple[int, dict[str, Any], str]] = []
+        for i, line in enumerate(lines):
+            try:
+                obj = json.loads(line.decode("utf-8").strip())
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+            if not isinstance(obj, dict) or obj.get("action") != "publish":
+                continue
+            if str(obj.get("article_url")) != article_url:
+                continue
+            day = str(obj.get("ts", ""))[:10]
+            if not _DATE_RE.match(day):
+                day = str(pub)
+            candidates.append((i, obj, day))
+        if not candidates:
+            out["reason"] = "发布日志无该文章的发表记录"
+            return out
+        # 用真实发表日期（日志 ts）作窗口起点，published_day 仅兜底
+        days = [day for _, _, day in candidates]
+        win_first = max(date.fromisoformat(min(days)), date(2025, 11, 1))
+        # 发表当日即试拉一次（数据次日才出，多半空）——「发布后自动调 API」动作
+        # 确实发生；末端与「最大昨日」取交集，低于 30 天上限则按实际日历天收口。
+        win_last = min(today - timedelta(days=1), win_first + timedelta(days=29))
+        if win_last < win_first:
+            win_last = win_first  # 至少打一窗，空数据由下方 row is None 收敛
+        latest_by_url, _, _ = _latest_stats_by_url(str(win_first), str(win_last), account)
+        row = latest_by_url.get(article_url)
+        if row is None:
+            out["reason"] = "微信统计接口尚无该文章数据（可能未过 30 天窗口或次日才更新）"
+            return out
+        stats = _stats_from_row(row)
+        changed = 0
+        for i, obj, _ in candidates:
+            new = dict(obj)
+            new["stats"] = stats
+            new["reads"] = stats["reads"]
+            new["shares"] = stats["shares"]
+            new["likes"] = stats["likes"]
+            if new != obj:
+                changed += 1
+                lines[i] = json.dumps(new, ensure_ascii=False).encode("utf-8") + line_tail(lines[i])
+        if changed:
+            atomic_write_bytes(path, b"".join(lines))
+        out.update({"ok": True, "matched": changed, **stats})
+        return out
+    except (AnalyticsError, OSError, ValueError) as e:
+        out["reason"] = f"数据回填失败: {e}"
+        return out

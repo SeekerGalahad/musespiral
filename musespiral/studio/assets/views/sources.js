@@ -134,6 +134,7 @@ await Promise.all([refreshSrcData(),loadMaterials(),refreshJobs()]);
 renderSources();
 },repaint:async function(){await loadMaterials();renderSources();}};
 function bindSources(){
+$('src-empty-add').addEventListener('click',sfOpen);
 $('src-rows').addEventListener('click',function(e){
 var v=e.target.closest('[data-srcverify]');
 if(v){srcVerify(v.getAttribute('data-srcverify'));return;}

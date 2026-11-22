@@ -1,0 +1,42 @@
+# ARCH-3 代码规范门（2026-11-21，正典=docs/项目方案/musespiral-极限架构与功能扩展总规划-2026-11-21.md §ARCH-3）
+# 首次运行会联网拉取各 hook 仓库安装独立环境；手动全量：pre-commit run --all-files
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.min\.(js|css)$   # 压缩的第三方 vendor 资源不重排（26.10.1 全量跑实测会误改）
+      - id: end-of-file-fixer
+        exclude: \.min\.(js|css)$
+
+  - repo: https://github.com/psf/black
+    rev: 26.10.1
+    hooks:
+      - id: black
+        args: ["--line-length", "100"]
+
+  - repo: https://github.com/PyCQA/isort
+    rev: 9.0.2
+    hooks:
+      - id: isort
+        args: ["--profile", "black"]
+
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.5.0
+    hooks:
+      - id: flake8
+        args: ["--max-line-length", "100", "--extend-ignore", "E203,W503"]
+
+  - repo: local
+    hooks:
+      - id: license-compliance
+        name: license compliance (fast pytest gate)
+        # 商业开源红线（AGPL/GPL 禁入依赖树）——每次提交前快速复验，
+        # 完整语义见 tests/test_license_compliance.py 头部判例说明。
+        # language: system——用当前激活环境的解释器跑（venv 激活后提交即生效）。
+        # 用 `python -m pytest` 而非裸 `pytest`：console script 若带陈旧 shebang
+        # （判例：26.10.1 全量跑实测命中失效的旧 mdpub venv 路径）会以
+        # 「Executable not found」混淆失败，解释器直调免疫此问题。
+        entry: python -m pytest tests/test_license_compliance.py -q
+        language: system
+        pass_filenames: false

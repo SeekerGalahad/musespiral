@@ -42,16 +42,31 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
+from .. import config
 from ..core.materials import model
 from ..core.materials.confidence import parse_ai_confidence  # N-4 末行自评解析
-from ..core.version.diff import diff_result as _diff_result
-from ..core.version.diff import render_diff_html as _render_diff_html
+from ..core.version.diff import diff_result as _diff_result  # noqa: F401（ARCH-2 迁移后保留拆分前模块面）
+from ..core.version.diff import render_diff_html as _render_diff_html  # noqa: F401（同上）
 from ..infra.ai import AIError
 from ..infra.ai import ai_configured
 from ..infra.ai import chat as _chat
 from ..infra.ai.prompts import load_override
 from ..jobs.store import now_iso as _now_iso
 from . import material_body, materials_service, sources_service
+# ARCH-2（2026-11-22）：迭代链族迁入 services/materials/iterations（它操作
+# 素材库，落点归素材域）。本模块 re-import 保住拆分前符号面——payload 与
+# 测试的 refine_service.list_iterations/diff_iterations 调用面零改动；
+# _chain_* 四助手是 adopt 写链的判定核，消费照旧。RefineError 的单一事实
+# 源仍是本模块（iterations 函数体内导入同一类对象）。
+from .materials.iterations import (  # noqa: F401（list/diff/_full_text 为门面转出）
+    _chain_root,
+    _chain_versions,
+    _full_text,
+    _iter_meta,
+    _iter_no,
+    diff_iterations,
+    list_iterations,
+)
 
 # F57 M0 唯一加工动作（model.PROVENANCE_OPS 首键；后续动作经该表扩）
 REFINE_OP = "summarize"
@@ -75,6 +90,12 @@ DEFAULT_PROMPT = """你是资深内容编辑。请把给到的素材正文提炼
 # 素材正文注入插槽（覆盖文件可含 {{material}} 控制注入位置；缺省追加在末尾）
 _MATERIAL_SLOT = "{{material}}"
 
+# FEAT-1 ③（2026-11-22）：refine prompt 尾部附带的相关历史素材摘要。
+# top-3（正典 §FEAT-1 第 6 条）；每条摘要截断预算防 prompt 膨胀（语义相关
+# 是「提示线索」不是「第二份正文」，仅给 AI 一个方向）。开关=config.semantic_context。
+RELATED_CONTEXT_TOP = 3
+RELATED_SUMMARY_CHARS = 160
+
 
 class RefineError(ValueError):
     """加工业务错误（可读消息；Studio 转 400/ok:false）。"""
@@ -97,11 +118,44 @@ def _material_text(material: dict[str, Any]) -> str:
         raise RefineError(str(exc)) from None
 
 
+def _related_context(material_id: str) -> str:
+    """FEAT-1 ③：组装「相关历史素材」prompt 块（无相关/开关关闭/embedding 缺位 → ""）。
+
+    纯增强面——search_service.related 内部已吞 embedding 缺位/空索引，本函数
+    再包一层容错（任何异常都不让相关推荐毁掉 AI 加工主路径）；摘要取相关素材
+    payload.text 首段（无正文面则退回标题），每条截 RELATED_SUMMARY_CHARS。
+    """
+    if not config.semantic_context_enabled():
+        return ""
+    from . import search_service  # 函数体内导入（导入期解耦）
+
+    try:
+        related = search_service.related(material_id, limit=RELATED_CONTEXT_TOP)
+    except Exception:
+        return ""  # 相关推荐是可失败的增强面——永不阻断 refine
+    lines: list[str] = []
+    for item in related:
+        mid = item.get("id")
+        full = materials_service.get_material(mid) if mid else None
+        if full is None:
+            continue
+        try:
+            summary = material_body.material_text(full, max_chars=RELATED_SUMMARY_CHARS)
+        except material_body.MaterialTextError:
+            summary = str(item.get("title") or mid or "")
+        if summary.strip():
+            lines.append(f"· [{item.get('title') or mid}] {summary.strip()}")
+    if not lines:
+        return ""
+    return "\n\n相关历史素材（语义相关，仅供提炼参考，非本素材正文）：\n" + "\n".join(lines)
+
+
 def _build_prompt(
     material: dict[str, Any],
     body: str,
     template: str | None = None,
     feedback: str | None = None,
+    related_context: str = "",
 ) -> str:
     """组装预览 prompt：源级 prompt_override > 覆盖文件（prompts.d/refine.txt）
     > 内置缺省；{{material}} 插槽存在则原位注入，否则正文追加在末尾。
@@ -112,6 +166,9 @@ def _build_prompt(
     feedback 非空（去空白后）时拼在**最终 prompt 尾部**（形如
     「用户改进要求：{feedback}」）——AI-3 重生成的自然语言改进要求，插槽/
     覆盖文件/源级 override 均不影响其落位（指令永远在素材正文之后）。
+
+    related_context 非空（FEAT-1 ③）时拼在**素材正文之后、feedback 之前**——
+    相关历史素材是提炼线索（在正文之后避免被误当主素材），用户改进要求永远最后。
     """
     base = template if template else (load_override("refine") or DEFAULT_PROMPT)
     block = f"【素材正文】（title: {material.get('origin', {}).get('title') or material['id']}）\n{body}"
@@ -119,6 +176,8 @@ def _build_prompt(
         prompt = base.replace(_MATERIAL_SLOT, block)
     else:
         prompt = f"{base}\n\n{block}"
+    if related_context:
+        prompt = f"{prompt}\n\n{related_context}"
     if feedback and feedback.strip():
         prompt = f"{prompt}\n\n用户改进要求：{feedback.strip()}"
     return prompt
@@ -162,6 +221,7 @@ def preview(material_id: str, *, feedback: str | None = None) -> dict[str, Any]:
     text = _chat(
         [{"role": "user", "content": _build_prompt(
             material, body, ai_cfg.get("prompt_override"), feedback=feedback,
+            related_context=_related_context(material_id),
         )}],
         task="refine",
         **sources_service.override_kwargs(ai_cfg),
@@ -183,52 +243,8 @@ def _source_ai_cfg(material: dict[str, Any]) -> dict[str, Any]:
 
 
 # ── 采纳（人工「存为素材」）─────────────────────────────────────────
-
-
-def _iter_meta(material: dict[str, Any]) -> dict[str, Any]:
-    """素材 payload.meta（非 dict → {}；只读视图不落盘）。"""
-    payload = material.get("payload") or {}
-    meta = payload.get("meta")
-    return meta if isinstance(meta, dict) else {}
-
-
-def _iter_no(material: dict[str, Any]) -> int | None:
-    """素材的 iteration 版本号（缺键/非 int → None；bool 不算 int）。"""
-    it = _iter_meta(material).get("iteration")
-    if isinstance(it, bool) or not isinstance(it, int):
-        return None
-    return it
-
-
-def _chain_root(material: dict[str, Any]) -> str:
-    """迭代链根判定（P2 契约）：素材已是 derived 且带非空 iteration_root →
-    继承它；否则该素材自身即链根（原始素材 / 无迭代键的存量 derived 同判）。
-    """
-    if material.get("type") == "derived":
-        root = _iter_meta(material).get("iteration_root")
-        if isinstance(root, str) and root.strip():
-            return root.strip()
-    return str(material["id"])
-
-
-def _chain_versions(root: str) -> list[dict[str, Any]]:
-    """链上既有版本：活跃 derived 且 meta.iteration_root == root、iteration
-    为合法整数；按 iteration 升序（同分 fetched_at/id 稳定排序）。
-
-    无迭代键的存量素材（含链根本体若是原始素材）不入版本列——读侧
-    「未携带三键 = 无迭代史」，零回归口径。
-    """
-    out: list[dict[str, Any]] = []
-    for m in materials_service.list_materials():
-        if m.get("type") != "derived":
-            continue
-        if str(_iter_meta(m).get("iteration_root") or "") != root:
-            continue
-        if _iter_no(m) is None:
-            continue
-        out.append(m)
-    out.sort(key=lambda m: (_iter_no(m) or 0, str(m.get("fetched_at") or ""), m["id"]))
-    return out
+# （迭代链判定四助手 _iter_meta/_iter_no/_chain_root/_chain_versions 已随
+#   ARCH-2 迁入 services/materials/iterations，本模块头部 re-import 消费。）
 
 
 def adopt(
@@ -343,75 +359,6 @@ def regenerate(material_id: str, *, feedback: str | None = None) -> dict[str, An
 
 
 # ── 迭代链读面（P2：版本列表 + 两版对比）────────────────────────────
-
-
-def list_iterations(material_id: str) -> dict[str, Any]:
-    """版本列表：同一链根下所有版本，按 iteration 升序。
-
-    入参可以是链上任一素材（原始根 / 任一版本）——链根判定同 adopt。
-    返回 {"root", "versions":[{id, iteration, ts, title, chars}]}；chars=
-    payload.text 全长（不截断——列表是展示面不是 AI 输入预算面）。
-    素材不存在/已删 → RefineError。
-    """
-    material = materials_service.get_material(material_id)
-    if material is None:
-        raise RefineError(f"素材不存在或已删: {material_id!r}")
-    root = _chain_root(material)
-    versions = [
-        {
-            "id": m["id"],
-            "iteration": _iter_no(m) or 0,
-            "ts": str(m.get("fetched_at") or ""),
-            "title": str((m.get("origin") or {}).get("title") or m["id"]),
-            "chars": len(str((m.get("payload") or {}).get("text") or "")),
-        }
-        for m in _chain_versions(root)
-    ]
-    return {"root": root, "versions": versions}
-
-
-def _full_text(material: dict[str, Any]) -> str:
-    """对比用全文（不截断——diff 是对照面不是 AI 输入预算面；
-    无正文面 → RefineError 可读拒绝）。"""
-    try:
-        return material_body.material_text(material)
-    except material_body.MaterialTextError as exc:
-        raise RefineError(str(exc)) from None
-
-
-def diff_iterations(id_a: str, id_b: str) -> dict[str, Any]:
-    """两版对比：复用 core/version/diff.diff_result（不另写 diff 算法）。
-
-    两者须同链根（任一侧不存在/已删、或链根不同 → RefineError 可读拒绝）。
-    返回 {"a","b","diff"}——a/b 为 {id, iteration, title} 最小标注；diff 为
-    DiffResult.to_dict()（hunks/added/removed/identical）+ 服务端渲染 html
-    （render_diff_html 红删绿增，E-6 /api/article/diff 同款产物面）。
-    """
-    a = materials_service.get_material(id_a)
-    if a is None:
-        raise RefineError(f"素材不存在或已删: {id_a!r}")
-    b = materials_service.get_material(id_b)
-    if b is None:
-        raise RefineError(f"素材不存在或已删: {id_b!r}")
-    root_a, root_b = _chain_root(a), _chain_root(b)
-    if root_a != root_b:
-        raise RefineError(
-            f"跨迭代链对比被拒绝: {id_a!r}（链根 {root_a}）与 {id_b!r}（链根 {root_b}）不同链"
-        )
-    no_a, no_b = _iter_no(a), _iter_no(b)
-    label_a = f"v{no_a}" if no_a is not None else id_a
-    label_b = f"v{no_b}" if no_b is not None else id_b
-    result = _diff_result(
-        _full_text(a),
-        _full_text(b),
-        from_label=label_a,
-        to_label=label_b,
-    )
-    return {
-        "a": {"id": a["id"], "iteration": no_a, "title": str((a.get("origin") or {}).get("title") or a["id"])},
-        "b": {"id": b["id"], "iteration": no_b, "title": str((b.get("origin") or {}).get("title") or b["id"])},
-        "diff": {
-            **result.to_dict(),
-            "html": _render_diff_html(result, from_label=label_a, to_label=label_b),
-        },
-    }
+# （list_iterations/_full_text/diff_iterations 已随 ARCH-2 迁入
+#   services/materials/iterations——它操作素材库，落点归素材域；本模块
+#   头部 re-import 保符号面，调用语义零变化。）

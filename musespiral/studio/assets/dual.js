@@ -93,8 +93,11 @@ dEl('cm-dual-note').textContent='双版已存为草稿：'+(r.drafts||[]).map(fu
 finally{if(btn)btn.disabled=false;}
 }
 
+var dlBound=false; // ARCH-1 幂等门（骨架懒注入后 __onViewHtml 重调 dBoot；防双绑）
 function dBoot(){
+if(dlBound)return;
 if(!dEl('cm-dual'))return;
+dlBound=true;
 dEl('cm-dual-gen').addEventListener('click',function(){dGenerate(this);});
 dEl('cm-dual-pick-a').addEventListener('click',function(){dPick('a',this);});
 dEl('cm-dual-pick-b').addEventListener('click',function(){dPick('b',this);});
@@ -103,5 +106,5 @@ dLoadProfiles();
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',dBoot);
 else dBoot();
-window.__mdpubDual={dEsc:dEsc,dSlug:dSlug,dUsage:dUsage,dProfileOptions:dProfileOptions};
+window.__mdpubDual={dEsc:dEsc,dSlug:dSlug,dUsage:dUsage,dProfileOptions:dProfileOptions,boot:dBoot};
 })();

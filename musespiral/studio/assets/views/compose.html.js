@@ -1,0 +1,106 @@
+document.getElementById('view-compose').innerHTML=`
+<div class="amb amb-compose" aria-hidden="true"></div>
+<div class="view-head">
+<div><h1 class="view-title">创作工坊</h1><p class="view-sub" id="compose-sub">加载中…</p></div>
+<div class="action-row"><input id="cm-new-slug" class="input" placeholder="slug（英文短名）"><input id="cm-new-title" class="input" placeholder="标题（可空）"><button class="btn" id="cm-smart-btn">✨ 智能组稿</button><button class="btn btn-primary" id="cm-new-btn"><span data-icon="plus"></span>建会话</button></div>
+</div>
+<div class="chips" id="cm-sessions" style="margin-bottom:var(--space-md)"></div>
+<div class="empty" id="cm-empty" hidden>
+<div class="empty-icon" data-icon="edit"></div>
+<div class="empty-title">暂无创作会话</div>
+<div class="empty-text">多素材 + 分块三态裁决 + 轮次迭代：填 slug 建会话，从左侧素材池（发现页高分候选）或手动路径加入素材。</div>
+</div>
+<div class="cm-grid" id="cm-grid" hidden>
+<div class="cm-col action-group">
+<h3 class="action-title">素材池</h3>
+<a class="btn" href="#material" id="cm-browse-link">浏览素材库 ⟶</a>
+<p class="action-hint">发现页高分候选（分数 ≥80）</p>
+<div id="cm-pool"></div>
+<div class="action-row"><input id="cm-add-path" class="input" style="flex:1;min-width:140px" placeholder="手动添加：素材路径（KB 内相对或绝对）"><button class="btn" id="cm-add-btn">加入</button></div>
+<div id="cm-sources"></div>
+<div id="cm-budget"></div>
+</div>
+<div class="cm-col cm-mid">
+<div class="cm-round-head"><b id="cm-round-title">尚未生成</b><span class="muted" id="cm-round-meta"></span></div>
+<div id="cm-blocks" tabindex="-1"></div>
+<div class="empty" id="cm-blocks-empty" hidden>
+<div class="empty-icon" data-icon="edit"></div>
+<div class="empty-title">尚无 AI 草稿</div>
+<div class="empty-text">素材就绪后点右侧「按反馈再生成」（长任务进任务面板）。</div>
+</div>
+</div>
+<div class="cm-col action-group">
+<div id="cm-novel"></div>
+<details class="action-group" id="cm-rel" hidden>
+<summary class="health-sum">🕸 人物关系图 · 挂卡关系力导向</summary>
+<div id="cm-rel-view"></div>
+</details>
+<details class="action-group" id="cm-fore" hidden>
+<summary class="health-sum">📌 伏笔账本 · 埋设/推进/回收</summary>
+<div id="cm-fore-view"></div>
+</details>
+<h3 class="action-title">轮次</h3>
+<div class="chips" id="cm-rounds" style="margin-bottom:10px"></div>
+<div id="cm-diff"></div>
+<div class="action-row" style="margin-top:12px">
+<button class="btn" id="cm-generate-btn"><span data-icon="refresh"></span>按反馈再生成</button>
+<button class="btn btn-primary" id="cm-adopt-btn"><span data-icon="check"></span>采纳入稿</button>
+</div>
+<details class="action-group" id="cm-outline">
+<summary class="health-sum">📋 大纲 · 逐节裁决再展开</summary>
+<div class="action-row"><button class="btn" id="cm-outline-gen">🔄 AI 生成大纲</button></div>
+<div id="cm-outline-list"></div>
+<p class="action-hint" id="cm-outline-note">无大纲——点「AI 生成大纲」先出骨架，再逐节勾选裁决后展开。</p>
+<div class="action-row"><button class="btn btn-primary" id="cm-outline-expand">🚀 展开已裁决节</button></div>
+</details>
+<details class="action-group" id="cm-dual">
+<summary class="health-sum">⚖️ 对比模式 · 同 prompt 双档案并行</summary>
+<div class="action-row"><label class="field">档案 A <select id="cm-dual-a" class="input"></select></label><label class="field">档案 B <select id="cm-dual-b" class="input"></select></label></div>
+<div class="action-row"><button class="btn btn-primary" id="cm-dual-gen">⚖️ 并行生成</button></div>
+<p class="action-hint" id="cm-dual-note">选两个已配置档案，用相同素材+指令并行出两版——对照选优后进正常裁决流。</p>
+<div class="cm-dual-grid" id="cm-dual-result" hidden>
+<div class="cm-dual-col"><div class="cm-dual-h" id="cm-dual-ha">A</div><pre class="cm-dual-body" id="cm-dual-ta"></pre><div class="cm-dual-use" id="cm-dual-ua"></div></div>
+<div class="cm-dual-col"><div class="cm-dual-h" id="cm-dual-hb">B</div><pre class="cm-dual-body" id="cm-dual-tb"></pre><div class="cm-dual-use" id="cm-dual-ub"></div></div>
+</div>
+<div class="action-row" id="cm-dual-acts" hidden><button class="btn" id="cm-dual-pick-a">⬅ 选 A</button><button class="btn" id="cm-dual-keep">🔄 保留双版</button><button class="btn" id="cm-dual-pick-b">选 B ➡</button></div>
+</details>
+<details class="action-group" id="cm-rolling">
+<summary class="health-sum">📖 滚动摘要 · AI 记住写了什么</summary>
+<div id="cm-rolling-view"><p class="action-hint" id="cm-rolling-text">暂无摘要——正稿字数跨过 1500 字后自动生成（入稿即触发），也可点刷新手动生成。</p></div>
+<div class="action-row"><button class="btn" id="cm-rolling-refresh">🔄 刷新</button><button class="btn" id="cm-rolling-edit">✏️ 编辑</button></div>
+<p class="action-hint" id="cm-rolling-note"></p>
+</details>
+<details class="action-group" id="cm-visual">
+<summary class="health-sum">视觉设计 · 封面工坊</summary>
+<div class="chips" id="cv-tpl"></div>
+<div class="action-row"><input class="input" id="cv-title" style="flex:1;min-width:160px" placeholder="主标题（缺省取文章）"><input class="input" id="cv-hook" style="flex:1;min-width:160px" placeholder="副题 hook（选填）"></div>
+<div class="action-row">
+<label class="field">字号 <select id="cv-fs"><option>S</option><option selected>M</option><option>L</option></select></label>
+<label class="field">对齐 <select id="cv-al"><option value="left" selected>左</option><option value="center">中</option><option value="right">右</option></select></label>
+<button class="btn btn-primary" id="cv-x">导出 PNG</button>
+<button class="btn" id="cv-pt">存为我的模板</button>
+</div>
+<div class="cv-prev" id="cv-prev"></div>
+</details>
+</div>
+</div>
+<div class="modal-overlay" id="cv-pm" hidden><div class="modal"><h3 class="modal-title">存为我的模板</h3><div class="cv-col"><input class="input" id="cv-pid" placeholder="模板 id（kebab，如 my-cover）"><input class="input" id="cv-pl" placeholder="显示名（选填）"></div><div class="modal-actions"><button class="btn" id="cv-pm-x">取消</button><button class="btn btn-primary" id="cv-pm-ok">保存</button></div></div></div>
+<div class="modal-overlay" id="sc-modal" hidden><div class="modal sc-modal">
+<h3 class="modal-title">✨ 智能组稿</h3>
+<div class="sc-steps" id="sc-steps"><span class="sc-step">1 · 主题</span><span class="sc-step">2 · 素材</span><span class="sc-step">3 · 大纲与会话</span></div>
+<div class="sc-pane" id="sc-pane1">
+<textarea class="input set-area" id="sc-topic" rows="3" style="min-height:72px;font-family:var(--font-body)" placeholder="一句话描述想写什么，如「写一篇关于 Transformer 架构演进的科普」"></textarea>
+<p class="action-hint">描述越具体，搜到的素材越相关。确认后自动建会话并把选中素材全部入池。</p>
+</div>
+<div class="sc-pane" id="sc-pane2" hidden>
+<div class="action-row"><input class="input" id="sc-q" style="flex:1;min-width:120px" placeholder="手动追加搜索素材…"><button class="btn" id="sc-search-btn">搜索</button></div>
+<div class="action-row"><button class="btn" id="sc-all">全选</button><button class="btn" id="sc-none">取消全选</button><button class="btn" id="sc-sort">相似度排序</button><span class="muted" id="sc-count" style="align-self:center;font-size:12px"></span></div>
+<div class="sc-list" id="sc-list"></div>
+</div>
+<div class="sc-pane" id="sc-pane3" hidden>
+<p class="action-hint" id="sc-hint3"></p>
+<div id="sc-outline"></div>
+</div>
+<div class="modal-actions"><button class="btn" id="sc-back">← 上一步</button><button class="btn" id="sc-cancel">取消</button><button class="btn btn-primary" id="sc-next">下一步</button></div>
+</div></div>
+`;

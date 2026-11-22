@@ -449,22 +449,40 @@ def test_original_endpoint_rejects_traversal_and_non_txt(server) -> None:
 # ── 6. preview 零落盘（from-chapters 提交不写任何字节）───────────
 
 
-def test_from_chapters_submit_writes_zero_bytes(server, mock_engine, ai_on, _isolate_home: Path) -> None:
-    before = {p: p.read_bytes() for p in _isolate_home.rglob("*") if p.is_file()}
-    code, out = _request(
-        server, "POST", "/api/materials/from-chapters",
-        {"confirm": True, "sourceUrl": SOURCE, "bookUrl": BOOK_URL, "book": BOOK,
-         "chapters": _chapters(2)},
-    )
-    assert code == 200 and out["ok"] is True and out["job_id"]
-    # 提交期零落盘：home 下文件集与内容零变化（job 运行期才写）
-    after_files = {p for p in _isolate_home.rglob("*") if p.is_file()}
-    new_files = after_files - set(before)
-    assert all("jobs.jsonl" in p.name for p in new_files), f"提交期新增文件: {new_files}"
-    for path, content in before.items():
-        if path.is_file():
-            assert path.read_bytes() == content, f"提交期改写了 {path}"
-    assert ms.list_materials() == [] and not bfs.cache_root().exists()
+def test_from_chapters_submit_writes_zero_bytes(
+    server, mock_engine, ai_on, _isolate_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 确定性门：job_fn 换成阻塞版——runner.submit 入队即起 worker 线程
+    # （jobs/runner.py submit→pool.submit），mock 引擎下 job 可在断言窗口内
+    # 跑完并写 materials/book_cache（负载相关竞态：2026-11-22 全量套件
+    # 并发时段 1/2 复现红，隔离复跑全绿）。被测纪律是「提交期零落盘」
+    # （book_actions._action_from_chapters 的 preview 零落盘），门住执行期
+    # 后断言不再依赖线程调度；finally 释放防 executor atexit join 挂进程。
+    gate = threading.Event()
+
+    def _gated_job(job_id: str) -> dict:
+        gate.wait()
+        return {}
+
+    monkeypatch.setattr(bfs, "job_fn", lambda *a, **k: _gated_job)
+    try:
+        before = {p: p.read_bytes() for p in _isolate_home.rglob("*") if p.is_file()}
+        code, out = _request(
+            server, "POST", "/api/materials/from-chapters",
+            {"confirm": True, "sourceUrl": SOURCE, "bookUrl": BOOK_URL, "book": BOOK,
+             "chapters": _chapters(2)},
+        )
+        assert code == 200 and out["ok"] is True and out["job_id"]
+        # 提交期零落盘：home 下文件集与内容零变化（job 运行期才写）
+        after_files = {p for p in _isolate_home.rglob("*") if p.is_file()}
+        new_files = after_files - set(before)
+        assert all("jobs.jsonl" in p.name for p in new_files), f"提交期新增文件: {new_files}"
+        for path, content in before.items():
+            if path.is_file():
+                assert path.read_bytes() == content, f"提交期改写了 {path}"
+        assert ms.list_materials() == [] and not bfs.cache_root().exists()
+    finally:
+        gate.set()
 
 
 def test_from_chapters_job_end_to_end(server, mock_engine, ai_on) -> None:

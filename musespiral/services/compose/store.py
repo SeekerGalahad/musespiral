@@ -248,6 +248,8 @@ def session_detail(slug: str, root: str | Path | None = None) -> dict:
         "novel": novel_chapter_stats(session),
         # E-5 人物卡挂载面：挂卡完整视图（前端右栏卡片渲染；空列表=未挂卡）
         "characters": _session_characters(session),
+        # FEAT-4 伏笔账本（前端伏笔面板 + 未回收徽章计数数据面）
+        "foreshadowing": [dict(x) for x in session.foreshadowing],
     }
 
 
@@ -295,6 +297,8 @@ def new_session(
         "novel_summary": "",
         "novel_summary_chapters": 0,
         "characters": [],
+        # FEAT-4：伏笔账本空态显式落盘（存量会话无该键由 from_meta 归一 []）
+        "foreshadowing": [],
     }
     _write_json_atomic(_meta_path(d), meta)
     _atomic_write(_draft_path(d), b"")

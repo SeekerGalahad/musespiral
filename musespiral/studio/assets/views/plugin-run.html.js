@@ -1,0 +1,26 @@
+document.getElementById('view-plugin-run').innerHTML=`
+<div class="view-head"><div>
+<h1 class="view-title" id="pr-title">流水线</h1>
+<p class="view-sub" id="pr-sub"></p>
+</div>
+<div class="action-row">
+<button class="btn" id="pr-back-btn" hidden><span data-icon="arrow-left"></span>返回清单</button>
+<button class="btn" id="pr-reset-btn" hidden title="清空本次运行状态"><span data-icon="refresh"></span>重置</button>
+<button class="btn btn-primary" id="pr-run-btn" hidden title="运行这条流水线（进度见日志与任务中心）"><span data-icon="play"></span>运行</button>
+</div>
+</div>
+<div id="pr-pick"></div>
+<div class="pr-flow" id="pr-flow" hidden></div>
+<div class="pr-rungrid" id="pr-panels" hidden>
+<div class="card pr-panel">
+<div class="pr-phead"><h3 class="pr-ptitle">运行日志</h3><span class="badge queued" id="pr-badge">待运行</span></div>
+<div class="pr-pbody"><div class="pr-logs" id="pr-logs"></div></div>
+</div>
+<div class="card pr-panel">
+<div class="pr-phead"><h3 class="pr-ptitle">产出物</h3><span class="badge queued" id="pr-out-badge">未生成</span></div>
+<div class="pr-pbody" id="pr-out"></div>
+</div>
+</div>
+<div id="pr-segs-wrap" hidden></div>
+<audio id="pr-audio" preload="none" hidden></audio>
+`;

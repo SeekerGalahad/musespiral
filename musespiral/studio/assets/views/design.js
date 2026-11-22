@@ -292,6 +292,7 @@ dvCommit(pre);dvGo();
 on('dv-fwd',function(){dvMove(1);});
 on('dv-bwd',function(){dvMove(-1);});
 on('dv-load-btn',function(){dvLoad();});
+on('dv-empty-load',function(){dvLoad();});
 on('dv-save-btn',function(){dvSave();});
 on('dv-export-btn',function(){$('dv-ex').hidden=false;});
 $('dv-art').addEventListener('change',function(){

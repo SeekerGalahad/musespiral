@@ -9,7 +9,8 @@
   merge.py     三态合并（keep/adopt_edited/discard；幂等）+ habits 训练对
   outline.py   G-T2 大纲模式纯数据面（OutlineSection+校验+序列化；零 I/O）
   novel.py     E-5 小说模式纯数据面（人物卡校验/章节切分/前情提要输入/
-               说话风格冲突检测；零 I/O）
+               说话风格冲突检测；FEAT-4 增人物关系 relations 与伏笔账本
+               planted/escalated/payoff 三态；零 I/O）
 """
 from .blocks import (
     ANCHOR_RE,
@@ -35,17 +36,30 @@ from .outline import (
 from .protocol import ParsedBlock, match_round, parse_ai_output
 from .novel import (
     CHARACTER_FIELDS,
+    CHARACTER_MAX_RELATIONS,
     DEFAULT_CONFLICT_RULES,
+    FORESHADOWING_CHAPTER_MAX,
+    FORESHADOWING_MAX,
+    FORESHADOWING_NOTE_MAX,
+    FORESHADOWING_STATUSES,
+    FORE_STATUS_ESCALATED,
+    FORE_STATUS_PAYOFF,
+    FORE_STATUS_PLANTED,
     SUB_TYPE_CHARACTER,
     Chapter,
     character_from_meta,
     detect_conflicts,
     is_dialogue_line,
     normalize_character,
+    normalize_foreshadowing_entry,
+    open_foreshadowing,
+    parse_foreshadowing,
     prior_chapters_text,
     render_character,
+    render_foreshadowing,
     split_chapters,
     validate_character,
+    validate_foreshadowing,
     validate_rules,
 )
 from .session import (
@@ -76,7 +90,15 @@ __all__ = [
     "ORIGIN_SOURCE",
     "ACTIONS",
     "CHARACTER_FIELDS",
+    "CHARACTER_MAX_RELATIONS",
     "DEFAULT_CONFLICT_RULES",
+    "FORESHADOWING_CHAPTER_MAX",
+    "FORESHADOWING_MAX",
+    "FORESHADOWING_NOTE_MAX",
+    "FORESHADOWING_STATUSES",
+    "FORE_STATUS_ESCALATED",
+    "FORE_STATUS_PAYOFF",
+    "FORE_STATUS_PLANTED",
     "KIND_ARTICLE",
     "KIND_NOVEL",
     "PER_SOURCE_BUDGET",
@@ -103,12 +125,17 @@ __all__ = [
     "detect_conflicts",
     "is_dialogue_line",
     "normalize_character",
+    "normalize_foreshadowing_entry",
+    "open_foreshadowing",
     "outline_from_json",
     "outline_to_json",
+    "parse_foreshadowing",
     "prior_chapters_text",
     "render_character",
+    "render_foreshadowing",
     "split_chapters",
     "validate_character",
+    "validate_foreshadowing",
     "validate_rules",
     "validate_sections",
     "blocks_from_markdown",

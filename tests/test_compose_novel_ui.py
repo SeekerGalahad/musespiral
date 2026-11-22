@@ -247,8 +247,9 @@ console.log(JSON.stringify({novel:novelHtml,edit:editHtml,
 
 
 def test_rail_containers_in_shell() -> None:
-    """右栏两容器：唯一稳定锚 #cm-novel（小说区 DOM 全由它内部条件创建/销毁）。"""
-    shell = _shell()
+    """右栏两容器：唯一稳定锚 #cm-novel（小说区 DOM 全由它内部条件创建/销毁）。
+    ARCH-1：compose 骨架源在 ui.views/compose.html（壳内为懒注入占位）。"""
+    shell = (SHELL.parent / "ui.views" / "compose.html").read_text(encoding="utf-8")
     assert 'id="cm-novel"' in shell
     # 右栏位置：在 #view-compose 段内（不是别处）
     cm = shell.index('id="view-compose"')
@@ -342,3 +343,107 @@ def test_character_remove_keeps_material(root: Path) -> None:
     compose_service.remove_character("ui3", mid, root=root)
     assert compose_service.session_detail("ui3", root=root)["characters"] == []
     assert materials_service.get_character(mid) is not None
+
+
+# ══ FEAT-4：人物关系力导向图 + 伏笔账本面板（独立产物 assets/novel.js）═══
+
+
+NOVEL_JS = STUDIO / "assets" / "novel.js"
+
+
+def _run_novel(frag: str) -> dict:
+    """node 真实执行 assets/novel.js（FEAT-4 独立产物，同 rolling.js 判例）。
+
+    IIFE 底部挂 window.__mdpubNovel={slug,esc,paint,boot,graphSvg,foreHtml}——
+    graphSvg/foreHtml 是纯函数（零 DOM/零 fetch），node 桩只须 window/document/
+    location/fetch 四件；boot 因 #cm-fore 桩缺失即时返回（ARCH-1 幂等门）。
+    """
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node 不可用——JS 行为断言需真实执行（结构/回环两层仍随全量跑）")
+    src = NOVEL_JS.read_text(encoding="utf-8")
+    script = (
+        "'use strict';\n"
+        "var _el={};\n"
+        "var window={addEventListener:function(){}};\n"
+        "var document={getElementById:function(id){return _el[id]||null;},"
+        "addEventListener:function(){},readyState:'complete'};\n"
+        "var location={hash:''};\n"
+        "var fetch=function(){return Promise.reject(new Error('stub'));};\n"
+        "var alert=function(m){throw new Error('alert:'+m);};\n"
+        + src
+        + "\nvar N=window.__mdpubNovel;\n"
+        + frag
+    )
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "novel_feat4_check.cjs"
+        path.write_text(script, encoding="utf-8")
+        proc = subprocess.run([node, str(path)], capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, f"node 行为断言失败:\n{proc.stdout}\n{proc.stderr}"
+    return json.loads(proc.stdout.strip().splitlines()[-1])
+
+
+def test_novel_js_graph_svg_and_deterministic() -> None:
+    """力导向图：≥2 节点出 <svg>/<circle>/<line>（零依赖自绘，不引 D3）；
+    关系提及未挂卡=幽灵节点；同输入两次布局逐字节一致（确定性收敛——
+    面板每次重绘不跳动）。"""
+    out = _run_novel(r"""
+var cards=[{id:'m1',name:'林远',relations:[{to:'陈默',relation:'宿敌'},{to:'苏眉',relation:'前妻'}]},
+{id:'m2',name:'陈默',relations:[{to:'林远',relation:'宿敌'}]}];
+var svg1=N.graphSvg(cards),svg2=N.graphSvg(cards),solo=N.graphSvg([{id:'m1',name:'林远'}]);
+console.log(JSON.stringify({svg:svg1,same:svg1===svg2,solo:solo}));
+""")
+    svg = out["svg"]
+    assert "<svg" in svg and "cn-graph" in svg
+    assert svg.count("<circle") == 3          # 林远/陈默（挂卡）+ 苏眉（幽灵）
+    assert svg.count("<line") == 3            # 三条关系边（林→陈/林→苏/陈→林）
+    assert "ghost" in svg                     # 未挂卡提及=幽灵节点样式
+    assert "宿敌" in svg                      # 边 title 带关系描述
+    assert out["same"] is True                # 确定性布局
+    assert "两张以上" in out["solo"]          # 单卡不出图（引导文案）
+
+
+def test_novel_js_fore_panel_badges_and_ops() -> None:
+    """伏笔面板：三态徽章（埋设/推进/已回收）+ 推进/回收/删按钮 + 埋伏笔表单。"""
+    out = _run_novel(r"""
+var html=N.foreHtml({foreshadowing:[
+{id:'f1',note:'文件内容未交代',chapter:'第3章',status:'planted'},
+{id:'f2',note:'左眼异变',chapter:'',status:'escalated'},
+{id:'f3',note:'借据真相',chapter:'第7章',status:'payoff'}]});
+console.log(JSON.stringify({html:html}));
+""")
+    html = out["html"]
+    assert "未回收 2 / 共 3 条" in html
+    for token in ("埋设", "推进", "已回收"):
+        assert token in html, token
+    assert 'data-nvfn="es"' in html and 'data-nvfn="pay"' in html and 'data-nvfn="rm"' in html
+    assert "第3章：文件内容未交代" in html
+    assert "cm-fore-note" in html and "cm-fore-ch" in html   # 埋伏笔表单
+    assert "留痕" in html                                     # 已回收行留痕不删
+    assert "仅提示不拦截" in html                              # 红线文案常驻面板
+
+
+def test_feat4_skeleton_and_loader_anchors() -> None:
+    """装载链结构锚：骨架（compose.html 源）有 cm-rel/cm-fore 两容器；core.js
+    懒加载清单含 novel.js + VSTANDALONE 登记 __mdpubNovel；关系输入留在
+    compose 视图（建卡弹窗 relations 字段）；novel.js 零外部库（不引 D3）。"""
+    skeleton = (STUDIO / "ui.views" / "compose.html").read_text(encoding="utf-8")
+    assert 'id="cm-rel"' in skeleton and 'id="cm-rel-view"' in skeleton
+    assert 'id="cm-fore"' in skeleton and 'id="cm-fore-view"' in skeleton
+    # 右栏位置：紧跟 #cm-novel（小说 rail 之后的两折叠区）
+    assert skeleton.index('id="cm-rel"') > skeleton.index('id="cm-novel"')
+    core = (STUDIO / "assets" / "core.js").read_text(encoding="utf-8")
+    assert "'assets/novel.js'" in core
+    assert "'__mdpubNovel'" in core          # VSTANDALONE compose 登记（boot 时机）
+    src = _src()
+    assert "cm-chf-relations" in src          # 建卡弹窗关系输入留在视图侧
+    assert "cnParseRelations" in src
+    novel = NOVEL_JS.read_text(encoding="utf-8")
+    # 零外部库红线：自绘力导向（不引 D3——无库装载字样）
+    assert "d3.v" not in novel and "d3js" not in novel.lower() and "cdn." not in novel.lower()
+    assert "require(" not in novel and "import " not in novel
+    assert "/api/compose/novel-summary" in novel
+    for act in ("foreshadow_add", "foreshadow_update", "foreshadow_remove"):
+        assert act in novel, act
+    # 视图产物不含 FEAT-4 面板 DOM（独立产物 owns——防双绘/防视图回涨）
+    assert "cm-fore-view" not in src

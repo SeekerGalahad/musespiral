@@ -12,6 +12,8 @@
   /api/compose/rolling-summary  G-T4 滚动摘要（刷新 / 用户手改两形态）
   /api/compose/novel-summary    E-5 小说上下文（前情提要刷新/手改 + 人物卡
                                 建卡/挂载/摘下；action 分流，见函数 docstring）
+  /api/compose/smart-start      FEAT-2 智能组稿（两形态：无 material_ids=语义搜
+                                候选 / 有=建会话+素材入池+AI 三段式大纲）
 
 薄壳纪律同 actions.py：参数解析 + 提交期同步校验（400/{ok:false} 契约）
 与结果格式化；编排全部在 services/compose_service（函数体内导入——导入
@@ -194,8 +196,10 @@ def _action_compose_generate(ctx: _StudioContext, data: dict[str, Any]) -> dict[
         # E-5（N-1）：conflicts 随 job.result 回传——前端 cnGenerate 读
         # j.result.conflicts 渲染⚠️提示条（只提示不拦截）。snippet 是截断行
         # 文本、无绝对路径，与 round/blocks 同安全面。
+        # FEAT-4：foreshadowing=未回收伏笔清单同口径回传（提示不拦截）。
         return {"round": result["round"], "blocks": result["blocks"],
-                "conflicts": result.get("conflicts") or []}
+                "conflicts": result.get("conflicts") or [],
+                "foreshadowing": result.get("foreshadowing") or []}
 
     return _submit(ctx, "compose_generate", {"slug": slug}, _body)
 
@@ -235,21 +239,28 @@ def _action_compose_adopt(ctx: _StudioContext, data: dict[str, Any]) -> dict[str
 
 
 def _action_compose_outline(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
-    """G-T2 大纲模式统一端点（§三）：action=generate|update|approve|expand。
+    """G-T2 大纲模式统一端点（§三）：action=generate|update|approve|expand|replace。
 
     - generate：AI 生成大纲（同步瞬时；chat 走 compose 任务键）
     - update：单节改 title/direction/target_chars（section + 可选字段）
     - approve：逐节裁决（section + approved:bool）——未裁决节不可展开
     - expand：展开已裁决节（section；产块进正常协议，prompt 含 direction+已展开节摘要）
+    - replace：整表覆写（sections 数组——FEAT-2 向导的删除段落/调整顺序/改
+      标题走此形态；校验复用 outline_save，已展开节被改动时以新表为准）
     """
     slug = _require_str(data, "slug")
     action = _require_str(data, "action")
-    if action not in ("generate", "update", "approve", "expand"):
-        raise _HttpError(400, "action 必须是 generate|update|approve|expand")
+    if action not in ("generate", "update", "approve", "expand", "replace"):
+        raise _HttpError(400, "action 必须是 generate|update|approve|expand|replace")
     svc = _service()
     try:
         if action == "generate":
             return {"ok": True, "outline": svc.outline_generate(slug, root=ctx.root)}
+        if action == "replace":
+            sections = data.get("sections")
+            if not isinstance(sections, list) or not all(isinstance(s, dict) for s in sections):
+                raise _HttpError(400, "sections 必须是对象数组")
+            return {"ok": True, "outline": svc.outline_save(slug, sections, root=ctx.root)}
         section = _require_str(data, "section")
         if action == "update":
             changes = {}
@@ -265,6 +276,59 @@ def _action_compose_outline(ctx: _StudioContext, data: dict[str, Any]) -> dict[s
             return {"ok": True, "outline": svc.outline_approve(
                 slug, section, approved, root=ctx.root)}
         result = svc.expand_section(slug, section, root=ctx.root)
+        result["ok"] = True
+        return result
+    except _HttpError:
+        raise
+    except Exception as exc:
+        return _error_payload(exc, ctx.root)
+
+
+def _action_compose_smart_start(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
+    """FEAT-2 智能组稿统一端点（POST /api/compose/smart-start；confirm 闸门）。
+
+    两形态（同端点载荷分流，契约锁 POST 只 +1）：
+      - 探测（无 material_ids）：{topic, confirm} → 语义搜 top-N 素材候选
+        （带相似度/来源/标题/id）→ {ok, suggestions:[...], semantic_ready}。前端
+        步骤 2 展示勾选用；继承 search_service 降级承诺，embedding 缺位照出词面结果。
+      - 确认（有 material_ids）：{topic, material_ids:[...], generate_outline?, slug?, confirm}
+        → 建会话 + 素材全入池 + 可选 AI 三段式大纲 → {ok, slug, attached, outline,
+        outline_source}。前端步骤 3 确认后跳工坊。
+
+    topic 必填；material_ids 非空字符串数组；generate_outline 缺省 true。业务失败
+    （素材已删/重名 slug/空主题）→ ok:false（可读错误，不 500）。
+    """
+    from ..services import search_service
+
+    topic = _require_str(data, "topic")
+    svc = _service()
+    try:
+        if data.get("material_ids") is None:
+            # 探测态：语义搜候选（limit 由前端固定 10，端点钳制 1..50）
+            limit = data.get("limit", 10)
+            if not isinstance(limit, int) or not 1 <= limit <= 50:
+                raise _HttpError(400, "limit 必须是 1~50 的整数")
+            suggestions = svc.suggest_materials(topic, limit=limit)
+            return {
+                "ok": True,
+                "topic": topic,
+                "suggestions": suggestions,
+                "total": len(suggestions),
+                "semantic_ready": search_service.semantic_ready(),
+            }
+        material_ids = data.get("material_ids")
+        if not isinstance(material_ids, list):
+            raise _HttpError(400, "material_ids 必须是字符串数组")
+        gen = data.get("generate_outline", True)
+        if not isinstance(gen, bool):
+            raise _HttpError(400, "generate_outline 必须是布尔值")
+        slug = data.get("slug")
+        if slug is not None and not isinstance(slug, str):
+            raise _HttpError(400, "slug 必须是字符串或 null")
+        result = svc.smart_start(
+            topic, material_ids, root=ctx.root, generate_outline=gen,
+            **({"slug": slug} if slug else {}),
+        )
         result["ok"] = True
         return result
     except _HttpError:
@@ -376,7 +440,10 @@ def _action_compose_novel_summary(ctx: _StudioContext, data: dict[str, Any]) -> 
     | `kind` | `{slug, kind:"article"\\|"novel"}` | **会话种类切换**（novel 才显示/注入小说上下文） |
     | `character_add` | `{slug, id:<素材id>}` | **挂卡**（幂等；素材须 meta.sub_type=character） |
     | `character_remove` | `{slug, id:<素材id>}` | **摘卡**（只解挂载，不删素材） |
-    | `character_create` | `{name, role?, appearance?, speech_style?, key_events?}` | **建卡**（落素材库 sub_type=character；同名同内容 dedup，异内容拒绝） |
+    | `character_create` | `{name, role?, appearance?, speech_style?, key_events?, relations?}` | **建卡**（落素材库 sub_type=character；同名同内容 dedup，异内容拒绝）。relations（FEAT-4）= `[{to, relation}]` 人物关系 |
+    | `foreshadow_add` | `{slug, note, chapter?, status?}` | **埋伏笔**（FEAT-4；缺省 planted）→ session.foreshadowing |
+    | `foreshadow_update` | `{slug, id:"f1", status?, note?, chapter?}` | **改伏笔**（状态推进 planted→escalated→payoff / 手改描述） |
+    | `foreshadow_remove` | `{slug, id:"f1"}` | **删伏笔**（误录清理；回收完成走 status=payoff 留痕） |
 
     **与滚动摘要并存**：本端点只写 novel 域字段，绝不触碰 `rolling_summary`
     （§3.6 两摘要各记各的：rolling=近期脉络、novel=此前各章情节账本）。
@@ -391,10 +458,12 @@ def _action_compose_novel_summary(ctx: _StudioContext, data: dict[str, Any]) -> 
     if action is not None and not isinstance(action, str):
         raise _HttpError(400, "action 必须是字符串")
     if action not in (None, "refresh", "edit", "kind", "character_add",
-                      "character_remove", "character_create"):
+                      "character_remove", "character_create",
+                      "foreshadow_add", "foreshadow_update", "foreshadow_remove"):
         raise _HttpError(
             400,
-            "action 必须是 refresh/edit/kind/character_add/character_remove/character_create 之一",
+            "action 必须是 refresh/edit/kind/character_add/character_remove/"
+            "character_create/foreshadow_add/foreshadow_update/foreshadow_remove 之一",
         )
     svc = _service()
     try:
@@ -410,12 +479,24 @@ def _action_compose_novel_summary(ctx: _StudioContext, data: dict[str, Any]) -> 
                 not isinstance(events, list) or not all(isinstance(e, str) for e in events)
             ):
                 raise _HttpError(400, "key_events 必须是字符串数组")
+            relations = data.get("relations")
+            if relations is not None and (
+                not isinstance(relations, list)
+                or not all(
+                    isinstance(r, dict)
+                    and isinstance(r.get("to", ""), str)
+                    and isinstance(r.get("relation", ""), str)
+                    for r in relations
+                )
+            ):
+                raise _HttpError(400, "relations 必须是 [{to, relation}] 对象数组")
             created = materials_service.add_character(
                 name,
                 role=data.get("role") or "",
                 appearance=data.get("appearance") or "",
                 speech_style=data.get("speech_style") or "",
                 key_events=list(events or []),
+                relations=list(relations or []),
             )
             return {
                 "ok": True,
@@ -435,6 +516,34 @@ def _action_compose_novel_summary(ctx: _StudioContext, data: dict[str, Any]) -> 
                 result = svc.add_character(slug, material_id, root=ctx.root)
             else:
                 result = svc.remove_character(slug, material_id, root=ctx.root)
+            return {"ok": True, "action": action, **result}
+        if action in ("foreshadow_add", "foreshadow_update", "foreshadow_remove"):
+            if action == "foreshadow_add":
+                note = _require_str(data, "note")
+                chapter = data.get("chapter")
+                if chapter is not None and not isinstance(chapter, str):
+                    raise _HttpError(400, "chapter 必须是字符串或 null")
+                status = data.get("status")
+                if status is not None and not isinstance(status, str):
+                    raise _HttpError(400, "status 必须是字符串或 null")
+                result = svc.add_foreshadowing(
+                    slug, note, chapter or "", root=ctx.root,
+                    **({"status": status} if status else {}),
+                )
+                return {"ok": True, "action": action, "slug": slug,
+                        "foreshadowing": result["foreshadowing"], "added": result["added"]}
+            fid = _require_str(data, "id")
+            if action == "foreshadow_remove":
+                result = svc.remove_foreshadowing(slug, fid, root=ctx.root)
+                return {"ok": True, "action": action, **result}
+            changes: dict[str, Any] = {}
+            for key in ("status", "note", "chapter"):
+                value = data.get(key)
+                if value is not None and not isinstance(value, str):
+                    raise _HttpError(400, f"{key} 必须是字符串或 null")
+                if value is not None:
+                    changes[key] = value
+            result = svc.update_foreshadowing(slug, fid, root=ctx.root, **changes)
             return {"ok": True, "action": action, **result}
         # 前情提要两形态（同 rolling-summary 的载荷分流纪律）
         if action == "edit" or summary is not None:

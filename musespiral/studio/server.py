@@ -160,7 +160,7 @@ def _make_handler(ctx: _StudioContext) -> type[BaseHTTPRequestHandler]:
             """POST /api/materials/upload（F59 二进制旁路，唯一非 JSON 动作面）。
 
             confirm 闸门 query 特判（?confirm=1 严格等于；缺省/假值 → 400 同
-            文案同语义——契约 §1.2 的形式修订，见 musespiral-API契约 §3.2-3）；
+            文案同语义——契约 §1.2 的形式修订，见 mdpub-API契约 §3.2-3）；
             Content-Length 预检：缺失/非整数/空 → 400；>8MiB **未读 body 即
             拒**（400，不消耗请求体）；服务层校验失败（格式/枚举）→ 400
             可读错误（过脱敏管道）。

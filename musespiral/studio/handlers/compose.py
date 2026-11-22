@@ -1,4 +1,4 @@
-"""compose 域动作：/api/compose/*（10 条）。
+"""compose 域动作：/api/compose/*（11 条）。
 
 R-2 按域登记（行为零变更）：10 个执行体在第十八期 F48 起已下沉的
 compose_actions.py（创作台动作，services 层经 compose_service 门面），本
@@ -20,6 +20,7 @@ from ..compose_actions import (  # 第十八期 F48-F52：创作台动作（M2 �
     _action_compose_remove_source,  # F-C 2026-11-18：素材撤池
     _action_compose_novel_summary,  # E-5 2026-11-19：小说上下文（前情提要+人物卡，§3.6）
     _action_compose_rolling_summary,  # G-T4 2026-11-19：滚动摘要刷新/手改（§五）
+    _action_compose_smart_start,  # FEAT-2：智能组稿（主题→素材→会话+大纲）
 )
 from ..security import _StudioContext
 
@@ -36,4 +37,5 @@ ROUTES: dict[str, Callable[[_StudioContext, dict[str, Any]], dict[str, Any]]] = 
     "/api/compose/rolling-summary": _action_compose_rolling_summary,  # G-T4：滚动摘要刷新/手改（§五）
     "/api/compose/novel-summary": _action_compose_novel_summary,  # E-5：小说上下文（前情提要+人物卡，§3.6）
     "/api/compose/dual": _action_compose_dual,  # G-T3：双模型对比 generate|pick|keep（§四）
+    "/api/compose/smart-start": _action_compose_smart_start,  # FEAT-2：智能组稿
 }

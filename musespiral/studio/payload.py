@@ -1,15 +1,16 @@
 """Studio GET 端点载荷构造（Phase A 自 routing.py 拆出，行为零变更）。
 
-  - 队列/详情/渲染/对照：_articles_payload（R3 status 字段 + R9 请求级扫描
-    缓存）/ _article_payload / _article_html / _article_review（note 可回放
-    CLI review 产物）
-  - R7 编辑载荷：_article_body_payload（正文原文，frontmatter 不含）与
-    _annotations_payload（批注 sidecar 读取；文件操作见 annotations.py）
-  - 平台矩阵 _platforms_payload（platform list 同源）/ 统计 _stats_payload /
-    任务层 _jobs_payload + _job_payload（R4：列表 + 单条轮询）
-  - 渲染口径 _render（与 WeChatAdapter._build_renderer 同源）
-  - 第十二期 F30：_discover_payload（知识库选题候选；KB 根外一律拒绝）
+- 队列/详情/渲染/对照：_articles_payload（R3 status 字段 + R9 请求级扫描
+  缓存）/ _article_payload / _article_html / _article_review（note 可回放
+  CLI review 产物）
+- R7 编辑载荷：_article_body_payload（正文原文，frontmatter 不含）与
+  _annotations_payload（批注 sidecar 读取；文件操作见 annotations.py）
+- 平台矩阵 _platforms_payload（platform list 同源）/ 统计 _stats_payload /
+  任务层 _jobs_payload + _job_payload（R4：列表 + 单条轮询）
+- 渲染口径 _render（与 WeChatAdapter._build_renderer 同源）
+- 第十二期 F30：_discover_payload（知识库选题候选；KB 根外一律拒绝）
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -19,25 +20,24 @@ from .. import config
 from ..core.content.parser import ParsedArticle, parse_article
 from ..core.quality.checks import run_checks
 from ..core.quality.render_checks import render_checks
-from ..platforms import PLIMITS, list_platforms
 from ..core.quality.review import build_review_html
-from ..services import publish_log_service, publish_service
+from ..platforms import PLIMITS, list_platforms
 from ..services import pack_service  # N-5 物料包并排预览读面（清单+单平台 payload+diff）
+from ..services import publish_log_service, publish_service
 from .actions import _runner
 from .annotations import _load_annotations, _read_article_text, _split_head_body
 from .assets import _rewrite_local_images
 from .scan import (
-    _VariantScanCache,
     _article_flags,
     _front_status,
     _iter_article_files,
     _paired_note,
     _paired_review,
+    _VariantScanCache,
 )
 from .security import (
-    _HttpError,
-    _StudioContext,
     _error_payload,
+    _HttpError,
     _mtime_date,
     _query_str,
     _rel,
@@ -45,8 +45,8 @@ from .security import (
     _resolve_file,
     _resolve_inside,
     _sanitize_error,
+    _StudioContext,
 )
-
 
 # 平台展示名（与 cli._PLATFORM_NAMES 同源；仅展示用途，不参与路由/校验）
 _PLATFORM_NAMES: dict[str, str] = {
@@ -114,7 +114,9 @@ def _articles_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> dict[
                 "title": str(metadata.get("title") or path.stem),
                 "date": str(metadata.get("date") or _mtime_date(path)),
                 "chars": len(article.raw_body.strip()),
-                "cover": str(metadata.get("cover") or ""),  # 队列卡片封面缩略图（正典 §4.2；空串=前端走 accent 色块回退）
+                "cover": str(
+                    metadata.get("cover") or ""
+                ),  # 队列卡片封面缩略图（正典 §4.2；空串=前端走 accent 色块回退）
                 "checks": counts,
                 "flags": _article_flags(ctx.root, path, cache=scan, body=article.raw_body),
                 "status": _front_status(metadata),  # R3：队列卡片状态徽章数据面
@@ -405,6 +407,63 @@ def _materials_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> dict
         return _error_payload(exc, ctx.root)
 
 
+# ── ARCH-5 语义搜索读面（正典 §ARCH-5 + FEAT-1 后端；UI 归 FEAT-1）─────
+
+
+def _material_search_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> dict[str, Any]:
+    """GET /api/materials/search?q=&mode=keyword|semantic|hybrid&limit=。
+
+    - mode 缺省 hybrid（三路合并，语义缺位自动降级为关键词+标签——
+      search_service 的降级承诺）；
+    - semantic 显式要语义：embedding 缺位是**环境态不是请求错误**——
+      200 ok:false 带安装引导（from-article 的 AI 降级面先例），不 5xx；
+    - q 必填（400）；limit 整数钳制 [1,100]（materials 面同款纪律）；
+    - 响应附 semantic_ready（语义路是否就绪）供前端亮降级灯；
+    - 条目为裁剪面（不含 payload 正文——详情走 /api/materials/detail）。
+    """
+    q = _query_str(query, "q")
+    if q is None:
+        raise _HttpError(400, "缺少必填参数 q")
+    mode = _query_str(query, "mode") or "hybrid"
+    if mode not in ("keyword", "semantic", "hybrid"):
+        raise _HttpError(400, f"mode 必须是 keyword/semantic/hybrid: {mode}")
+    limit = 10
+    raw_limit = _query_str(query, "limit")
+    if raw_limit is not None:
+        try:
+            limit = max(1, min(int(raw_limit), 100))
+        except ValueError:
+            raise _HttpError(400, f"limit 必须是整数: {raw_limit}") from None
+    from ..infra.embedding import EmbeddingError
+    from ..services import search_service  # 函数体内导入（导入期解耦）
+
+    try:
+        if mode == "keyword":
+            items = search_service.keyword_search(q, limit=limit)
+        elif mode == "semantic":
+            items = search_service.semantic_search(q, limit=limit)
+        else:
+            items = search_service.hybrid_search(q, limit=limit)
+    except EmbeddingError as exc:  # 环境态降级面（可读安装引导）
+        return {
+            "ok": False,
+            "error": str(exc),
+            "mode": mode,
+            "semantic_ready": False,
+            "items": [],
+            "total": 0,
+        }
+    except ValueError as exc:
+        raise _HttpError(400, str(exc)) from None
+    return {
+        "ok": True,
+        "mode": mode,
+        "semantic_ready": search_service.semantic_ready(),
+        "items": items,
+        "total": len(items),
+    }
+
+
 def _material_detail_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> dict[str, Any]:
     """GET /api/materials/detail?id=…：素材详情（血统引用就地状态）+ 删除连坐预览。
 
@@ -424,7 +483,12 @@ def _material_detail_payload(ctx: _StudioContext, query: dict[str, list[str]]) -
         cascade = materials_service.cascade_preview(mid)
     except ValueError as exc:
         raise _HttpError(404, str(exc)) from None
-    return {"ok": True, "material": detail, "cascade": cascade}
+    # FEAT-1 ②：语义相关 top-5（详情侧栏「语义相关」区）——纯增强面，
+    # related 内部全吞 embedding 缺位/空索引异常，永不因推荐失败让详情 500。
+    from ..services import search_service  # 函数体内导入（导入期解耦）
+
+    related = search_service.related(mid, limit=5)
+    return {"ok": True, "material": detail, "cascade": cascade, "related": related}
 
 
 # ── 第二十一期 Phase A：文件服务（F60）/ 标签频次（F63）/ 集合清单（F62）──

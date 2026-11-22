@@ -41,6 +41,7 @@ def _build_studio_ui() -> None:
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    _default_off_index_hook()  # ARCH-5：默认关增量索引钩子（见下方注释块）
     config.addinivalue_line(
         "markers",
         "e2e: 需 playwright 真实浏览器的端到端用例（默认跳过——装 playwright 才启用；"
@@ -62,6 +63,21 @@ try:  # e2e 前置：playwright 可导入才收集 tests/e2e/
     import playwright  # noqa: F401
 except ImportError:
     collect_ignore.append("e2e")
+
+
+# ── ARCH-5 增量索引钩子默认关闭（2026-11-22）─────────────────────────
+# services/materials 写面（add/add_many/delete）挂了向量索引钩子，默认异步
+# 守护线程会探测 127.0.0.1:11434——开发机 Ollama 在线时，无关测试的每次
+# add_material 都会真调 bge-m3 推理（测试封闭性破坏 + daemon 线程可能越过
+# tmp 目录生命周期）。故测试进程默认 off；需要钩子的用例（test_search_service）
+# 以 monkeypatch.setenv("MUSESPIRAL_INDEX_HOOK", "sync") 逐用例开启（同步
+# 模式断言无竞态）。setdefault：显式环境变量仍可强制真异步做本地验证。
+
+
+def _default_off_index_hook() -> None:
+    import os
+
+    os.environ.setdefault("MUSESPIRAL_INDEX_HOOK", "off")
 
 
 # ── 架构分层检查（正典 §二 规则 1-4，自动化防回归）──

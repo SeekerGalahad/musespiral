@@ -294,6 +294,8 @@ function bindBooks(){
 bkDigestInit();
 $('bk-subs-btn').addEventListener('click',function(){location.hash='#books?tab=subs';});
 $('bk-subs-back').addEventListener('click',function(){location.hash='#books';});
+$('bk-guide-subs').addEventListener('click',function(){location.hash='#books?tab=subs';});
+$('bk-guide-import').addEventListener('click',imOpen);
 $('bk-search-box').addEventListener('keydown',function(e){
 if(e.isComposing||e.keyCode===229||e.key!=='Enter')return;
 if(!this.value.trim())return;

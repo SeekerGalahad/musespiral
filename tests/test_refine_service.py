@@ -328,3 +328,61 @@ def test_regenerate_errors_propagate_zero_trace(env, ai_on, monkeypatch) -> None
     with pytest.raises(svc.RefineError, match="不存在"):
         svc.regenerate("nope00000000")
     assert len(_lines(env)) == 0  # 拒绝零落盘（连源素材都不存在）
+
+
+# ── FEAT-1 ③：refine prompt 附带 top-3 语义相关素材摘要 + 开关 ──────────
+
+
+def test_preview_prompt_includes_related_summaries(env, ai_on, monkeypatch) -> None:
+    """refine prompt 尾部含相关历史素材摘要（抓 messages 断言，非只看 200）。
+
+    search_service.related 打桩为确定性返回（真实 embedding 不在本测试范围），
+    验证「相关历史素材：…」块拼在素材正文之后。
+    """
+    from musespiral.services import search_service
+
+    row = model.make_material(
+        mtype="crawled", source_id="manual", uri="https://x/src", title="主素材",
+        payload={"text": "主素材正文。"}, fetched_at="2026-11-22T09:00:00",
+    )
+    ms.add_material(row)
+    # 相关素材需在库里（_related_context 回读摘要用真实 id）
+    rel = model.make_material(
+        mtype="crawled", source_id="manual", uri="https://x/rel", title="历史素材甲",
+        payload={"text": "注意力机制的历史要点。"}, fetched_at="2026-11-20T09:00:00",
+    )
+    saved_rel = ms.add_material(rel)
+    calls = _mock_chat(monkeypatch)
+    monkeypatch.setattr(
+        search_service,
+        "related",
+        lambda mid, limit=5, **kw: [{
+            "id": saved_rel["id"], "title": "历史素材甲", "similarity": 0.92,
+            "matched_lanes": ["semantic"],
+        }],
+    )
+    svc.preview(row["id"])
+    content = calls[0]["messages"][0]["content"]
+    assert "相关历史素材" in content
+    assert "注意力机制的历史要点。" in content
+    assert content.index("主素材正文。") < content.index("相关历史素材")  # 相关在正文之后
+
+
+def test_preview_related_context_respects_config_switch(env, ai_on, monkeypatch) -> None:
+    """config.semantic_context=false → prompt 不注入相关素材块（可配置关闭）。"""
+    from musespiral import config
+    from musespiral.services import search_service
+
+    row = model.make_material(
+        mtype="crawled", source_id="manual", uri="https://x/src2", title="主素材2",
+        payload={"text": "主素材正文2。"}, fetched_at="2026-11-22T09:00:00",
+    )
+    ms.add_material(row)
+    calls = _mock_chat(monkeypatch)
+    monkeypatch.setattr(
+        search_service, "related",
+        lambda mid, limit=5, **kw: [{"id": "x", "title": "不该出现", "similarity": 0.9}],
+    )
+    monkeypatch.setenv(config.SEMANTIC_CONTEXT_ENV, "false")
+    svc.preview(row["id"])
+    assert "相关历史素材" not in calls[0]["messages"][0]["content"]

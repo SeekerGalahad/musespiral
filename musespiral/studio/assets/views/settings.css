@@ -1,0 +1,2 @@
+.set-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:14px;align-items:start}
+.amb-settings{background:linear-gradient(90deg,var(--ink-3),var(--ink-2))}

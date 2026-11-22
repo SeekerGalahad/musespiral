@@ -120,5 +120,11 @@ def submit_and_track(draft_id: str, article_path: str | Path) -> str:
         result.get("article_detail", {}).get("item", [{}])[0].get("article_url", "")
     )
     if article_url:
-        set_publish_url(default_log_path(), publish_id, article_url)
+        log_path = default_log_path()
+        set_publish_url(log_path, publish_id, article_url)
+        # FEAT-3：发表后自动拉一次微信统计回填该篇 stats（含在看）——best-effort，
+        # 失败/无数据内部收敛为 ok=False，绝不阻塞已完成的发表（红线见 analytics）。
+        from ..infra.wechat.analytics import backfill_published_stats
+
+        backfill_published_stats(article_url, log_path=log_path)
     return article_url

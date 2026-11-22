@@ -400,9 +400,10 @@ console.log(JSON.stringify({
 
 
 def test_sbs_js_structure_and_loader() -> None:
-    """结构锚：tmpl 平台适配 tab（原「变体」改名）+ panel-variants 在壳；
+    """结构锚：article 视图骨架的平台适配 tab（原「变体」改名；ARCH-1 起骨架源
+    在 ui.views/article.html，壳内为懒注入占位）+ panel-variants；
     构建产物 article.js 含 SBS 函数与端点字面量（压缩剥注释不剥函数）。"""
-    tmpl = TMPL.read_text(encoding="utf-8")
+    tmpl = (STUDIO / "ui.views" / "article.html").read_text(encoding="utf-8")
     assert 'data-tab="variants"' in tmpl
     assert "平台适配" in tmpl  # tab 标签（N-5 改名）
     assert 'id="panel-variants"' in tmpl

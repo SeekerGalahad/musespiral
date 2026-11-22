@@ -20,15 +20,158 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import importlib.util
 import json
 import shutil
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from .. import config
 
 MANIFEST_NAME = "manifest.json"
+
+# 插件发现索引缓存（ARCH-4 §五，2026-11-22）：~/.musespiral/plugins/index.json。
+# 缓存「目录名 → {dir, id, version, hash, timestamp, fingerprint, data}」，重扫时
+# 未变目录（fingerprint=内容 sha256）直接复用缓存 data，跳过 read_manifest 的
+# JSON 解析+校验；变更目录重读并只更新该条，删除目录清条。index.json 自身是
+# 文件，scan_manifests 的 is_dir() 门天然忽略——不进 discovered/skipped。
+# 2026-11-22 复核修订：指纹由 mtime_ns:size 改为内容 sha256——mtime/size 均
+# 可在内容已变时保持原值（git checkout / rsync -t / tar -p / 等长原地改写），
+# 旧口径会让缓存命中喂旧 manifest，version_warnings 比到旧 hash 上，升级警告
+# 静默丢失。命中语义=内容逐字节一致（省的是解析与校验，不是读取）。
+INDEX_NAME = "index.json"
+INDEX_VERSION = 1
+
+
+def manifest_content_hash(manifest: dict[str, Any]) -> str:
+    """manifest 内容 sha256 前 12 位（版本协商 + 发现索引的共同内容指纹锚）。
+
+    规范化：sort_keys + 紧凑分隔 + ensure_ascii=False——同一份 manifest dict 的
+    键顺序无关，字节级稳定；用于「保存时记录 / 加载时比对」判断插件是否升级
+    （ARCH-4 §四）与 index.json 的 hash 字段（§五）。纯函数，零 I/O。
+    """
+    canonical = json.dumps(manifest, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
+
+
+def index_path(root: Path | None = None) -> Path:
+    """索引文件路径：<plugins-root>/index.json（随 MUSESPIRAL_HOME）。"""
+    root = Path(root) if root is not None else plugins_dir()
+    return root / INDEX_NAME
+
+
+def load_index(root: Path | None = None) -> dict[str, Any]:
+    """读发现索引；缺失/坏 JSON/非对象/版本不符 → 空壳 {"version":1,"entries":{}}。
+
+    永不抛——缓存是加速手段不是事实真相（坏缓存降级为全量重扫，绝不炸插件
+    列表）。
+    """
+    empty: dict[str, Any] = {"version": INDEX_VERSION, "entries": {}}
+    try:
+        data = json.loads(index_path(root).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return empty
+    if not isinstance(data, dict) or data.get("version") != INDEX_VERSION:
+        return empty
+    entries = data.get("entries")
+    return {"version": INDEX_VERSION, "entries": entries if isinstance(entries, dict) else {}}
+
+
+def save_index(root: Path | None, entries: dict[str, Any]) -> Path:
+    """写发现索引（原子替换：tmp 文件 + os.replace，防半截写把缓存写坏）。"""
+    import os
+
+    root = Path(root) if root is not None else plugins_dir()
+    root.mkdir(parents=True, exist_ok=True)
+    path = root / INDEX_NAME
+    tmp = root / f".{INDEX_NAME}.tmp"
+    tmp.write_text(
+        json.dumps({"version": INDEX_VERSION, "entries": entries}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    os.replace(tmp, path)
+    return path
+
+
+def _manifest_fingerprint(path: Path) -> str:
+    """manifest 文件指纹 = 内容 sha256——内容寻址，保 mtime 的改写不再蒙混。
+
+    （v1 为 mtime_ns:size：git checkout / rsync -t / tar -p / 等长原地改写
+    都能保 mtime+size 而内容已变，缓存命中即喂旧 manifest——2026-11-22
+    复核判例，version_warnings 静默丢警告。）文件不可读返回空串（当 miss）。"""
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return ""
+
+
+def scan_manifests_incremental(
+    root: Path | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, str]], dict[str, Any]]:
+    """增量扫描插件区 → (discovered, skipped, index)。
+
+    与 scan_manifests 的 discovered/skipped 形状逐字一致（dir/data、dir/reason），
+    区别只在读取策略：缓存命中（内容指纹相同且有 data）直接复用缓存 data，
+    跳过 read_manifest 的 JSON 解析+校验（文件字节仍要读——算内容指纹）；
+    未命中/变更重读并只更新该条；消失的目录清出索引。索引有变化才落盘
+    （无变化不写，减少无谓磁盘 I/O）。
+
+    返回值第三项 index 供调用方/测试查看本次索引态（{"version", "entries"}）。
+    """
+    root = Path(root) if root is not None else plugins_dir()
+    index = load_index(root)
+    entries: dict[str, Any] = index["entries"]
+    if not root.is_dir():
+        return [], [], index
+
+    discovered: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = []
+    live: set[str] = set()
+    changed = False
+    for entry in sorted(root.iterdir()):
+        if not entry.is_dir() or entry.name.startswith("."):
+            continue
+        mpath = entry / MANIFEST_NAME
+        if not mpath.is_file():
+            skipped.append({"dir": str(entry), "reason": f"缺少 {MANIFEST_NAME}"})
+            continue
+        fp = _manifest_fingerprint(mpath)
+        cached = entries.get(entry.name)
+        if (
+            isinstance(cached, dict)
+            and cached.get("fingerprint") == fp
+            and isinstance(cached.get("data"), dict)
+        ):
+            data = cached["data"]  # 命中：内容逐字节一致，跳过解析校验复用缓存
+        else:
+            data, reason = read_manifest(mpath)
+            if data is None:
+                skipped.append({"dir": str(entry), "reason": reason})
+                if entry.name in entries:
+                    del entries[entry.name]
+                    changed = True
+                continue
+            entries[entry.name] = {
+                "dir": str(entry),
+                "id": str(data.get("id") or entry.name),
+                "version": str(data.get("version") or ""),
+                "hash": manifest_content_hash(data),
+                "timestamp": datetime.now().isoformat(timespec="seconds"),
+                "fingerprint": fp,
+                "data": data,
+            }
+            changed = True
+        live.add(entry.name)
+        discovered.append({"dir": str(entry), "data": data})
+
+    for stale in [k for k in entries if k not in live]:
+        del entries[stale]
+        changed = True
+    if changed:
+        save_index(root, entries)
+    return discovered, skipped, {"version": INDEX_VERSION, "entries": entries}
 
 # 插件入口模块可选声明的 python 包依赖（模块级 ``PYTHON_DEPS = [...]``，
 # 元素是 **import 名**（faster_whisper）不是 pip 名——探测对象是 find_spec）。

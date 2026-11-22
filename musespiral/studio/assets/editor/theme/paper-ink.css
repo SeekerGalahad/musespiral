@@ -1,5 +1,9 @@
 /* paper-ink — musespiral Studio 纸墨主题（本地定制，cdnjs 无此 theme）。
- * 依赖 core.css 的 :root 变量（--paper-*/--ink-*/--line-*/--wash/--tint/--font-mono），
+ * 依赖 core.css 的 :root 变量（--paper-*、--ink-*、--line-*、--wash、--tint、--font-mono）。
+ * 注意：CSS 注释内严禁出现「星号紧随斜杠」序列（旧版变量列表用斜杠分隔
+ * `--paper-*` 与 `--ink-*`，恰好构成该序列，注释被提前闭合，解析器把紧随的
+ * 首条 .CodeMirror 基础规则当垃圾选择器吞掉——编辑器永久白底、暗色失效；
+ * 2026-11-22 FEAT-5 暗色补全轮浏览器 CSSOM 实测定位）。
  * 亮/暗双色随 html[data-theme] 与 prefers-color-scheme 自动切换。
  * 加载顺序：必须在 codemirror.min.css 之后（同特异性靠后者胜出）。
  */

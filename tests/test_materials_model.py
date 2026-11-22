@@ -240,8 +240,9 @@ def test_core_materials_layer_is_pure() -> None:
     禁 pathlib/os/json/io/open/subprocess/config——零 I/O 不是只禁架构门
     规则 3 的四库，而是整个文件系统/时钟面（fetched_at 由调用方注入）。
     第二十一期扩两模块（tags/search）：re 属纯计算 stdlib，纳入白名单。
+    ARCH-5（2026-11-22）vector：math 属纯计算 stdlib，纳入白名单。
     """
-    allowed = {"__future__", "hashlib", "typing", "dataclasses", "datetime", "re"}
+    allowed = {"__future__", "hashlib", "typing", "dataclasses", "datetime", "re", "math"}
     pkg = Path(model.__file__).parent
     for path in sorted(pkg.glob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))

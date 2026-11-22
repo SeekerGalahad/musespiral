@@ -4,7 +4,8 @@
   a) 构建产物存在、字节等于各源 render/render_core_js/render_core_css 结果，
      且壳被 make_server 服务（GET / 200 text/html 与产物逐字节一致——走
      _read_ui_html 数据面）；assets 静态面（/assets/*）见本文件「g) 产物静态面」
-  b) M1 三锚：壳 ≤48KiB / 手写 assets 总量 ≤400KiB / 单文件 ≤208KiB + 触发条款
+  b) 体积锚：壳 ≤20KiB（ARCH-1 ③重锚）/ 手写 assets 总量三档 / 分层锚（core/view/
+     core.css/view.css/view.html.js）+ 触发条款
      （2026-11-18 用户裁决重锚；2026-11-19 F1 起 assets/editor/** vendor 剥离
      手写口径并另设 VENDOR_PINNED 清单钉死；单文件时代 MAX_BYTES 13 次扩门
      沿革随多文件化退役，沿革见 git 历史——估算偏低第四次判例与锚注释档在下）
@@ -41,14 +42,12 @@ CORE_CSS = STUDIO / "assets" / "core.css"
 # ── M1 三锚 + 触发条款（2026-11-18 用户裁决，随前端多文件化同批重锚）──────
 # 单文件时代（MAX_BYTES ≤304KiB；13 次扩门沿革 136KB→144KiB→192KiB→194KiB→
 # 224KiB→240KiB→248KiB→260KiB→272KiB→304KiB，裁决依据档见 git 历史）随多文件化
-# 退役——多文件后门约束形态改为「三锚 + 触发条款」：
-#   壳 ≤48KiB（49,152B）         实测 42,284B=41.3KiB（R4 导入弹窗批后），
-#                                余 6.7KiB——壳含八视图内联 HTML（tmpl
-#                                11,709B + views，F58 纪律 HTML 零压缩）
-#                                为物理下限；M2 critical CSS 若内联进壳会使
-#                                壳再涨，届时按同一逻辑（实测+余量）复核壳锚。
-#   assets 总量 ≤400KiB          见下「手写口径」。
-#   单文件 ≤208KiB（212,992B）   见下「手写口径」。
+# 退役——多文件后门约束形态改为「体积锚 + 触发条款」。原三锚形态（沿革留档）：
+#   壳 ≤48KiB（49,152B）         [ARCH-1 ③ 已重锚为 20KiB，见 SHELL_MAX_BYTES 处]
+#   assets 总量 ≤400KiB          [已改绿/黄/红三档，见 ASSETS_TOTAL_*]
+#   单文件 ≤208KiB（212,992B）   [保留为兜底，见 ASSET_FILE_MAX_BYTES]。
+# ARCH-1 ① 后壳 HTML 外移（骨架注入 assets/views/*.html.js），壳实测 10,006B；
+# ③ 将壳锚重设为 20KiB（正典 §ARCH-1 步骤 8）。
 # 正典 §二/§三 预估（壳 ~15-20KB、core.js 压缩后 ~110KB「需实测」）被实测证伪
 # ——**估算偏低第四次判例**（沿 E1-E3 偏低 5 倍 / F72 偏低 ~1 倍 / R4 偏低 3 倍
 # 之后）：前端体积按设计文档估算立预算不可靠，须以实测为准。
@@ -73,7 +72,10 @@ CORE_CSS = STUDIO / "assets" / "core.css"
 # core.css 60,419B / editor.js 24,823B / editor.css 3,743B = 293,427B=286.5KiB，
 # 余量 360KiB 触发线 75,213B；core.js 距 200KiB 触发线仅 358B（水位告警仍生效：
 # 下一批前端功能落地前先看 M3 拆分）。
-SHELL_MAX_BYTES = 48 * 1024
+# ── ARCH-1 ③ 壳锚重设（2026-11-21）──────────────────────────
+# ①壳 HTML 外移后壳实测 10,006B（原 49,130B，−79.7%）——原 48KiB 锚失去意义。
+# 正典 §ARCH-1 步骤 8：壳锚 48KiB→20KiB（拆完预期 ~15KB，留缓冲）。实测余 10,474B。
+SHELL_MAX_BYTES = 20 * 1024   # 20,480B（ARCH-1 ③；原 48KiB）
 # ── 总量三档（2026-11-21 owner 裁决「机制修正」：总量锚自硬门降为绿/黄/红三档）──
 # 沿革：REFINE-ITER 批（2026-11-20）最小必要抬锚 426,500→432,000B 原带
 # 「⚠️ 待 owner 追认」标记——**2026-11-21 owner 明确追认 432,000 有效**；同日
@@ -112,14 +114,60 @@ SHELL_MAX_BYTES = 48 * 1024
 # material.js +85B（lineage repaint 钩子 + 清筛选复位 mconf——40,863→40,948B
 # 距 40KiB 锚余 12B）+ N-5 侧 views/article.js +4,330B（并排双栏 SBS 函数族）
 # 与 core.css +753B（sbs 样式，见其批注释）。
-# **首屏锚（FIRST_SCREEN_MAX_BYTES）保持硬门不变**——那才是用户体验指标；
-# 本批另加 80% 使用率告警（见 test_first_screen_budget）。单文件/单视图/core
-# 分层锚维持硬门（防单点失控，三档只作用于「总量」一层）。
-# 绿档上限沿用 N-2 批的 444,000B（= 该批批内读数 443,396B + 604B 尾数）；
-# 按提交 8fbc815b6b 复算的实测值是 443,482B（余 518B）——两种读数都记在这里，
-# 以提交复算值为准（口径纪律见下方「数字口径纪律」条）。
-ASSETS_TOTAL_GREEN_MAX = 444_000
-ASSETS_TOTAL_YELLOW_MAX = 480_000    # 黄档上限（绿 +8%——软警报带）
+# **ARCH-1 ①+② 拆分批（2026-11-21）总量三档口径重校（口径级调整·第二次也是
+# 最后一次，owner 裁决 2026-11-21）**：ARCH-1 落地后 assets-only 口径实测
+# 513,073B 超红档 480,000B——但拆解证明**不是真膨胀，是门口径与架构动作的
+# 结构性冲突**：壳 HTML 外移使壳 −39,124B（门只扫 assets/，减量不可见）而
+# views/*.html.js 十文件 +39,666B（门内可见），净效果=前端总交付面仅 +~2KB
+# 包装开销。**口径变更理由**：原口径只扫 assets/，任何「字节从壳搬到 assets」
+# 的瘦身动作都会被误判为膨胀（REFINE-ITER/批3/ARCH-1 三次撞门同根因）；门应
+# 度量「用户为本站付出的总字节」= **壳 + 手写 assets 全量**。**ARCH-1 归因链**
+# （git ls-tree HEAD 复算，正典口径）：HEAD 469,192B → ①壳 49,130→10,006B
+# （−39,124，门内不可见）+ html.js +39,666 + core.js/独立产物 +3,176 → ②
+# core.css 77,416→33,749（−43,667）+ views/*.css +44,081（净 +414=@media 包裹
+# 重组与 .pg-detail,.pr-rungrid 逗号组拆分固有开销）+ core.js 装载链 +625 →
+# 实测总交付面 **523,079B**（壳 10,006 + assets 513,073）。**首屏锚不动**：
+# 首屏（壳+core.js+core.css）149,551→106,509B（−29%），ARCH-1 核心收益；
+# FIRST_SCREEN_MAX_BYTES 硬门与 80% 告警语义不变。三档数字按新口径重校：
+# **FEAT-2 智能组稿批增长归因（2026-11-22，绿→黄首因）**：compose 视图加三步
+# 向导——ui.views/compose.html 向导 modal 骨架+入口按钮 → assets/views/
+# compose.js +7.8KB（SC 状态机/三步导航/素材列表/大纲就地编辑）→ compose.css
+# +1.4KB（.sc-* 全族）；零 core.js/壳改动（向导全在懒加载视图内，首屏不动）。
+# 总交付面 528,229→539,277B（+11,048B）越过绿档 530,000 落黄——黄档=软警报
+# 不阻塞；下一批前端落地前宜先清一笔 views/*.js 瘦身或重校绿档。
+# **FEAT-3 数据回流批增长归因（2026-11-22，黄带内续增）**：洞察 SVG 趋势图——
+# ui.views/insight.html +趋势卡 → assets/views/insight.js +聚合/渲染（statsBuckets/
+# renderStatsTrend，零新端点）→ insight.css +14 条 .st-*/stats-trend 规则（三线色
+# 走 CSS 变量，暗色自动覆写）；零 core.js/壳改动（全在懒加载 insight 视图，首屏
+# 不动）。总交付面 539,277→544,013B（+4,736B），仍在黄带（≤570,000）软警报内，
+# test_plugins_ui TOTAL_MAX 已随批 540,000→545,000 对齐。
+# **FEAT-4 小说双件套批增长归因（2026-11-22，黄带内续增）**：人物关系力导向图
+# （SVG 自绘零依赖，不引 D3）+ 伏笔账本三态面板——按 lineage.js 判例二次拆分为
+# 独立产物 assets/novel.js（9,242B：forceLayout/graphSvg/foreHtml + boot，
+# compose.js 贴 40KiB 锚不进视图产物）+ compose 视图关系轻面（+643B：挂卡行关系
+# 展示/建卡弹窗 relations 输入/cnParseRelations）+ compose.html cm-rel/cm-fore 两
+# 容器（→html.js +346B）+ compose.css 11 条 .cn-* 规则 + core.js 装载接线
+# （+149B：loader 清单 + VSTANDALONE 登记）。首屏不动（novel.js 懒加载）。
+# 总交付面 544,013→555,262B（+11,249B），仍在黄带（≤570,000）软警报内，
+# test_plugins_ui TOTAL_MAX 已随批 545,000→556,000 对齐。
+# **FEAT-5 前端交互升级批增长归因（2026-11-22，黄带内续增，+6,958B）**：
+# ①快捷键速查（? 唤起）——壳 ui.tmpl.html +kbd-modal +535B、ui.js core
+# +SHORTCUTS/kbdOpen/键位绑定（?/​/ 聚焦搜索/Escape 链）；②行式骨架
+# skelCards/skelRows 归 core（material/sources 首访占位画在 __onViewHtml——
+# material.js 贴 40KiB 水位仅 +7B 不加逻辑）；③四视图空态引导（sources/plugins/
+# design/books 空态文案改「你可以做什么」+CTA 按钮，html.js +~700B）；④暗色补全
+# （live 预览 iframe 双色板 + 灯箱错误色 token 化）。首屏增量=壳 +535B 与
+# core.js +4,050B（速查数据与骨架通用件，视图共用故归 core）。总交付面
+# 555,262→562,220B，仍在黄带（≤570,000）；test_plugins_ui TOTAL_MAX 随批
+# 556,000→563,000 对齐——**黄带余量仅 7KB，下批前端功能应先瘦身或走
+# novel.js 式独立产物判例**。
+ASSETS_TOTAL_GREEN_MAX = 530_000      # 523,079 + ~7K 缓冲
+ASSETS_TOTAL_YELLOW_MAX = 570_000     # 绿 ×1.075——软警报带
+ASSETS_TOTAL_RED_MAX = 600_000        # 硬上限：总交付面 600KB 对个人工具已极宽松
+# ~~旧三档常量~~（ARCH-1 口径重校退役）：GREEN 444,000 / YELLOW 480,000 为
+# assets-only 口径读数，随口径退役；「红档（>480,000B）硬失败」语义由
+# ASSETS_TOTAL_RED_MAX 承接。**此为第二次也是最后一次口径级调整——将来再爆
+# 红档即真膨胀，按拆分/删除处置，不得再动口径。**
 # 旧常量 ASSETS_TOTAL_MAX_BYTES / M3_ASSETS_TOTAL_MAX_BYTES / AFTER_M1_ASSETS_BYTES
 # 随三档化退役：消费它们的三个测试统一改走 _assert_assets_total_tier()。
 # AFTER_M1_ASSETS_BYTES 的定义行已于 2026-11-21 三档化批（提交 8fbc815b6b）删除，
@@ -140,8 +188,18 @@ ASSET_FILE_MAX_BYTES = 208 * 1024
 #   shell 45,720B / core.js 55,519B / 单 view 最大 material.js 39,511B /
 #   手写 assets 总量 376,127B≈367.3KiB / 首屏(壳+core+单view 最大) 140,750B≈137.5KiB。
 # 分层：core ≤160KiB（余 105KB）/ 单 view ≤40KiB（material 39,511B 距锚仅 1.4KB）/ 总量锚见下。
+# ── ARCH-1 ② CSS 拆分分层锚（2026-11-21；总规划 §ARCH-1 步骤③锚重设）──────
+# core.css 自「全量 77,416B」拆为 core 33,749B（token/暗色/reset/keyframes/壳框架/
+# 通用组件/首屏 publish）+ assets/views/<view>.css 十懒视图（最大 material.css
+# 7,827B）。锚：core.css ≤40KiB（余 ~6.2KB）/ 单 view css ≤8KiB（material 余 ~365B）。
+# ── ARCH-1 ③ 视图 HTML 注入器新锚（2026-11-21；正典 §ARCH-1 步骤 9）────────
+# ①外移后 assets/views/<view>.html.js（十懒视图骨架注入器，publish 无此产物）
+# 单文件最大 books.html.js 6,487B；锚 ≤8KiB（余 ~1.7KB）。此锚原缺失——③补齐。
 CORE_JS_MAX_BYTES = 160 * 1024        # 163,840B
 VIEW_JS_MAX_BYTES = 40 * 1024         # 40,960B
+CORE_CSS_MAX_BYTES = 40 * 1024        # 40,960B（②拆分后实测 33,582B，余 6.4KB）
+VIEW_CSS_MAX_BYTES = 8 * 1024         # 8,192B（②实测最大 material.css 7,825B）
+VIEW_HTML_MAX_BYTES = 8 * 1024        # 8,192B（③实测最大 books.html.js 6,487B）
 FIRST_SCREEN_MAX_BYTES = 240 * 1024   # 245,760B：行业 size-limit 洞察=parse/execute 成本
 # 总量锚：题面建议 360KiB（368,640B），但「一份 ui.js 拆成 1 core + 9 view」的固有开销
 # （9 独立文件 + 跨视图调用的 no-op 占位符 + 9 bind 包装 + ensureView）使实测为
@@ -309,7 +367,7 @@ FIRST_SCREEN_MAX_BYTES = 240 * 1024   # 245,760B：行业 size-limit 洞察=pars
 #   改懒加载（M3 架构的能力，用它）。当前 ~60%：AI-3 提交 2b0c18f738 复算
 #   148,010B=60.2%（N-2 批内读数 147,811B=60.1%，同档）。
 # **二级（单产物上限，防单文件失控——维持硬门）**：
-#   core.js ≤ 163,840B / 单 view ≤ 40,960B / 壳 ≤ 49,152B
+#   core.js ≤ 163,840B / 单 view ≤ 40,960B / 壳 ≤ 20,480B（ARCH-1 ③ 重锚）
 #   这三条不随总量变化，任何「拆成独立懒加载文件」都合法绕过（正是设计意图；
 #   判例：E-6 versions.js、REFINE-ITER iterations.js 自 material.js 拆出）。
 # **三级（总量三档，防整体膨胀——2026-11-21 由硬门降档）**：
@@ -317,7 +375,9 @@ FIRST_SCREEN_MAX_BYTES = 240 * 1024   # 245,760B：行业 size-limit 洞察=pars
 #   红 >480,000B（硬失败，必须拆分/删除）。判例依据：两天三撞（REFINE-ITER
 #   +5,368 / N-2 +11,524）而首屏始终 60% 未承压——总量增长是功能正常扩张
 #   （9 插件/11 视图/5 源线），用硬门管正常增长是范畴错误。
-AFTER_M1_SHELL_BYTES = 49_152  # N-3 源级 AI 配置批（sources 视图 AI 配置弹窗）后重锚至硬锚上界，见上注释档
+# ARCH-1 ③（2026-11-21）：壳硬锚 SHELL_MAX_BYTES 已 48KiB→20KiB，本防回涨锚同步对齐
+# （否则 49KB 的弱锚与 20KB 硬锚并存的冗余/矛盾）。原值 49,152=N-3 批硬锚上界。
+AFTER_M1_SHELL_BYTES = 20 * 1024  # 20,480B（ARCH-1 ③，与 SHELL_MAX_BYTES 同值）
 
 # ── F1 vendor 清单钉死（CM5 5.65.18 一期面：core+markdown mode+两 edit addon
 # +两 search addon；任何升级/增删都须显式改这里并重估）─────────────────
@@ -330,7 +390,7 @@ VENDOR_PINNED: dict[str, int] = {
     "assets/editor/addon/edit/matchbrackets.min.js": 3_096,
     "assets/editor/addon/search/search.min.js": 5_804,
     "assets/editor/addon/search/searchcursor.min.js": 5_277,
-    "assets/editor/theme/paper-ink.css": 2_718,  # 2026-11-21 改名 mdpub→musespiral（注释 +5B）
+    "assets/editor/theme/paper-ink.css": 3_108,  # 2026-11-22 FEAT-5 暗色补全：头注释内旧变量列表的「星号紧随斜杠」序列提前闭合注释，吞掉首条 .CodeMirror 基础规则（编辑器永久白底暗色失效，浏览器 CSSOM 实测定位）——变量列表改顿号分隔+成因注记 +390B，随批更新钉死值
 }
 
 
@@ -357,11 +417,12 @@ def _isolate_home(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_build_product_exists_and_matches_sources() -> None:
-    """产物存在且逐字节等于各源当前 render 结果（conftest 会话级已构建）。
+    """产物存在且逐字节等于各源 render/render_core_js/render_core_css 结果（conftest 会话级已构建）。
 
     M3 起产物=壳（render）+ assets/core.js（render_core_js 去视图块）+
     assets/views/<view>.js（render_view_js 九视图）+ assets/core.css（render_core_css）。
-    全部对拍，缺一或漂移即红。
+    ARCH-1 ② 起 + assets/views/<view>.css（render_view_css 十懒视图；publish 无
+    产物——首屏样式在 core.css）。全部对拍，缺一或漂移即红。
     """
     assert OUT.is_file(), f"构建产物缺失: {OUT}"
     assert CORE_JS.is_file() and CORE_CSS.is_file(), "assets 产物缺失（须跑 scripts/build_ui.py）"
@@ -381,6 +442,17 @@ def test_build_product_exists_and_matches_sources() -> None:
         assert path.is_file(), f"视图产物缺失: {path}"
         assert path.read_bytes() == mod.render_view_js(js, name), \
             f"assets/views/{name}.js 与 ui.js 视图块压缩结果不一致"
+    # ARCH-1 ②：十懒视图 CSS 产物逐一对拍（publish 无 css 产物）
+    css_views = mod.load_view_css()
+    assert set(css_views) == set(mod.EXPECTED_VIEWS) - {mod.FIRST_SCREEN_VIEW}, \
+        "ui.views/*.css 源集合与预期懒视图不一致"
+    for name, blob in css_views.items():
+        path = STUDIO / "assets" / "views" / f"{name}.css"
+        assert path.is_file(), f"视图 CSS 产物缺失: {path}"
+        assert path.read_bytes() == mod.render_view_css(blob, name), \
+            f"assets/views/{name}.css 与 ui.views/{name}.css 压缩结果不一致"
+    assert not (STUDIO / "assets" / "views" / "publish.css").exists(), \
+        "首屏视图不得有 css 产物（publish 样式在 core.css）"
 
 
 def test_make_server_serves_build_product(tmp_path: Path) -> None:
@@ -433,14 +505,22 @@ def _handwritten_files() -> list[Path]:
 
 
 def _assets_total_bytes() -> int:
-    return sum(p.stat().st_size for p in _handwritten_files())
+    """总交付面（ARCH-1 口径重校 2026-11-21 owner 裁决）：壳 ui.html + 手写 assets。
+
+    原 assets-only 口径把「壳→assets 字节搬家」（ARCH-1 壳 HTML/CSS 外移，壳同额
+    减小但门不可见）误判为膨胀——门改度量用户真实交付面=壳产物 + assets/ 手写
+    文件（剥 assets/editor/ vendor，与分层锚同口径）。归因链与三档重校依据见
+    ASSETS_TOTAL_GREEN_MAX 注释档。
+    """
+    shell = OUT.stat().st_size
+    return shell + sum(p.stat().st_size for p in _handwritten_files())
 
 
 def _assert_assets_total_tier() -> int:
-    """总量三档判定（2026-11-21 owner 裁决机制修正；三个总量消费测试统一走此）。
+    """总量三档判定（2026-11-21 owner 裁决机制修正；ARCH-1 起口径=总交付面）。
 
-    绿 ≤444,000B PASS；黄 ≤480,000B PASS+醒目告警（warnings+print，不阻塞
-    交付，下批须在常量注释档补增长归因）；红 >480,000B FAIL（真膨胀，必须
+    绿 ≤530,000B PASS；黄 ≤570,000B PASS+醒目告警（warnings+print，不阻塞
+    交付，下批须在常量注释档补增长归因）；红 >600,000B FAIL（真膨胀，必须
     拆分/删除）。返回实测总量供调用方记录。
     """
     import warnings
@@ -450,21 +530,24 @@ def _assert_assets_total_tier() -> int:
         return total
     if total <= ASSETS_TOTAL_YELLOW_MAX:
         msg = (
-            f"⚠️ 手写 assets 总量 {total}B 落入黄档（{ASSETS_TOTAL_GREEN_MAX}~"
-            f"{ASSETS_TOTAL_YELLOW_MAX}B 软警报带）：不阻塞交付，但下一批必须在"
-            " test_build_ui.py 常量注释档补增长归因说明（绿/黄/红三档语义见"
-            " ASSETS_TOTAL_GREEN_MAX 注释档）"
+            f"⚠️ 前端总交付面（壳+手写 assets）{total}B 落入黄档（"
+            f"{ASSETS_TOTAL_GREEN_MAX}~{ASSETS_TOTAL_YELLOW_MAX}B 软警报带）：不阻塞"
+            "交付，但下一批必须在 test_build_ui.py 常量注释档补增长归因说明"
+            "（绿/黄/红三档语义见 ASSETS_TOTAL_GREEN_MAX 注释档）"
         )
         print("\n" + "=" * 24 + msg + "=" * 24 + "\n")
         warnings.warn(UserWarning(msg), stacklevel=2)
         return total
     raise AssertionError(
-        f"手写 assets 总量 {total}B 超红档 {ASSETS_TOTAL_YELLOW_MAX}B——真膨胀，"
-        "必须拆分或删除（三档语义见 ASSETS_TOTAL_GREEN_MAX 注释档）")
+        f"前端总交付面（壳+手写 assets）{total}B 超红档 {ASSETS_TOTAL_RED_MAX}B"
+        "——真膨胀，必须拆分或删除（三档语义见 ASSETS_TOTAL_GREEN_MAX 注释档）")
 
 
 def test_shell_within_budget() -> None:
-    """壳锚（M1 三锚之一）：ui.html ≤ 48KiB（壳含八视图内联 HTML 为物理下限）。"""
+    """壳锚（ARCH-1 ③ 重锚）：ui.html ≤ 20KiB（①外移后实测 10,006B，余 ~10KB）。
+
+    正典 §ARCH-1 步骤 8：壳锚 48KiB→20KiB（拆分后预期 ~15KB，留 5KB 缓冲）。
+    """
     size = OUT.stat().st_size
     assert size <= SHELL_MAX_BYTES, f"壳 ui.html 超出预算: {size} bytes（锚注释档见上）"
 
@@ -480,18 +563,25 @@ def test_assets_within_total_budget() -> None:
 
 
 def test_asset_files_within_budget() -> None:
-    """M3 分层锚（手写口径）：core.js ≤160KiB / 单 view.js ≤40KiB / 其余手写 ≤208KiB。"""
+    """分层锚（手写口径）：core.js ≤160KiB / 单 view.js ≤40KiB / core.css ≤40KiB /
+    单 view css ≤8KiB / 单 view html.js ≤8KiB（③）/ 其余手写 ≤208KiB。"""
     for path in _handwritten_files():
         size = path.stat().st_size
         rel = path.relative_to(STUDIO).as_posix()
         if rel == "assets/core.js":
             limit, label = CORE_JS_MAX_BYTES, "core.js"
+        elif rel == "assets/core.css":
+            limit, label = CORE_CSS_MAX_BYTES, "core.css"
+        elif rel.startswith("assets/views/") and rel.endswith(".html.js"):
+            limit, label = VIEW_HTML_MAX_BYTES, "view.html.js"  # ③：须先于 .js 分支
         elif rel.startswith("assets/views/") and rel.endswith(".js"):
             limit, label = VIEW_JS_MAX_BYTES, "view.js"
+        elif rel.startswith("assets/views/") and rel.endswith(".css"):
+            limit, label = VIEW_CSS_MAX_BYTES, "view.css"
         else:
             limit, label = ASSET_FILE_MAX_BYTES, "单文件"
         assert size <= limit, (
-            f"{rel} 超出{label}预算: {size}B > {limit}B（分层锚见模块头 M3 注释档）")
+            f"{rel} 超出{label}预算: {size}B > {limit}B（分层锚见模块头 M3/②注释档）")
 
 
 def test_first_screen_budget() -> None:
@@ -509,7 +599,10 @@ def test_first_screen_budget() -> None:
 
     shell = OUT.stat().st_size
     core = CORE_JS.stat().st_size
-    views = sorted((STUDIO / "assets" / "views").glob("*.js"))
+    # ARCH-1：views/ 另有 *.html.js（骨架注入器，懒加载 HTML 不进首屏 parse 的
+    # JS 预算口径）——首屏取最大「行为脚本」view.js 作最坏情况。
+    views = sorted(p for p in (STUDIO / "assets" / "views").glob("*.js")
+                   if not p.name.endswith(".html.js"))
     assert views, "缺少视图产物（须跑 scripts/build_ui.py）"
     biggest_view = max(p.stat().st_size for p in views)
     biggest_name = max(views, key=lambda p: p.stat().st_size).name
@@ -534,7 +627,8 @@ def test_m3_split_trigger_watermark() -> None:
     起走三档（绿/黄/红）——红档（>480,000B）在本测试同样转红。
     """
     core = CORE_JS.stat().st_size
-    views = sorted((STUDIO / "assets" / "views").glob("*.js"))
+    views = sorted(p for p in (STUDIO / "assets" / "views").glob("*.js")
+                   if not p.name.endswith(".html.js"))
     biggest_view = max((p.stat().st_size for p in views), default=0)
     biggest_name = max(views, key=lambda p: p.stat().st_size).name if views else "(none)"
     assert core <= CORE_JS_MAX_BYTES, (
@@ -629,7 +723,7 @@ def test_assets_total_tier_semantics() -> None:
 
 def test_build_render_is_deterministic() -> None:
     """纯函数确定性：同一组源连算两次 render/render_core_js/render_view_js/render_core_css
-    逐字节一致（壳 + core + 九视图 + css 全测）。"""
+    逐字节一致（壳 + core + 九视图 + css 全测；②起含 render_view_css）。"""
     mod = _build_module()
     t, v, c, j = _sources(mod)
     assert mod.render(t, v, c, j) == mod.render(t, v, c, j)
@@ -637,19 +731,27 @@ def test_build_render_is_deterministic() -> None:
     assert mod.render_core_css(c) == mod.render_core_css(c)
     for name in mod.EXPECTED_VIEWS:
         assert mod.render_view_js(j, name) == mod.render_view_js(j, name), name
+    css_views = mod.load_view_css()
+    for name, blob in css_views.items():
+        assert mod.render_view_css(blob, name) == mod.render_view_css(blob, name), name
 
 
 def test_build_twice_produces_identical_file() -> None:
-    """落盘确定性：连跑两次 build()，壳+assets 全文件（含 views/）sha256 一致。"""
+    """落盘确定性：连跑两次 build()，壳+assets 全文件（含 views/ js+css）sha256 一致。"""
     mod = _build_module()
     first = mod.build()
-    files = [OUT, CORE_JS, CORE_CSS] + sorted((STUDIO / "assets" / "views").glob("*.js"))
+    files = ([OUT, CORE_JS, CORE_CSS]
+             + sorted((STUDIO / "assets" / "views").glob("*.js"))
+             + sorted((STUDIO / "assets" / "views").glob("*.css")))
     digest1 = [hashlib.sha256(p.read_bytes()).hexdigest() for p in files]
     second = mod.build()
     digest2 = [hashlib.sha256(p.read_bytes()).hexdigest() for p in files]
     assert first == second == OUT
     assert digest1 == digest2
-    assert len(files) == 3 + len(mod.EXPECTED_VIEWS), "assets 全文件枚举缺视图产物"
+    # ARCH-1：views/ 三产物——11 行为脚本 + 10 HTML 注入器（publish 留壳）
+    # + 10 视图 CSS（publish 样式在 core.css）
+    assert len(files) == 3 + 3 * len(mod.EXPECTED_VIEWS) - 2, \
+        f"assets 全文件枚举缺视图产物（实为 {len(files)}）: {files}"
 
 
 def test_m3_view_blocks_present_and_canonical() -> None:
@@ -702,15 +804,17 @@ def test_build_product_contains_structure_markers() -> None:
 def test_views_directory_layout() -> None:
     """ui.views/ 恰含视图文件（P1 重构：queue→publish、dashboard→insight、
     新增 sources；F72 批 2026-11-17 新增 design 视觉编辑；PL-3 批 2026-11-20
-    新增 plugins/plugin-run——插件系统四视图按评审 §2.3 拆两 view）。
+    新增 plugins/plugin-run——插件系统四视图按评审 §2.3 拆两 view；
+    ARCH-1 批 2026-11-21 新增 article——原 tmpl 硬编码骨架外移为第 11 个源文件）。
 
     文件名=marker 名=hash 名=section id（canonical 单名，test_studio_ui 的
     test_p1_view_file_names_canonical 同口径）。
     """
     names = sorted(p.stem for p in VIEWS.glob("*.html"))
-    # PL-3 #plugins 批（2026-11-20）：+plugins +plugin-run（十视图——工具组两入口）
-    assert names == ["books", "compose", "design", "insight", "material", "plugin-run",
-                     "plugins", "publish", "settings", "sources"], names
+    # ARCH-1 批（2026-11-21）：+article（十一个源文件——publish 留壳内联，
+    # 其余十个出 html.js 注入器）
+    assert names == ["article", "books", "compose", "design", "insight", "material",
+                     "plugin-run", "plugins", "publish", "settings", "sources"], names
     for name in names:
         blob = (VIEWS / f"{name}.html").read_bytes()
         assert blob, name
@@ -726,10 +830,12 @@ def test_empty_view_renders_to_zero_bytes() -> None:
     v2 = dict(v, empty=b"")
     product = mod.render(t2, v2, c, j)
     assert b"<!--BUILD:VIEW:" not in product  # 全部消费
-    # 反证：非空则产物应含其内容
-    v3 = dict(v2, empty=b'<section id="view-empty" class="view" hidden></section>\n')
+    # 反证：非空则产物应含其内容（ARCH-1 起非首屏=空占位 section 进壳）——
+    # 用既有视图 settings 换最小骨架做探针（新合成懒视图名会被装载契约门拒）
+    v3 = dict(v2, settings=b'<section id="view-settings" class="view" hidden></section>\n')
     product3 = mod.render(t2, v3, c, j)
-    assert b"view-empty" in product3
+    assert b'view-settings' in product3
+    assert b'view-empty' not in product3  # 空视图不产生占位
 
 
 def test_view_marker_and_files_must_agree() -> None:
@@ -738,6 +844,74 @@ def test_view_marker_and_files_must_agree() -> None:
     t, v, c, j = _sources(mod)
     with pytest.raises(ValueError, match="不一致"):
         mod.render(t, {k: b for k, b in v.items() if k != "settings"}, c, j)
+
+
+# ── e2) ARCH-1 壳 HTML 外移（2026-11-21）─────────────────────
+
+
+def test_arch1_shell_placeholder_and_first_screen_inline() -> None:
+    """壳内形态：首屏 publish 全骨架内联（首屏加载不触发懒加载）；其余十视图
+    =空占位 <section …></section>（开标签逐字节取自源文件，属性保真）。"""
+    shell = OUT.read_text(encoding="utf-8")
+    for p in sorted(VIEWS.glob("*.html")):
+        name = p.stem
+        body = p.read_bytes().rstrip(b"\n")
+        opening = body[:body.index(b">") + 1]
+        if name == "publish":
+            assert '<section id="view-publish"' in shell
+            assert 'id="queue-filters"' in shell, "publish 骨架须内联进壳（首屏红线）"
+            assert 'id="article-list"' in shell
+        else:
+            assert (opening + b"</section>").decode() in shell, name
+    # 占位恰好 10 个（article/books/compose/design/insight/material/plugin-run/
+    # plugins/settings/sources）；publish 的 section 非空。
+    placeholders = re.findall(
+        r'<section id="view-[a-z0-9-]+"[^>]*></section>', shell)
+    assert len(placeholders) == 10, placeholders
+
+
+def test_arch1_lazy_skeleton_not_in_shell() -> None:
+    """反证门：十懒视图的骨架内层（取各源内层首个 id 作探针）不得留在壳里。"""
+    shell = OUT.read_text(encoding="utf-8")
+    for p in sorted(VIEWS.glob("*.html")):
+        if p.stem == "publish":
+            continue
+        body = p.read_bytes().rstrip(b"\n")
+        inner = body[body.index(b">") + 1:-len(b"</section>")]
+        m = re.search(rb'id="([^"]+)"', inner)
+        assert m, f"{p.stem} 内层无 id 探针"
+        probe = m.group(1).decode()
+        assert f'id="{probe}"' not in shell, (p.stem, probe)
+
+
+def test_arch1_view_html_js_products() -> None:
+    """assets/views/<view>.html.js 注入器：首行 getElementById innerHTML= 模板串
+    形态、字节等于 render_view_html_js、publish 无此产物。"""
+    mod = _build_module()
+    views = {p.stem: p.read_bytes() for p in VIEWS.glob("*.html")}
+    for name in sorted(views):
+        path = STUDIO / "assets" / "views" / f"{name}.html.js"
+        if name == mod.FIRST_SCREEN_VIEW:
+            assert not path.exists(), "首屏视图不得有 html.js（HTML 已在壳）"
+            continue
+        assert path.is_file(), f"注入器缺失: {name}"
+        blob = path.read_bytes()
+        assert blob == mod.render_view_html_js(views, name), name
+        assert blob.startswith(
+            f"document.getElementById('view-{name}').innerHTML=`".encode()), name
+        assert blob.endswith(b"`;\n"), name
+
+
+def test_arch1_lazy_marker_requires_js_view_block() -> None:
+    """装载契约门：非空懒视图标记无对应 ui.js @view 块 → 拒绝构建（404 预防）。"""
+    mod = _build_module()
+    t, v, c, j = _sources(mod)
+    t2 = t.replace(b"<!--BUILD:VIEW:settings-->\n",
+                   b"<!--BUILD:VIEW:settings-->\n<!--BUILD:VIEW:ghost-->\n")
+    v2 = dict(v, ghost=b'<section id="view-ghost" class="view" hidden>'
+                      b'<div id="ghost-probe"></div></section>\n')
+    with pytest.raises(ValueError, match="无对应 ui.js"):
+        mod.render(t2, v2, c, j)
 
 
 # ── f) F58 保守压缩 ───────────────────────────────────────

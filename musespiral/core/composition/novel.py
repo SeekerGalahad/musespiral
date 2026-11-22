@@ -40,16 +40,145 @@ CHARACTER_TEXT_MAX = 400
 CHARACTER_NAME_MAX = 40
 CHARACTER_MAX_EVENTS = 30
 
+# FEAT-4 人物关系（meta.relations）：每条 {to: 对方人物名, relation: 关系描述}。
+# 卡片侧字段——关系跟着人物卡快照走（卡删关系即删）；渲染进 {{characters}}
+# 注入行，前端力导向图可视化（挂卡面）。
+CHARACTER_MAX_RELATIONS = 30
+
 # 素材 payload.meta.sub_type 的「人物卡」标识（materials API 复用的判别键）
 SUB_TYPE_CHARACTER = "character"
+
+
+# ── FEAT-4 伏笔追踪（session.foreshadowing）─────────────────────────────
+#
+# 伏笔账本挂在**会话**上（不挂素材——伏笔是「这本小说写到哪了」的进度面，
+# 换一本书就是另一个会话另一本账）。每条：
+#   {"id": "f1", "note": "文件内容未交代", "chapter": "第3章",
+#    "status": "planted|escalated|payoff"}
+# 三态（徽章面）：planted=已埋设（缺省）/ escalated=已推进 / payoff=已回收。
+# 「未回收」= status != payoff——生成时随 job.result 提示 + prompt 注入
+# 待回收清单（**提示不拦截**，与说话风格冲突检测同红线）。
+
+FORE_STATUS_PLANTED = "planted"
+FORE_STATUS_ESCALATED = "escalated"
+FORE_STATUS_PAYOFF = "payoff"
+FORESHADOWING_STATUSES: tuple[str, ...] = (
+    FORE_STATUS_PLANTED, FORE_STATUS_ESCALATED, FORE_STATUS_PAYOFF,
+)
+
+# 单条上限（账本进 prompt 的摘要面；note 是伏笔一句话描述，200 字绰绰有余）
+FORESHADOWING_NOTE_MAX = 200
+FORESHADOWING_CHAPTER_MAX = 80
+FORESHADOWING_MAX = 100
+
+
+def _fore_status_or_default(value: object) -> str:
+    """status 宽容归一（脏值 → planted；不崩读侧——存量/手改 session.json 防线）。"""
+    text = str(value or "").strip()
+    return text if text in FORESHADOWING_STATUSES else FORE_STATUS_PLANTED
+
+
+def validate_foreshadowing(items: Any) -> list[str]:
+    """校验伏笔载荷（list[{note, chapter?, status?}]——id 由服务层分配）。
+
+    返回错误清单（空=合法）。note 必填非空；chapter/status 可缺（缺省
+    ""/planted）；给错类型才是错误（同 validate_character 纪律）。
+    """
+    errors: list[str] = []
+    if not isinstance(items, list):
+        return ["伏笔必须是数组（每项 {note, chapter?, status?}）"]
+    for i, item in enumerate(items):
+        if not isinstance(item, dict):
+            errors.append(f"伏笔[{i}] 必须是对象")
+            continue
+        note = item.get("note")
+        if not isinstance(note, str) or not note.strip():
+            errors.append(f"伏笔[{i}].note 必须是非空字符串（伏笔描述）")
+        elif len(note.strip()) > FORESHADOWING_NOTE_MAX:
+            errors.append(
+                f"伏笔[{i}].note 过长（{len(note.strip())} 字符，上限 {FORESHADOWING_NOTE_MAX}）"
+            )
+        chapter = item.get("chapter", "")
+        if not isinstance(chapter, str):
+            errors.append(f"伏笔[{i}].chapter 必须是字符串")
+        elif len(chapter) > FORESHADOWING_CHAPTER_MAX:
+            errors.append(
+                f"伏笔[{i}].chapter 过长（上限 {FORESHADOWING_CHAPTER_MAX}）"
+            )
+        status = item.get("status", FORE_STATUS_PLANTED)
+        if status not in FORESHADOWING_STATUSES:
+            errors.append(
+                f"伏笔[{i}].status 必须是 {'/'.join(FORESHADOWING_STATUSES)} 之一: {status!r}"
+            )
+    return errors
+
+
+def normalize_foreshadowing_entry(item: dict[str, Any], fid: str) -> dict[str, str]:
+    """归一单条伏笔（校验通过后调用；id 由调用方分配——服务层按会话自增）。"""
+    return {
+        "id": str(fid),
+        "note": str(item.get("note") or "").strip()[:FORESHADOWING_NOTE_MAX],
+        "chapter": str(item.get("chapter") or "").strip()[:FORESHADOWING_CHAPTER_MAX],
+        "status": _fore_status_or_default(item.get("status")),
+    }
+
+
+def parse_foreshadowing(meta: Any) -> list[dict[str, str]]:
+    """session.json foreshadowing 键 → 伏笔账本（宽容读：非 list/脏条目跳过）。
+
+    存量 session.json 无该键 → []（零迁移零回归）；条目缺 note 丢弃（账本里
+    空白伏笔没有意义），status 脏值归一 planted（读侧不因手改坏文件而崩）。
+    """
+    out: list[dict[str, str]] = []
+    if not isinstance(meta, list):
+        return out
+    for item in meta:
+        if not isinstance(item, dict):
+            continue
+        note = str(item.get("note") or "").strip()
+        if not note:
+            continue
+        out.append(normalize_foreshadowing_entry(item, str(item.get("id") or "")))
+        if len(out) >= FORESHADOWING_MAX:
+            break
+    return out
+
+
+def open_foreshadowing(items: Sequence[dict[str, Any]]) -> list[dict[str, str]]:
+    """未回收伏笔（status != payoff）——生成后提示与 prompt 待回收清单的数据面。"""
+    return [
+        {"id": str(x.get("id") or ""), "note": str(x.get("note") or ""),
+         "chapter": str(x.get("chapter") or ""), "status": _fore_status_or_default(x.get("status"))}
+        for x in (items or [])
+        if isinstance(x, dict) and str(x.get("note") or "").strip()
+        and _fore_status_or_default(x.get("status")) != FORE_STATUS_PAYOFF
+    ]
+
+
+def render_foreshadowing(items: Sequence[dict[str, Any]]) -> str:
+    """未回收伏笔 → prompt 注入行（每条一行；已回收的不进——省 token，AI 只需
+    知道「还有什么没收」）。空账本/全部已回收 → 空串（整节缺席）。
+
+    形如：``- [埋设] 第3章：文件内容未交代`` / ``- [推进] 左眼异变与旧实验有关``。
+    """
+    open_items = open_foreshadowing(items)
+    if not open_items:
+        return ""
+    lines: list[str] = []
+    for item in open_items:
+        label = "推进" if item["status"] == FORE_STATUS_ESCALATED else "埋设"
+        where = f"{item['chapter']}：" if item["chapter"] else ""
+        lines.append(f"- [{label}] {where}{item['note']}")
+    return "\n".join(lines)
 
 
 def validate_character(payload: Any) -> list[str]:
     """校验人物卡载荷（返回错误清单，空=合法）。
 
     payload 形态：{"name": str 必填非空, "role"/"appearance"/"speech_style":
-    str 可缺, "key_events": list[str] 可缺}。宽容面与 materials 读侧同纪律：
-    缺键按空串/空表；给错类型才是错误（不静默吞错拼字段）。
+    str 可缺, "key_events": list[str] 可缺, "relations": list[{to, relation}]
+    可缺}。宽容面与 materials 读侧同纪律：缺键按空串/空表；给错类型才是错误
+    （不静默吞错拼字段）。
     """
     errors: list[str] = []
     if not isinstance(payload, dict):
@@ -75,26 +204,79 @@ def validate_character(payload: Any) -> list[str]:
             errors.append(f"key_events 过多（{len(events)} 条，上限 {CHARACTER_MAX_EVENTS}）")
         if any(not isinstance(e, str) for e in events):
             errors.append("key_events 每项必须是字符串")
+    errors.extend(_validate_relations(payload.get("relations", []), name))
+    return errors
+
+
+def _validate_relations(relations: Any, name: Any) -> list[str]:
+    """校验人物关系面（FEAT-4）：list[{to, relation}]——to 必填（对方人物名）。"""
+    errors: list[str] = []
+    if relations is None:
+        return errors
+    if not isinstance(relations, list):
+        return ["relations 必须是数组（每项 {to, relation}）"]
+    if len(relations) > CHARACTER_MAX_RELATIONS:
+        errors.append(f"relations 过多（{len(relations)} 条，上限 {CHARACTER_MAX_RELATIONS}）")
+    for i, rel in enumerate(relations):
+        if not isinstance(rel, dict):
+            errors.append(f"relations[{i}] 必须是对象（{{to, relation}}）")
+            continue
+        to = rel.get("to")
+        if not isinstance(to, str) or not to.strip():
+            errors.append(f"relations[{i}].to 必须是非空字符串（对方人物名）")
+        elif len(to.strip()) > CHARACTER_NAME_MAX:
+            errors.append(
+                f"relations[{i}].to 过长（{len(to.strip())} 字符，上限 {CHARACTER_NAME_MAX}）"
+            )
+        elif isinstance(name, str) and name.strip() and to.strip() == name.strip():
+            errors.append(f"relations[{i}].to 不能是自己（{to.strip()}）")
+        relation = rel.get("relation", "")
+        if not isinstance(relation, str):
+            errors.append(f"relations[{i}].relation 必须是字符串")
+        elif len(relation) > CHARACTER_TEXT_MAX:
+            errors.append(
+                f"relations[{i}].relation 过长（{len(relation)} 字符，上限 {CHARACTER_TEXT_MAX}）"
+            )
     return errors
 
 
 def normalize_character(payload: dict[str, Any]) -> dict[str, Any]:
     """归一人物卡（去空白、缺键补默认、事件去空行）——校验通过后调用。"""
     events = [str(e).strip() for e in (payload.get("key_events") or [])]
+    relations = _normalize_relations(payload.get("relations") or [])
     return {
         "name": str(payload.get("name") or "").strip(),
         "role": str(payload.get("role") or "").strip(),
         "appearance": str(payload.get("appearance") or "").strip(),
         "speech_style": str(payload.get("speech_style") or "").strip(),
         "key_events": [e for e in events if e][:CHARACTER_MAX_EVENTS],
+        "relations": relations,
     }
+
+
+def _normalize_relations(items: list[Any]) -> list[dict[str, str]]:
+    """归一关系面：去空白、丢空 to、截断至上限（校验通过后的宽容收尾）。"""
+    out: list[dict[str, str]] = []
+    for rel in items:
+        if not isinstance(rel, dict):
+            continue
+        to = str(rel.get("to") or "").strip()
+        if not to:
+            continue
+        out.append({
+            "to": to[:CHARACTER_NAME_MAX],
+            "relation": str(rel.get("relation") or "").strip()[:CHARACTER_TEXT_MAX],
+        })
+        if len(out) >= CHARACTER_MAX_RELATIONS:
+            break
+    return out
 
 
 def character_from_meta(meta: dict[str, Any] | None) -> dict[str, Any]:
     """素材 payload.meta → 人物卡视图（非人物卡返回空 name 的骨架）。
 
-    素材侧字段落位：meta.name/role/appearance/speech_style/key_events（与
-    schema 同名，零映射——读侧不必记第二套键名）。
+    素材侧字段落位：meta.name/role/appearance/speech_style/key_events/relations
+    （与 schema 同名，零映射——读侧不必记第二套键名）。
     """
     meta = meta or {}
     events = meta.get("key_events")
@@ -106,6 +288,7 @@ def character_from_meta(meta: dict[str, Any] | None) -> dict[str, Any]:
         "appearance": str(meta.get("appearance") or ""),
         "speech_style": str(meta.get("speech_style") or ""),
         "key_events": [str(e) for e in events if isinstance(e, str) and str(e).strip()],
+        "relations": _normalize_relations(meta.get("relations") if isinstance(meta.get("relations"), list) else []),
     }
 
 
@@ -113,7 +296,8 @@ def render_character(card: dict[str, Any]) -> str:
     """人物卡 → prompt 注入行（§3.6「生成时注入 prompt」的单卡形态）。
 
     形如：``- 林远（研究员）：外貌：瘦高…；说话风格：短句·不用感叹号；
-    关键事件：第3章 初次出场 / 第7章 借钱不还``。空字段整段缺席（不留空标签）。
+    关键事件：第3章 初次出场 / 第7章 借钱不还；关系：陈默=宿敌``。空字段
+    整段缺席（不留空标签）。
     """
     name = str(card.get("name") or "").strip()
     if not name:
@@ -128,6 +312,15 @@ def render_character(card: dict[str, Any]) -> str:
     events = [str(e).strip() for e in (card.get("key_events") or []) if str(e).strip()]
     if events:
         parts.append("关键事件：" + " / ".join(events))
+    relations = _normalize_relations(
+        card.get("relations") if isinstance(card.get("relations"), list) else []
+    )
+    if relations:
+        parts.append(
+            "关系：" + " / ".join(
+                f"{r['to']}={r['relation'] or '关系未注明'}" for r in relations
+            )
+        )
     return head + ("：" + "；".join(parts) if parts else "")
 
 

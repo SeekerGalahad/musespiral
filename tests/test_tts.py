@@ -582,9 +582,10 @@ b1:ttsBtnState(true),b2:ttsBtnState(false)
 
 
 def test_tts_frontend_structure_and_loader() -> None:
-    """结构锚：详情工具条按钮 + 播放栏 + audio；装载钩子；实现不内联 core.js。"""
-    shell = TMPL.read_text(encoding="utf-8")
-    built = SHELL.read_text(encoding="utf-8")
+    """结构锚：详情工具条按钮 + 播放栏 + audio；装载钩子；实现不内联 core.js。
+    ARCH-1：骨架自 tmpl 迁 ui.views/article.html（壳内为懒注入占位）。"""
+    shell = (STUDIO / "ui.views" / "article.html").read_text(encoding="utf-8")
+    built = shell
     js = TTS_JS.read_text(encoding="utf-8")
     ui = UI_JS.read_text(encoding="utf-8")
     core = CORE_JS.read_text(encoding="utf-8")

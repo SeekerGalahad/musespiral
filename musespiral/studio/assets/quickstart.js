@@ -216,9 +216,12 @@ qSetProgress(100,'失败');
 }finally{QS.running=false;}
 }
 
+var qsBound=false; // ARCH-1 幂等门（#radar-body 骨架随 insight 视图懒注入，__onViewHtml 重调；防双 Observer/双委托）
 function boot(){
+if(qsBound)return;
 qGet('radar-body');
 if(!qGet('radar-body'))return;
+qsBound=true;
 qSnapshot().then(qDecorate).catch(function(){});
 new MutationObserver(qDecorate).observe(qGet('radar-body'),{childList:true,subtree:true});
 // 全局委托：装饰按钮点击（快照可能晚于行渲染，重新拉一次再开）。
@@ -233,5 +236,5 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 else boot();
 
 window.__mdpubQuickstart={qsSlug:qsSlug,qsEsc:qsEsc,qsWriteHash:qsWriteHash,qsPhasePct:qsPhasePct,
-qsModalHtml:qsModalHtml,qsBlockHtml:qsBlockHtml,qsReadyHtml:qsReadyHtml,QS_MODES:QS_MODES};
+qsModalHtml:qsModalHtml,qsBlockHtml:qsBlockHtml,qsReadyHtml:qsReadyHtml,QS_MODES:QS_MODES,boot:boot};
 })();

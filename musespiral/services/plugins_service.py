@@ -5,8 +5,11 @@ core/plugins（契约半边：parse_manifest / expected_dirname），对表现�
 暴露 list/get/check/refresh 入口（PL-3 前端「manifest 即 UI」的数据面；
 scan_plugins 是同份扫描的 tuple 形编程接口）。
 每次调用重扫插件区——插件是用户手工放置的目录，无安装登记表，重扫即
-是事实真相（设计 §十二 /api/plugins/refresh 语义即如此；目录扫描在
-插件量级下是毫秒级操作，v1 不做缓存）。
+是事实真相（设计 §十二 /api/plugins/refresh 语义即如此）。用户区走
+**增量发现索引**（ARCH-4 §五，2026-11-22，loader.scan_manifests_incremental）：
+~/.musespiral/plugins/index.json 缓存每目录的 hash/version/timestamp + 原始
+manifest，未变目录跳过读盘与 JSON 解析（加速启动列表加载），变更目录只更新
+该条；内置区（包内 plugins_builtin/）始终全量扫——不往包目录写运行时缓存。
 
 三个入口都容忍脏数据：坏插件只进 skipped 清单（reason 带错误明细），
 不影响其他插件（校验要求 8）。流水线静态契约校验在
@@ -21,15 +24,24 @@ from ..core.plugins.manifest import expected_dirname, parse_manifest
 from ..infra import plugins_loader as loader
 
 
-def _scan_one_root(root: Path) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+def _scan_one_root(
+    root: Path, *, incremental: bool = False
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     """单 root 扫描 + 逐个契约校验三道门（list_plugins 的原主体，抽出以便
     内置区与用户区合并扫描）。
 
     三道门全过才算已装：parse_manifest 红→skipped；目录名≠id（斜杠转
     下划线核对，校验要求 1）→skipped；runtime 入口文件不存在
     （infra.entry_file_ok，校验要求 4）→skipped。
+
+    incremental=True（用户区/显式 root）走发现索引缓存——未变目录跳过读盘；
+    内置区 False 全量扫（不往包目录写运行时缓存）。两路的 discovered/skipped
+    形状一致，调用方无感。
     """
-    discovered, skipped = loader.scan_manifests(root)
+    if incremental:
+        discovered, skipped, _index = loader.scan_manifests_incremental(root)
+    else:
+        discovered, skipped = loader.scan_manifests(root)
     plugins: list[dict[str, Any]] = []
     for disc in discovered:
         directory, data = disc["dir"], disc["data"]
@@ -58,7 +70,8 @@ def list_plugins(root: Path | None = None) -> dict[str, Any]:
         免安装（不必放 ~/.musespiral/plugins/）；用户区同 id **覆盖**内置（用户
         换掉官方实现的逃生门）；skipped 两区聚合。
       - root 显式（测试/工具自定 root）：只扫该 root，内置区不混入——
-        断言单一 root 内容的调用方语义不变。
+        断言单一 root 内容的调用方语义不变；**不写索引**（缓存只属于用户安装区，
+        不往测试夹具/包内目录落 index.json 污染源码树）。
     plugins 按插件 id 排序（稳定输出，前端清单不跳）；manifest 是
     model_dump(mode="json")——前端据此渲染 I/O 表/权限/配置表单（§8.2）。
     """
@@ -66,7 +79,7 @@ def list_plugins(root: Path | None = None) -> dict[str, Any]:
         plugins, skipped = _scan_one_root(Path(root))
     else:
         builtin, builtin_skipped = _scan_one_root(loader.builtin_plugins_dir())
-        user, user_skipped = _scan_one_root(loader.plugins_dir())
+        user, user_skipped = _scan_one_root(loader.plugins_dir(), incremental=True)
         by_id: dict[str, dict[str, Any]] = {}
         for item in (*builtin, *user):
             by_id[item["manifest"]["id"]] = item  # 用户区后扫，同 id 覆盖内置

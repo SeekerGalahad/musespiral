@@ -9,6 +9,7 @@ sources/internal/refresh（本文件内实现）。
 job 提交复用共享管道 `_runner`（同包 platform 域持有，actions re-export
 面不变）。
 """
+
 from __future__ import annotations
 
 from typing import Any, Callable
@@ -19,14 +20,15 @@ from ..ingest_actions import (  # B 采集扩展（第二十一期）：/api/ing
     _action_ingest_crawl,
     _action_ingest_refresh,
 )
-from .platform import _runner
 from ..security import (
-    _HttpError,
-    _StudioContext,
     _error_payload,
     _http_400_on,
+    _HttpError,
+    _require_confirm,
     _require_str,
+    _StudioContext,
 )
+from .platform import _runner
 
 
 def _ensure_radarhub_preset(sid: str) -> None:
@@ -96,8 +98,12 @@ def _action_materials_verify(ctx: _StudioContext, data: dict[str, Any]) -> dict[
 
     with _http_400_on(ValueError):
         row = materials_service.update_triage(mid, {"verified": verified})
-    return {"ok": True, "id": mid, "verified": row.get("triage", {}).get("verified") is True,
-            "triage": row.get("triage") or {}}
+    return {
+        "ok": True,
+        "id": mid,
+        "verified": row.get("triage", {}).get("verified") is True,
+        "triage": row.get("triage") or {},
+    }
 
 
 def _action_materials_register(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
@@ -110,7 +116,9 @@ def _action_materials_register(ctx: _StudioContext, data: dict[str, Any]) -> dic
     """
     url = _require_str(data, "url")
     # 选填三键：缺省空串（显式给非 str 值由服务层拒绝——400）
-    optional = {key: (data[key] if key in data else "") for key in ("title", "note", "duration_text")}
+    optional = {
+        key: (data[key] if key in data else "") for key in ("title", "note", "duration_text")
+    }
     from ...services import materials_service
 
     with _http_400_on(ValueError):
@@ -196,6 +204,7 @@ def _action_ingest(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
 
     runner = _runner()
     if data.get("all") is True:
+
         def _run_all(_job_id: str) -> dict[str, Any]:
             return {"results": ingest_service.refresh_all(articles_root=ctx.root)}
 
@@ -321,7 +330,9 @@ def _action_sources_register(ctx: _StudioContext, data: dict[str, Any]) -> dict[
         raise _HttpError(400, "kb 源必须配置 config.root（知识库根绝对路径）")
     if stype == "rss" and not (isinstance(cfg.get("url"), str) and cfg["url"].strip()):
         raise _HttpError(400, "rss 源必须配置 config.url（http(s) 订阅地址）")
-    if stype == "internal" and not (isinstance(cfg.get("scan_root"), str) and cfg["scan_root"].strip()):
+    if stype == "internal" and not (
+        isinstance(cfg.get("scan_root"), str) and cfg["scan_root"].strip()
+    ):
         raise _HttpError(400, "internal 源必须配置 config.scan_root（文章根目录绝对路径）")
     label = data.get("label")
     subscriptions = data.get("subscriptions")
@@ -342,6 +353,25 @@ def _action_sources_register(ctx: _StudioContext, data: dict[str, Any]) -> dict[
     with _http_400_on(ValueError):
         saved = sources_service.register_source(row)
     return {"ok": True, "source": saved}
+
+
+def _action_materials_reindex(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
+    """POST /api/materials/reindex {confirm:true}（ARCH-5）：全量重建素材向量索引。
+
+    同步执行（ThreadingHTTPServer 下仅本请求阻塞；素材 ≤10000 的设计规模
+    秒级~分钟级）。幂等：已新鲜（同模型+同文本哈希）的条目零重嵌；顺带
+    清理非活跃 id 残留行。embedding 缺位（Ollama 未运行/未拉模型）是环境
+    态——200 ok:false 带安装引导（from-article 的 AI 降级面先例），不 5xx。
+    """
+    _require_confirm(data)
+    from ...infra.embedding import EmbeddingError
+    from ...services import search_service  # 函数体内导入（导入期解耦）
+
+    try:
+        result = search_service.rebuild_index()
+    except EmbeddingError as exc:
+        return _error_payload(exc, ctx.root)
+    return {"ok": True, **result}
 
 
 # ---- 域内路由片段（actions._ACTION_ROUTES 合并面之一）----
@@ -368,4 +398,9 @@ ROUTES: dict[str, Callable[[_StudioContext, dict[str, Any]], dict[str, Any]]] = 
     # N-4 人工核验（2026-11-21，正典=《总体方案》§二 N-4）：标记/取消同端点
     # （body verified=false 即取消）。契约锁 POST 72→73。
     "/api/materials/verify": _action_materials_verify,
+    # ARCH-5 语义基础设施（2026-11-22，正典=《极限架构与功能扩展总规划
+    # -2026-11-21》§ARCH-5 第 5 件）：素材向量索引全量重建（confirm 闸门；
+    # 幂等重嵌 + 清理残留行；embedding 缺位 200 ok:false 安装引导）。
+    # 契约锁 POST 73→74。
+    "/api/materials/reindex": _action_materials_reindex,
 }

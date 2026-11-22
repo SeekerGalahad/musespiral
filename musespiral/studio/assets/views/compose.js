@@ -262,9 +262,11 @@ var c=cnChips(d),cs=CN.cs;
 c+=CD+'📖 前情提要</summary>'+(CN.e
 ?'<textarea class="input set-area" id="cm-ns-area" rows="5"></textarea>'+CR+'<button class="btn btn-primary" data-cn="save">保存</button>'+CE
 :'<p class="action-hint" id="cm-ns-text"></p>'+CR+cnL('🔄 AI 刷新','refresh')+cnL('✏️ 编辑','edit')+CE)
-+'<p class="action-hint">已摘要 '+(d.novel_summary_chapters||0)+' 章 / 共 '+((d.novel||{}).chapters||0)+' 章</p>'+CS;
++'<p class="action-hint">已摘要 '+(d.novel_summary_chapters||0)+' 章 / 共 '+((d.novel||{}).chapters||0)+' 章'+CS;
 c+=CD+'👥 人物卡</summary>';
-cs.forEach(function(x){c+='<p class="action-hint">'+esc(x.name)+(x.role?' · '+esc(x.role):'')+(x.speech_style?' · '+esc(x.speech_style):'')+cnL('×','rm',x.id)+'</p>';});
+cs.forEach(function(x){
+var rel=(x.relations||[]).map(function(r){return esc(r.to)+(r.relation?'='+esc(r.relation):'');}).join('、');
+c+='<p class="action-hint">'+esc(x.name)+(x.role?' · '+esc(x.role):'')+(x.speech_style?' · '+esc(x.speech_style):'')+(rel?' · <span class="cn-rel">'+rel+'</span>':'')+cnL('×','rm',x.id)+'</p>';});
 if(!cs.length)c+='<p class="action-hint">尚无人物卡</p>';
 return c+CR+cnL('＋ 挂已有卡','pick')+cnL('＋ 新建人物','new')+CE+'<div id="cm-ch-pool"></div>'+CS;
 }
@@ -317,13 +319,18 @@ var w='',i;
 if($('cm-ch-modal')){$('cm-ch-modal').hidden=false;return;}
 [['name','姓名'],['role','角色'],['appearance','外貌'],['speech_style','说话风格']].forEach(function(x){
 w+='<input class="input" id="cm-chf-'+x[0]+'" placeholder="'+x[1]+'">';});
-$('cm-novel').insertAdjacentHTML('beforeend','<div class="modal-overlay" id="cm-ch-modal"><div class="modal"><h3 class="modal-title">新建人物</h3><div class="cv-col">'+w+'<textarea class="input set-area" id="cm-chf-key_events" rows="3" placeholder="关键事件（每行一条）"></textarea></div><div class="modal-actions"><button class="btn" data-cn="mclose">取消</button><button class="btn btn-primary" data-cn="create">建卡</button></div></div></div>');
+$('cm-novel').insertAdjacentHTML('beforeend','<div class="modal-overlay" id="cm-ch-modal"><div class="modal"><h3 class="modal-title">新建人物</h3><div class="cv-col">'+w+'<textarea class="input set-area" id="cm-chf-key_events" rows="3" placeholder="关键事件（每行一条）"></textarea><textarea class="input set-area" id="cm-chf-relations" rows="3" placeholder="人物关系（每行： 人物名=关系，如 陈默=宿敌）——关系图见下方🕸折叠区"></textarea></div><div class="modal-actions"><button class="btn" data-cn="mclose">取消</button><button class="btn btn-primary" data-cn="create">建卡</button></div></div></div>');
 $('cm-chf-name').focus();
+}
+function cnParseRelations(text){
+return String(text||'').split('\n').map(function(s){return s.trim();}).filter(Boolean).map(function(s){
+var i=s.indexOf('=');
+return i<0?{to:s,relation:''}:{to:s.slice(0,i).trim(),relation:s.slice(i+1).trim()};});
 }
 async function cnCreate(el){
 var fv=function(k){var e=$('cm-chf-'+k);return e?String(e.value||'').trim():'';},name=fv('name'),d;
 if(!name)return toast('姓名不能为空',ER);
-try{d=await cnPost({action:'character_create',name:name,role:fv('role'),appearance:fv('appearance'),speech_style:fv('speech_style'),key_events:fv('key_events').split('\n').map(function(s){return s.trim();}).filter(Boolean)});
+try{d=await cnPost({action:'character_create',name:name,role:fv('role'),appearance:fv('appearance'),speech_style:fv('speech_style'),key_events:fv('key_events').split('\n').map(function(s){return s.trim();}).filter(Boolean),relations:cnParseRelations(fv('relations'))});
 if((d.material||{}).id)await cnPost({action:'character_add',id:d.material.id});
 $('cm-ch-modal').hidden=true;toast('已建卡:'+name,OK);
 await loadComposeDetail(state.cslug,true);renderCompose();
@@ -421,6 +428,94 @@ await loadComposeDetail(cs,true);
 if(cr&&+cr>0)state.cround=+cr;
 renderCompose();
 }};
+var SC={step:1,topic:'',items:[],sel:{},sorted:true,outline:null,outlineSource:null,slug:'',done:false};
+function scSelectedIds(){return SC.items.filter(function(m){return SC.sel[m.id];}).map(function(m){return m.id;});}
+function scSec(id){var S=(SC.outline||{}).sections||[],i;for(i=0;i<S.length;i++)if(S[i].id===id)return S[i];return null;}
+function scTitleOf(mid){var m=null,i,L=SC.items;for(i=0;i<L.length;i++)if(L[i].id===mid){m=L[i];break;}return m?String(m.title||mid).slice(0,24):mid;}
+function scMerge(a,b){var seen={},out=[];a.forEach(function(m){seen[m.id]=1;out.push(m);});b.forEach(function(m){if(!seen[m.id]){seen[m.id]=1;out.push(m);}});return out;}
+function scReset(){SC.step=1;SC.topic='';SC.items=[];SC.sel={};SC.sorted=true;SC.outline=null;SC.outlineSource=null;SC.slug='';SC.done=false;$('sc-topic').value='';$('sc-q').value='';scPaint();}
+function scOpen(){$('sc-modal').hidden=false;scReset();$('sc-topic').focus({preventScroll:true});}
+function scClose(){$('sc-modal').hidden=true;}
+function scGoto(n){SC.step=n;scPaint();}
+function scBack(){if(SC.step>1&&!SC.done)scGoto(SC.step-1);}
+function scRow(m){
+var sim=(typeof m.similarity==='number'&&m.similarity>0)?Math.round(m.similarity*100)+'%':'';
+return '<label class="sc-row"><input type="checkbox" data-sc-mid="'+esc(m.id)+'"'+(SC.sel[m.id]?' checked':'')+'>'+
+'<span class="sc-row-main"><span class="sc-row-t" title="'+esc(m.title||m.id)+'">'+esc(m.title||m.id)+'</span>'+
+'<span class="sc-row-p">'+esc(m.preview||m.uri||'')+'</span>'+
+'<span class="sc-row-meta"><span class="src-badge">'+esc(m.source_id||'—')+'</span>'+(sim?'<span class="sim-badge" title="语义相关度">'+sim+'</span>':'')+'<span>'+esc((m.matched_lanes||[]).join('+'))+'</span></span></span></label>';
+}
+function scOutlineHtml(){
+var S=(SC.outline&&SC.outline.sections)||[];
+if(!S.length)return '<p class="action-hint">（未生成大纲——进入工坊后可用「AI 生成大纲」）</p>';
+return S.map(function(s,i){
+return '<div class="sc-outline-row">'+
+'<input class="input" data-sc-title="'+esc(s.id)+'" value="'+esc(s.title)+'" placeholder="段落标题">'+
+'<textarea class="input" rows="2" data-sc-pts="'+esc(s.id)+'" placeholder="要点（每行一条，来自素材内容）">'+esc((s.points||[]).join('\n'))+'</textarea>'+
+'<div class="sc-outline-mats">'+(s.material_ids||[]).map(function(mid){return '<span class="tag" title="引用素材 '+esc(mid)+'">'+esc(scTitleOf(mid))+'</span>';}).join('')+'</div>'+
+'<div class="sc-outline-ops"><button class="btn" data-sc-up="'+esc(s.id)+'"'+(i===0?' disabled':'')+'>↑</button><button class="btn" data-sc-dn="'+esc(s.id)+'"'+(i===S.length-1?' disabled':'')+'>↓</button><button class="btn mat-del" data-sc-del="'+esc(s.id)+'">✕ 删除段落</button></div></div>';
+}).join('');
+}
+function scPaint(){
+var steps=$('sc-steps').children,i;
+for(i=0;i<steps.length;i++)steps[i].className='sc-step'+(i+1===SC.step?' is-active':(i+1<SC.step?' is-done':''));
+$('sc-pane1').hidden=SC.step!==1;
+$('sc-pane2').hidden=SC.step!==2;
+$('sc-pane3').hidden=SC.step!==3;
+$('sc-back').hidden=SC.step===1||SC.done;
+$('sc-next').textContent=SC.step===1?'下一步：搜索素材':(SC.done?'进入工坊':'确认并生成');
+if(SC.step===2){
+var L=SC.items.slice();
+if(SC.sorted)L.sort(function(a,b){return (b.similarity||0)-(a.similarity||0);});
+$('sc-list').innerHTML=L.length?L.map(scRow).join(''):'<p class="action-hint" style="padding:10px;margin:0">没有命中素材——换个说法，或先在素材库采集。</p>';
+$('sc-count').textContent='已选 '+scSelectedIds().length+'/'+SC.items.length;
+$('sc-sort').classList.toggle('is-active',SC.sorted);
+}
+if(SC.step===3&&!SC.done){
+$('sc-hint3').textContent='将创建会话「'+SC.topic+'」，'+scSelectedIds().length+' 篇素材全部入池，AI 基于素材内容生成三段式大纲。';
+$('sc-outline').innerHTML='';
+}else if(SC.step===3&&SC.done){
+$('sc-hint3').textContent=(SC.outlineSource==='ai'?'AI 大纲已生成（基于选中素材内容）':'AI 暂不可用，已按素材要点生成兜底大纲')+'——可改标题/删段/调序，进入工坊后逐节裁决再展开。';
+$('sc-outline').innerHTML=scOutlineHtml();
+}
+}
+async function scProbe(q){
+try{var d=await postJSON('/api/compose/smart-start',{topic:q,limit:10,confirm:true});
+SC.items=scMerge(SC.items,d.suggestions||[]);
+if(!SC.items.length)toast('没有命中素材——换个说法试试',WN);
+scPaint();}
+catch(err){toast('搜索失败：'+err.message,ER);}
+}
+async function scNext(btn){
+if(SC.step===1){
+SC.topic=$('sc-topic').value.trim();
+if(!SC.topic){toast('先输入主题描述',ER);return;}
+btn.disabled=true;
+try{await scProbe(SC.topic);}finally{btn.disabled=false;}
+if(SC.items.length)scGoto(2);
+return;
+}
+if(SC.step===2){
+var ids=scSelectedIds();
+if(!ids.length){toast('至少勾选一篇素材',ER);return;}
+btn.disabled=true;
+try{var d=await postJSON('/api/compose/smart-start',{topic:SC.topic,material_ids:ids,generate_outline:true,confirm:true});
+SC.slug=d.slug;SC.outline=d.outline;SC.outlineSource=d.outline_source;SC.done=true;
+toast('会话已建：'+d.slug+'（素材 '+d.attached+' 篇入池）',OK);scGoto(3);}
+catch(err){toast('创建失败：'+err.message,ER);}
+finally{btn.disabled=false;}
+return;
+}
+if(!SC.done)return;
+btn.disabled=true;
+try{
+var secs=(SC.outline||{}).sections||[];
+if(secs.length)await postJSON('/api/compose/outline',{slug:SC.slug,action:'replace',sections:secs,confirm:true});
+scClose();
+location.hash='#compose?s='+encodeURIComponent(SC.slug);
+}catch(err){toast('大纲保存失败：'+err.message,ER);}
+finally{btn.disabled=false;}
+}
 function bindCompose(){
 $('cv-tpl').addEventListener('click',function(e){var b=e.target.closest('[data-cvt]');if(!b||b.getAttribute('data-cvt')===CV.tpl)return;CV.tpl=b.getAttribute('data-cvt');cvChips();cvEdit();});
 $('cv-title').addEventListener('input',cvEdit);
@@ -491,6 +586,50 @@ if(!cmd)return;
 if(cmd==='mclose'){$('cm-ch-modal').hidden=true;return;}
 if(cmd==='create'){cnCreate(b);return;}
 cnAct(cmd,b.getAttribute('data-id'),b);
+});
+$('cm-smart-btn').addEventListener('click',scOpen);
+$('sc-cancel').addEventListener('click',scClose);
+$('sc-back').addEventListener('click',scBack);
+$('sc-next').addEventListener('click',function(){scNext(this);});
+$('sc-topic').addEventListener('keydown',function(e){
+if(e.isComposing||e.keyCode===229)return;
+if(e.key==='Enter'){e.preventDefault();$('sc-next').click();}
+});
+$('sc-search-btn').addEventListener('click',function(){var q=$('sc-q').value.trim();if(q)scProbe(q);});
+$('sc-q').addEventListener('keydown',function(e){
+if(e.isComposing||e.keyCode===229)return;
+if(e.key==='Enter'){e.preventDefault();$('sc-search-btn').click();}
+});
+$('sc-all').addEventListener('click',function(){SC.items.forEach(function(m){SC.sel[m.id]=1;});scPaint();});
+$('sc-none').addEventListener('click',function(){SC.sel={};scPaint();});
+$('sc-sort').addEventListener('click',function(){SC.sorted=!SC.sorted;scPaint();});
+$('sc-list').addEventListener('change',function(e){
+var t=e.target,mid=t.getAttribute&&t.getAttribute('data-sc-mid');
+if(!mid||t.type!=='checkbox')return;
+if(t.checked)SC.sel[mid]=1;else delete SC.sel[mid];
+$('sc-count').textContent='已选 '+scSelectedIds().length+'/'+SC.items.length;
+});
+$('sc-outline').addEventListener('input',function(e){
+var t=e.target,id=t.getAttribute&&(t.getAttribute('data-sc-title')||t.getAttribute('data-sc-pts')),s;
+if(!id)return;
+s=scSec(id);
+if(!s)return;
+if(t.hasAttribute('data-sc-title'))s.title=t.value;
+else{s.points=t.value.split('\n').map(function(x){return x.trim();}).filter(Boolean);s.direction=s.points.join('；');}
+});
+$('sc-outline').addEventListener('click',function(e){
+var b=e.target.closest('[data-sc-up],[data-sc-dn],[data-sc-del]'),secs=(SC.outline||{}).sections||[],i,j,tmp;
+if(!b||!secs.length)return;
+if(b.hasAttribute('data-sc-del')){
+SC.outline.sections=secs.filter(function(s){return s.id!==b.getAttribute('data-sc-del');});
+scPaint();return;
+}
+for(i=0;i<secs.length;i++)if(secs[i].id===b.getAttribute('data-sc-up')||secs[i].id===b.getAttribute('data-sc-dn'))break;
+if(i>=secs.length)return;
+j=b.hasAttribute('data-sc-dn')?i+1:i-1;
+if(j<0||j>=secs.length)return;
+tmp=secs[i];secs[i]=secs[j];secs[j]=tmp;
+scPaint();
 });
 }
 bindCompose();

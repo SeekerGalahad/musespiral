@@ -30,6 +30,21 @@ PUBLISH_LOG = "publish_log.jsonl"
 DEFAULT_THEME = "lapis"
 DEFAULT_CODE_THEME = "monokai"
 
+# FEAT-1（2026-11-22）：AI 加工时是否附带语义相关素材摘要。默认开启；
+# MUSESPIRAL_SEMANTIC_CONTEXT=false 关闭（与 MUSESPIRAL_INDEX_HOOK 同款环境开关纪律
+# ——布尔配置走环境变量，单人 Studio 无独立 settings 写面）。
+SEMANTIC_CONTEXT_ENV = "MUSESPIRAL_SEMANTIC_CONTEXT"
+
+
+def semantic_context_enabled() -> bool:
+    """refine prompt 是否注入 top-3 语义相关素材摘要（缺省 True）。
+
+    只认显式 false/0/no（大小写不敏感）——其余一切值（含未设）均为开启，宽容读。
+    embedding 缺位时 search_service.related 天然返回空，本开关不影响其它路径。
+    """
+    return os.environ.get(SEMANTIC_CONTEXT_ENV, "").strip().lower() not in ("false", "0", "no")
+
+
 # 知识库根登记文件（第十二期 F26/F30 选题引擎）：~/.musespiral/kb_root.txt 一行
 # 绝对路径，指向知识库目录（如 <repo>/docs/ai-knowledge-base）。Studio 侧
 # /api/discover 的穿越防护与 discover_service 的默认扫描边界都以它为准。

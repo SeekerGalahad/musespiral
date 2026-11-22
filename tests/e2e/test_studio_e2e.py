@@ -409,6 +409,14 @@ def test_cmd_digit_nav_global_and_article_tab_priority(page) -> None:
     page.evaluate("location.hash='#publish'")
     page.locator("#article-list a.article-card").first.click()
     expect(page.locator("#view-article")).to_be_visible(timeout=15000)
+    # 等视图装载窗口关闭（ensureView 完成、VAPI.article.setTab 已登记）再发键——
+    # 2026-11-22 判例：装载窗口内 Meta+2 原会被 DNAV 回落劫持到 #material
+    # （panel-variants 元素在但恒 hidden 15s；ui.js 修正为消费 no-op 后，
+    # 本等待决定 ⌘2 是否切得动 Tab，消除按键与懒装载的竞态）
+    page.wait_for_function(
+        "() => window.VAPI && VAPI.article && typeof VAPI.article.setTab === 'function'",
+        timeout=15000,
+    )
     page.keyboard.press("Meta+2")
     expect(page.locator("#panel-variants")).to_be_visible(timeout=15000)
     page.keyboard.press("Meta+5")

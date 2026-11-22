@@ -380,8 +380,9 @@ console.log(JSON.stringify({urls:urls,body:body}));
 
 
 def test_modal_markup_three_stage_anchors() -> None:
-    """三段式弹窗标记：入口 tabs + 过滤/列表（D1 容器）+ 底部汇总。"""
-    src = _shell()
+    """三段式弹窗标记：入口 tabs + 过滤/列表（D1 容器）+ 底部汇总。
+    ARCH-1：骨架源在 ui.views/books.html（壳内为懒注入占位）。"""
+    src = (UI.parent / "ui.views" / "books.html").read_text(encoding="utf-8")
     assert 'id="im"' in src and 'modal im-modal' in src  # modal overlay（非 drawer）
     assert 'id="im-open"' in src and "导入书源" in src  # 订阅态入口
     assert 'data-imtab="paste"' in src and 'data-imtab="url"' in src and 'data-imtab="file"' in src
@@ -417,8 +418,11 @@ def test_js_behavior_literals() -> None:
 
 
 def test_css_virtual_list_anchors() -> None:
-    """core.css 锚：弹窗宽幅/400px 虚拟滚动窗/30px 行高/灰显只读。"""
-    css = CORE_CSS.read_text(encoding="utf-8")
+    """CSS 语料锚（ARCH-1 ② 起语料=core.css+views/*.css 合并域，im-* 现落
+    assets/views/books.css）：弹窗宽幅/400px 虚拟滚动窗/30px 行高/灰显只读。"""
+    vdir = CORE_CSS.parent / "views"
+    css = CORE_CSS.read_text(encoding="utf-8") + "\n" + "\n".join(
+        p.read_text(encoding="utf-8") for p in sorted(vdir.glob("*.css")))
     assert ".im-modal{width:min(760px,100%)" in css
     assert ".im-list{position:relative;height:400px;overflow-y:auto" in css  # D1 容器
     assert ".im-canvas{position:relative" in css

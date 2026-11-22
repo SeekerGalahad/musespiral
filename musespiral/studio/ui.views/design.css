@@ -1,0 +1,20 @@
+/* design 视图专属样式（ARCH-1 ② 自 ui.css 拆出；构建产物=assets/views/design.css，随视图懒加载注入） */
+/* Phase C F72 社媒图编辑器（#design 视图）+ D6 右键暗示（终评 §三 P2-D6 方案 A） */
+.amb-design{background:linear-gradient(90deg,var(--amber),var(--vermilion))}
+.dv-layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:14px;align-items:start}
+.dv-side{display:flex;flex-direction:column;gap:14px;border:1px solid var(--line-1);border-radius:var(--radius-card);padding:var(--space-md)}
+.dv-grp{display:flex;flex-direction:column;gap:6px}
+.dv-cap{font-size:var(--fs-micro);color:var(--ink-3);font-weight:600}
+.dv-hint{margin:0;color:var(--ink-2);font-size:var(--fs-micro)}
+.dv-colors .chip{width:26px;height:26px;padding:0;border:2px solid var(--line-2);border-radius:50%}
+.dv-colors .chip.is-active{border-color:var(--indigo)}
+.dv-dirty{color:var(--amber);font-size:18px;line-height:1}
+.undo-hud{font-size:var(--fs-micro);color:var(--ink-2);border:1px solid var(--line-1);border-radius:var(--radius-pill);padding:2px 9px}
+.dv-stage-wrap{position:relative;min-height:460px;display:flex;align-items:center;justify-content:center;padding:var(--space-lg);background:var(--paper-2);border:1px solid var(--line-1);border-radius:var(--radius-card);overflow:auto}
+.dv-skel{width:min(380px,72%);aspect-ratio:3/4;border-radius:var(--radius-card);background:color-mix(in srgb,var(--ink-1) 9%,transparent);animation:skel-pulse 1.2s ease-in-out infinite}
+.dv-stage svg{display:block;width:auto;height:auto;max-width:100%;max-height:72vh;box-shadow:var(--shadow-md)}
+.dv-stage [data-o]:hover{opacity:.88}
+.dv-stage [data-o].dv-drag{opacity:.75;cursor:grabbing}
+.dv-hd rect{fill:none;stroke:var(--indigo);stroke-width:2}
+.dv-hd .h{fill:var(--indigo)}
+.dv-tin{position:absolute;z-index:var(--z-pop);padding:4px 8px;font-size:15px;border:2px solid var(--indigo);border-radius:var(--radius-btn);background:var(--paper-1)}

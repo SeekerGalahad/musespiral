@@ -112,8 +112,13 @@ def _shell_js() -> str:
 
 
 def _shell_js_css() -> str:
-    """壳+core.js+core.css 合并视图（HTML/JS/CSS 标记全混）。"""
-    return _shell_js() + "\n" + _CORE_CSS.read_text(encoding="utf-8")
+    """壳+core.js+全部 CSS（core.css+views/*.css，ARCH-1 ② 合并域）混断言。"""
+    css = _CORE_CSS.read_text(encoding="utf-8")
+    vdir = _CORE_CSS.parent / "views"
+    if vdir.is_dir():
+        css += "\n" + "\n".join(
+            p.read_text(encoding="utf-8") for p in sorted(vdir.glob("*.css")))
+    return _shell_js() + "\n" + css
 
 
 # ══ a) 结构断言（构建产物锚）════════════════════════════

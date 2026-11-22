@@ -57,6 +57,7 @@ UI = STUDIO / "ui.html"
 CORE_JS = STUDIO / "assets" / "core.js"
 CORE_CSS = STUDIO / "assets" / "core.css"
 VIEWS_JS = STUDIO / "assets" / "views"
+VIEWS_HTML = STUDIO / "ui.views"
 
 # §15.2 API 契约逐端点（路径不含 query string）；/api/meta 为 §16 F19-2 新增；
 # /api/action/batch_adapt 为第八期轮次四新增（单引号字面量走本契约，重发路径为模板串不计入）；
@@ -101,10 +102,16 @@ CONTRACT_PATHS = {
     # N-1 小说前端（2026-11-20）：前情提要/人物卡六 action 统一端点（E-5 既有端点，
     # 前端首次消费；N-1 零新增——契约锁数不变，见 test_compose_novel）
     "/api/compose/novel-summary",
+    # FEAT-2 智能组稿（2026-11-22）：三步向导统一端点（探测=语义搜候选 /
+    # 确认=建会话+素材入池+AI 三段式大纲）+ 向导「进入工坊」前的大纲整表覆写
+    # （action=replace——G-T2 既有端点的新 action 形态）
+    "/api/compose/smart-start",
+    "/api/compose/outline",
     # P20 M3 素材视图收编（发现→素材）：分诊/删除连坐/源连接/ingest 端点；
     # /api/discover/star 后端零触碰保留（收编过渡期），UI 不再调用故出契约
     "/api/materials",
     "/api/materials/detail",
+    "/api/materials/search",  # FEAT-1 语义搜索（关键词/语义/混合三模式统一读面）
     "/api/materials/triage",
     "/api/materials/delete",
     "/api/sources",
@@ -216,7 +223,32 @@ ICON_NAMES = [
 
 
 def _source() -> str:
-    """读壳 ui.html（HTML 骨架+视图内联+assets 引用）；缺失即失败（不静默跳过）。"""
+    """读壳 ui.html（ARCH-1 起非首屏视图在壳内是**空占位** <section>，真骨架
+    由 assets/views/<view>.html.js 进入视图时注入）；缺失即失败（不静默跳过）。
+
+    ARCH-1 等价域（2026-11-21 壳 HTML 外移）：断言语料=「占位替换回源骨架」的
+    组装 DOM——每个空占位 section 行替换为 ui.views/<view>.html 的完整源（与
+    拆分前壳内联形态逐字节等价；首屏 publish 本就内联，原样保留）。三千余行
+    结构断言的等价域由此保持，无需逐条改写；需要验「壳里真的没有骨架」的
+    断言读 _shell_bare()。
+    """
+    assert UI.exists(), f"Studio 壳不存在: {UI}"
+    shell = UI.read_text(encoding="utf-8")
+    out_lines = []
+    for line in shell.split("\n"):
+        m = re.fullmatch(r'<section id="view-([a-z0-9-]+)"[^>]*></section>', line)
+        if m:
+            name = m.group(1)
+            path = VIEWS_HTML / f"{name}.html"
+            assert path.exists(), f"懒视图源缺失: {path}"
+            out_lines.append(path.read_text(encoding="utf-8").rstrip("\n"))
+        else:
+            out_lines.append(line)
+    return "\n".join(out_lines)
+
+
+def _shell_bare() -> str:
+    """裸壳（ARCH-1 专用域）：只读 ui.html 本体——占位/无骨架断言用。"""
     assert UI.exists(), f"Studio 壳不存在: {UI}"
     return UI.read_text(encoding="utf-8")
 
@@ -228,9 +260,12 @@ def _js() -> str:
     （各自的 render* + 专属 helper；PL-3 批起 11 视图）。绝大多数结构断言关心
     「函数/字面量在 JS 语料里存在」而非具体落在哪个文件，合并读保持这些断言的
     等价域（=拆分前单文件）。需要验证视图归属的断言另用 `_view_js(name)` / `_core_js()`。
+    ARCH-1（2026-11-21）：assets/views/ 下另有 <view>.html.js（HTML 骨架注入器，
+    非行为脚本）——HTML 语料经 `_source()` 的占位替换覆盖，此处排除之。
     """
     assert CORE_JS.exists(), f"core.js 产物不存在: {CORE_JS}"
-    files = [CORE_JS] + sorted(VIEWS_JS.glob("*.js"))
+    files = [CORE_JS] + sorted(
+        p for p in VIEWS_JS.glob("*.js") if not p.name.endswith(".html.js"))
     assert len(files) == 12, f"视图产物应为 11 个，实为 {len(files) - 1}: {files}"
     return "\n".join(p.read_text(encoding="utf-8") for p in files)
 
@@ -249,9 +284,19 @@ def _view_js(name: str) -> str:
 
 
 def _css() -> str:
-    """读 assets/core.css（全部 CSS：token/组件类/响应式规则）。"""
+    """CSS 全语料 = core.css + views/*.css 合并（ARCH-1 ② CSS 按视图拆分）。
+
+    ②拆分把视图专属样式自 core.css 拆到 assets/views/<view>.css（懒加载随视图
+    注入；publish 首屏样式留 core.css）。绝大多数结构断言关心「选择器/规则在
+    CSS 语料里存在」而非具体落在哪个文件，合并读保持这些断言的等价域（=拆分前
+    单文件，与 _js() 的 M3 先例同构）。core.css 专属断言（token/暗色覆写）继续
+    直接读 CORE_CSS。
+    """
     assert CORE_CSS.exists(), f"core.css 产物不存在: {CORE_CSS}"
-    return CORE_CSS.read_text(encoding="utf-8")
+    parts = [CORE_CSS.read_text(encoding="utf-8")]
+    parts.extend(p.read_text(encoding="utf-8")
+                 for p in sorted(VIEWS_JS.glob("*.css")))
+    return "\n".join(parts)
 
 
 def _shell_js() -> str:
@@ -981,7 +1026,8 @@ def test_detail_cmd_s_save_binding() -> None:
     assert "(e.metaKey||e.ctrlKey)&&(e.key==='s'||e.key==='S')" in src
     assert "state.tab==='edit'){e.preventDefault();handleSaveBody();}" in src
     assert "e.key==='Escape'" in src
-    assert "if(!AB.hidden)hideBubble();" in src
+    # ARCH-1（2026-11-21）：AB 惰性抓取（article HTML 懒注入）——null 守卫形态
+    assert "if(AB&&!AB.hidden)hideBubble();" in src
     assert "if(!$('viewer').hidden)$('viewer').hidden=true;" in src
 
 
@@ -1520,9 +1566,11 @@ def test_keyboard_shortcuts_main_action_and_tabs() -> None:
     assert "else if(state.tab==='actions')handlePublish(PB);" in src
     # ⌘1-4：仅详情页生效，映射前四个 Tab（编辑/变体/检查/预览）——2026-11-17
     # 集成轮 ⌘1-7 修为全局分域分支后，tab 优先以「#article 可见且键 ≤4」内联判定；
-    # A 类专项（2026-11-20）后 setTab 经 VAPI.article 注册表（core 不直呼视图函数）
+    # A 类专项（2026-11-20）后 setTab 经 VAPI.article 注册表（core 不直呼视图函数）；
+    # 2026-11-22 复核：装载窗口（VAPI.article 未登记）消费为 no-op，绝不回落 DNAV
+    # 导航（否则窗口期 ⌘2 被劫持到 #material，违反彼视图优先）
     assert "if((e.metaKey||e.ctrlKey)&&e.key>='1'&&e.key<='7'){" in src
-    assert "if(!$('view-article').hidden&&+e.key<=4){if(a1&&a1.setTab)return a1.setTab(['edit','variants','checks','preview'][+e.key-1],true);}" in src
+    assert "if(!$('view-article').hidden&&+e.key<=4){if(a1&&a1.setTab)return a1.setTab(['edit','variants','checks','preview'][+e.key-1],true);return;}" in src
     # Esc 逐层收：命令面板 → 批注气泡 → 查看器 → 任务菜单（收菜单同时停轮询）
     assert "if(!$('cp').hidden){cpClose();return;}" in src
     assert "if(!JM.hidden){JM.hidden=true;jobsPollStop();}" in src
@@ -1554,17 +1602,20 @@ def test_ime_guards_on_all_editor_and_compose_keydown_handlers() -> None:
     AI-3 重生成批（2026-11-21）+1 处：重生成输入条 Enter 提交的 document 监听
     （ks 条在 #pr-segs-wrap、aw 条在 #pr-out，故挂 document 级；IME 选词的
     Enter 不得误触提交）——内联 16 处。
+    FEAT-2 智能组稿批（2026-11-22）+2 处：向导主题输入（Enter=下一步）与手动
+    追加搜索框（Enter=搜索）两内联监听（IME 选词的 Enter 不得误触向导推进/
+    追加搜索）——内联 18 处。
     """
     src = _js()
     guard = "if(e.isComposing||e.keyCode===229)return;"
     head = "addEventListener('keydown',function(e){\n"
-    assert src.count(head + guard) == 16, (
-        f"内联 keydown 处理器首行 IME 守卫应为 16 处，实为 {src.count(head + guard)}"
+    assert src.count(head + guard) == 18, (
+        f"内联 keydown 处理器首行 IME 守卫应为 18 处，实为 {src.count(head + guard)}"
     )
-    # 第 17 处：askConfirm 弹层 onKey（具名函数，removeEventListener 需具名引用）
+    # 第 19 处：askConfirm 弹层 onKey（具名函数，removeEventListener 需具名引用）
     assert "function onKey(e){ " + guard in src
-    assert src.count(guard) == 17, (
-        f"IME 守卫总数（内联 16 + onKey 1）应为 17 处，实为 {src.count(guard)}"
+    assert src.count(guard) == 19, (
+        f"IME 守卫总数（内联 18 + onKey 1）应为 19 处，实为 {src.count(guard)}"
     )
 
 
@@ -2458,9 +2509,10 @@ def test_p1_view_file_names_canonical() -> None:
     """
     studio = UI.parent / "ui.views"
     names = sorted(p.stem for p in studio.glob("*.html"))
-    # R4 #books 批（2026-11-18）+1 视图文件（八视图——导航供给组第三入口）
-    assert names == ["books", "compose", "design", "insight", "material", "plugin-run",
-                     "plugins", "publish", "settings", "sources"], names  # PL-3 批 +plugins +plugin-run
+    # R4 #books 批（2026-11-18）+1 视图文件；PL-3 批 +plugins +plugin-run；
+    # ARCH-1 批（2026-11-21）+article（原 tmpl 硬编码骨架外移——十一视图源）
+    assert names == ["article", "books", "compose", "design", "insight", "material",
+                     "plugin-run", "plugins", "publish", "settings", "sources"], names
 
 
 def test_p1_nav_badges_wired() -> None:
@@ -2693,9 +2745,10 @@ def test_design_nav_seven_views_and_routing() -> None:
     assert "var DNAV=['sources','material','design','compose','publish','insight','settings'];" in src
     # ⌘1-7 七视图快捷键——全局分域分支（深构 §5.1/§八-4：视图外管导航、
     # #article 内 ⌘1-4 管 tab 彼视图优先；2026-11-17 集成轮自 design 域修为全局；
-    # A 类专项后 setTab 经 VAPI.article 注册表，core 不直呼视图函数）
+    # A 类专项后 setTab 经 VAPI.article 注册表，core 不直呼视图函数；
+    # 2026-11-22 复核：装载窗口内 ⌘1-4 消费 no-op 不回落 DNAV）
     assert "if((e.metaKey||e.ctrlKey)&&e.key>='1'&&e.key<='7'){" in src
-    assert "if(!$('view-article').hidden&&+e.key<=4){if(a1&&a1.setTab)return a1.setTab(['edit','variants','checks','preview'][+e.key-1],true);}" in src
+    assert "if(!$('view-article').hidden&&+e.key<=4){if(a1&&a1.setTab)return a1.setTab(['edit','variants','checks','preview'][+e.key-1],true);return;}" in src
     assert "location.hash='#'+DNAV[+e.key-1];return;" in src
     # 防回退：design 域限定的旧实现（view-design 门后导航 → 其余 6 视图失效）不得复现
     assert "if(m&&e.key>='1'&&e.key<='7'){e.preventDefault();location.hash='#'+DNAV[+e.key-1];return;}" not in all_src
@@ -3423,8 +3476,10 @@ def test_f1_media_verify_three_state_health_lamp() -> None:
 
 def test_e1_pipeline_button_and_job_submit() -> None:
     """E1：文章详情操作 Tab 顶部「一键到物料」btn-primary → POST /api/action/pipeline。"""
-    tmpl = Path(__file__).resolve().parent.parent / "musespiral" / "studio" / "ui.tmpl.html"
-    t = tmpl.read_text(encoding="utf-8")
+    # ARCH-1：panel-actions 骨架自 tmpl 迁 ui.views/article.html（壳内只剩占位）
+    art = (Path(__file__).resolve().parent.parent / "musespiral" / "studio"
+           / "ui.views" / "article.html")
+    t = art.read_text(encoding="utf-8")
     panel = t[t.index('id="panel-actions"'):]
     assert "一键到物料" in panel
     assert 'class="btn btn-primary" id="pipe-run"' in panel
@@ -3709,7 +3764,9 @@ def test_m3_view_products_exist() -> None:
     expected = {"sources", "material", "books", "compose", "design",
                 "publish", "insight", "article", "settings",
                 "plugins", "plugin-run"}
-    actual = {p.stem for p in VIEWS_JS.glob("*.js")}
+    # ARCH-1：views/ 另有 <view>.html.js 骨架注入器（stem 带 .html 后缀）——排除
+    actual = {p.stem for p in VIEWS_JS.glob("*.js")
+              if not p.name.endswith(".html.js")}
     assert actual == expected, f"视图产物集合不符: {actual}"
     for name in expected:
         assert (VIEWS_JS / f"{name}.js").stat().st_size > 1000, name
@@ -3757,7 +3814,10 @@ def test_m3_lazy_load_wiring() -> None:
     视图脚本用顶层 function 声明（注入即全局）。"""
     core = _core_js()
     assert "__viewPromises" in core
-    assert 's.src="assets/views/"+view+".js"' in core
+    # ARCH-1 两步装载：html.js（innerHTML 填充壳内空占位）→ <view>.js（行为脚本）
+    assert '__loadScript("assets/views/"+view+".html.js")' in core
+    assert '__loadScript("assets/views/"+view+".js")' in core
+    assert "__onViewHtml" in core
     assert "await ensureView(view)" in core
     # 至少 3 个视图脚本用顶层函数声明（零 import/export）
     for view in ("publish", "article", "material"):
@@ -3780,3 +3840,195 @@ def test_all_negative_gate_covers_lazy_assets() -> None:
     # 全手写产物（含懒加载）无系统对话框泄漏
     assert "window.prompt" not in all_src
     assert "window.confirm" not in all_src
+
+
+# ── FEAT-1 语义搜索前端（2026-11-22）：三模式 / 相关度徽章 / 语义相关区 / 降级 ──
+
+
+def test_feat1_search_modes_in_shell() -> None:
+    """搜索框三模式指示器 + 相关度排序项 + 降级提示位进入素材视图骨架。"""
+    src = _source()
+    seg = src[src.index('<div class="pub-toolbar">'):src.index('<div class="sel-bar"')]
+    assert 'id="mat-modes"' in seg
+    for m in ("auto", "keyword", "semantic"):
+        assert 'data-searchmode="%s"' % m in seg
+    assert '<option value="relevance">' in seg  # 相关度排序
+    assert 'id="mat-mode-hint"' in seg  # 降级提示
+
+
+def test_feat1_search_mode_logic_in_core() -> None:
+    """三模式自动切换 + 相关度徽章 + 降级重搜在 core 共享块。"""
+    src = _core_js()
+    assert "function effectiveMode(q){" in src
+    assert "function looksNatural(q){" in src
+    assert "function simPct(v){" in src
+    assert "function matSearch(q){" in src
+    # auto 按输入形态选 hybrid/keyword
+    assert "looksNatural(q)?'hybrid':'keyword'" in src
+    # 降级：ok:false + semantic 模式 + 未就绪 → 切关键词重搜 + 提示
+    assert "mode==='semantic'&&state.searchReady===false" in src
+    assert "state.searchMode='keyword'" in src
+    assert "已自动切换为关键词搜索" in src
+    # 三路搜索端点 + 相关度排序
+    assert "/api/materials/search?q=" in src
+    assert "'relevance'" in src or "msort==='relevance'" in _js()
+
+
+def test_feat1_related_section_and_badges() -> None:
+    """详情「语义相关」区 + 点击跳转 + 列表相关度徽章。"""
+    all_src = _all()
+    assert "function matRelatedHtml(related){" in all_src
+    assert "data-mrelated=" in all_src
+    assert "simPct(m.similarity)" in all_src
+    assert "matRelatedHtml(d.related)+" in _js()
+    assert ".sim-badge{" in _css() and ".sim-related{" in _css()
+
+
+# ── FEAT-3 数据回流：洞察阅读/在看/分享趋势（SVG 自绘，按周/月）────────
+
+def test_feat3_stats_trend_skeleton() -> None:
+    """洞察视图含 stats 趋势容器 + 周/月粒度 chips + 说明节点。"""
+    src = _source()
+    assert 'id="stats-trend-card"' in src
+    assert 'id="stats-trend"' in src
+    assert 'id="stats-trend-note"' in src
+    assert 'data-srange="week"' in src and 'data-srange="month"' in src
+    # 位置：紧随发布趋势卡之后、源贡献之前
+    i_pt, i_st, i_src = (src.index(x) for x in
+                         ('id="trend-chart"', 'id="stats-trend"', 'id="contrib-bars"'))
+    assert i_pt < i_st < i_src
+
+
+def test_feat3_stats_trend_logic_in_view_js() -> None:
+    """statsBuckets 按周/月聚合 + renderStatsTrend SVG 自绘 + 周/月切换绑定。"""
+    src = _view_js("insight")
+    assert "function statsBuckets(mode){" in src
+    assert "if(mode==='month')k=d.slice(0,7)" in src  # 月桶 YYYY-MM
+    assert "dt.setDate(dt.getDate()-wd)" in src  # 周桶归一到周一
+    # 三指标口径：优先 stats 子对象，兼容顶层 reads/shares（zaikan 恒取 stats）
+    assert "s.reads!=null?s.reads:r.reads" in src
+    assert "+s.zaikan||0" in src
+    assert "s.shares!=null?s.shares:r.shares" in src
+    # SVG 自绘：三条 path + 圆点 + 网格 + 图例，零图表库
+    assert "function renderStatsTrend(){" in src
+    assert "<svg viewBox=\"0 0 '+W+' '+H+'\"" in src
+    for cls in ("st-reads", "st-zaikan", "st-shares"):
+        assert 'class="st-line st-' in src and cls in src
+    assert "st-legend" in src
+    # 空态引导（不是空白闪烁）
+    assert "发表并回填数据后，此处显示趋势" in src
+    # 接进 renderInsight 渲染链 + 周/月 chip 委托
+    assert "renderTrend();renderStatsTrend();renderPlatformBars()" in src
+    assert "state.srange=c.getAttribute('data-srange')" in src
+    assert "renderStatsTrend();" in src
+
+
+def test_feat3_stats_trend_css_dark_safe() -> None:
+    """趋势 SVG 三线色走 CSS 变量（暗色覆写自动生效），零硬编码色。"""
+    css = _css()
+    for sel in ("#stats-trend-card .chips", ".stats-trend svg", ".st-legend"):
+        assert sel in css
+    assert ".stats-trend .st-reads{stroke:var(--vermilion)}" in css
+    assert ".stats-trend .st-zaikan{stroke:var(--amber)}" in css
+    assert ".stats-trend .st-shares{stroke:var(--viz-1)}" in css
+
+
+# ── FEAT-5 前端交互升级（2026-11-22）：快捷键速查 / 空态引导 / 首访骨架 / 暗色补全 ──
+
+def test_feat5_kbd_help_modal_shell_and_bindings() -> None:
+    """? 唤起快捷键速查：壳 modal 结构 + core 键位绑定（?=/）+ Escape 链 + 命令面板底注。"""
+    shell = _shell_bare()
+    for i in ("kbd-modal", "kbd-title", "kbd-body", "kbd-close"):
+        assert f'id="{i}"' in shell, f"壳缺 #{i}"
+    assert '<kbd>?</kbd> 全部快捷键' in shell  # 命令面板底注可发现性
+    core = _core_js()
+    assert "function kbdOpen(){kbdPaint();$('kbd-modal').hidden=false;" in core
+    assert "function kbdClose(){$('kbd-modal').hidden=true;}" in core
+    assert "function kbdPaint(){" in core
+    # ? 唤起（输入框外守卫，与 g 序列同款）；/ 聚焦当前视图搜索框
+    assert "if(e.key==='?'){e.preventDefault();kbdOpen();return;}" in core
+    assert "var kf=KFOCUS[routeInfo().name];if(kf){var ke=$(kf);if(ke){e.preventDefault();ke.focus();" in core
+    assert "var KFOCUS={material:'mat-search',books:'bk-search-box',publish:'fetch-url'};" in core
+    # Escape 关闭链：速查弹层与其他浮层同层可关（spark/cp 之后、ctx 之前）
+    esc_seg = core[core.index("if(e.key==='Escape'){"):core.index("if(!$('ctx').hidden)")]
+    assert "if(!$('kbd-modal').hidden){kbdClose();return;}" in esc_seg
+    # 弹层点击遮罩/关闭钮两条关路
+    assert "$('kbd-modal').addEventListener('click',function(e){if(e.target===this)kbdClose();});" in core
+    assert "$('kbd-close').addEventListener('click',kbdClose);" in core
+
+
+def test_feat5_shortcuts_data_covers_existing_bindings() -> None:
+    """速查数据是既有键位的可发现层（不新增键位）：全局段覆盖 ⌘K/⌘1-7/g 序列/⌘⇧I/Esc，
+    视图段按 SHORTCUTS 组名对齐路由名（文章详情/素材库/视觉编辑）。"""
+    core = _core_js()
+    for lit in ("⌘K / Ctrl+K", "⌘1-7", "g 然后 s/m/c/p/i/,", "⌘⇧I", "Esc",
+                "⌘1-4", "⌘S", "⌘⏎", "← →"):
+        assert lit in core, f"速查数据缺既有键位: {lit}"
+    # 视图专属段仅在当前路由展示（kPaint 里组名!==全局 && 组名!==cur 即跳过）
+    assert "if(g[0]!=='全局'&&g[0]!==cur)return;" in core
+
+
+def test_feat5_empty_state_guidance_with_actions() -> None:
+    """四视图空态从「披露现状」升级为「你可以做什么」+CTA：文案不再裸提 API，
+    每个空态至少一个现在就能点的按钮，绑定与头部既有动作同路。"""
+    src = _source()
+    # 源中枢：不再是「settings.json / POST /api/sources」开发者措辞
+    assert "还没有内容源" in src and "注册第一个源" in src
+    assert "POST /api/sources 注册" not in src
+    assert 'id="src-empty-add"' in src
+    # 插件：真空态双 CTA（新建/重扫）
+    assert 'id="pg-empty-new"' in src and 'id="pg-empty-rescan"' in src
+    # 视觉编辑：空态可直达「载入」
+    assert 'id="dv-empty-load"' in src
+    # 书籍：搜索占位引导卡配可行动按钮（订阅管理/导入书源）——R4 批文案契约不动
+    assert 'id="bk-guide-subs"' in src and 'id="bk-guide-import"' in src
+    assert "搜索结果渲染 · R4 批" in src  # 契约锁仍成立（壳静态文案；JS 赋值字面量另锁于 books.js）
+    # 绑定与头部动作同路（sources→sfOpen / plugins→hash 与 refresh-btn / design→dvLoad / books→subs tab 与 imOpen）
+    vs = _view_js("sources")
+    assert "$('src-empty-add').addEventListener('click',sfOpen);" in vs
+    vp = _view_js("plugins")
+    assert "$('pg-empty-new').addEventListener('click',function(){location.hash='#plugins?new=1';});" in vp
+    assert "$('pg-empty-rescan').addEventListener('click',function(){$('pg-refresh-btn').click();});" in vp
+    vd = _view_js("design")
+    assert "on('dv-empty-load',function(){dvLoad();});" in vd
+    vb = _view_js("books")
+    assert "$('bk-guide-subs').addEventListener('click',function(){location.hash='#books?tab=subs';});" in vb
+    assert "$('bk-guide-import').addEventListener('click',imOpen);" in vb
+
+
+def test_feat5_skeleton_on_first_visit() -> None:
+    """首访骨架屏：通用件 skelCards/skelRows 在 core；material/sources 首访占位画在
+    __onViewHtml（material.js 贴 40KiB 水位不加逻辑）；plugins 在 pgEnter 画骨架卡。"""
+    core = _core_js()
+    assert "function skelCards(n){" in core and "function skelRows(n){" in core
+    # material：首访且无数据时画骨架卡（回访有缓存不闪）
+    assert "if(view==='material'&&!(state.mats||[]).length){var ml=$('mat-list');if(ml)ml.innerHTML=skelCards(4);}" in core
+    # sources：首访无源时表体画行式骨架
+    assert "if(view==='sources'&&!matSrcs().length){var sr=$('src-rows');if(sr)sr.innerHTML='<tr><td colspan=\"9\"><div class=\"skel\">'+skelRows(4)+'</div></td></tr>';}" in core
+    vp = _view_js("plugins")
+    assert "if(!PG.list.length&&!PG.err){$('pg-grid').innerHTML=skelCards(4);$('pg-grid').hidden=false;$('pg-empty').hidden=true;}" in vp
+    # material 视图产物未因此增重（骨架逻辑归 core 的判例锚）
+    assert "skelCards" not in _view_js("material")
+
+
+def test_feat5_dark_mode_live_preview_and_tokens() -> None:
+    """暗色补全：live 预览 iframe 双色板（基座+深色覆写，renderLive 按 themeDark 取
+    生效态）；切主题由 applyTheme 同步钩子重注；灯箱错误色 token 化；速查/骨架样式
+    全 token 无硬编码色。"""
+    va = _view_js("article")
+    assert "var LIVE_CSS_DARK=" in va
+    assert "themeDark()?LIVE_CSS_DARK:''" in va
+    core = _core_js()
+    assert "function themeDark(){" in core
+    # applyTheme 末尾同步 live 预览——经 VAPI 触达（跨视图治理：core 不直呼视图函数）
+    assert "if(va&&va.live&&!$('view-article').hidden)va.live();" in core
+    assert ",repaint:renderDetail,setTab:setTab,live:renderLive}" in _view_js("article")
+    vm = _view_js("material")
+    assert 'color:var(--crimson)' in vm and "#ff7b89" not in vm
+    css = _css()
+    for sel in (".kbd-modal{", ".kbd-row{", ".skel-row{", ".empty-actions{"):
+        assert sel in css
+    # 新增样式零硬编码色（暗色全覆盖走 token/color-mix(var) 路径；压缩产物无注释，
+    # 段落以 .empty-actions{ 为界——FEAT-5 三族规则在 core.css 中连续排列）
+    kbd_seg = css[css.index(".kbd-modal{"):css.index(".empty-actions{")]
+    assert "#" not in kbd_seg, f"FEAT-5 样式混入硬编码色: {kbd_seg[:120]}"

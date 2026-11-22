@@ -108,8 +108,11 @@ window.dispatchEvent(new Event('hashchange'));
 }catch(e){vNote('恢复失败：'+e.message);}
 finally{if(btn)btn.disabled=false;}
 }
+var vBound=false; // ARCH-1 幂等门（#view-article 骨架懒注入后 __onViewHtml 重调 vBoot；防双绑）
 function vBoot(){
+if(vBound)return;
 if(!VEl('panel-versions'))return;
+vBound=true;
 var btn=VEl('ver-diff-btn');
 if(btn)btn.addEventListener('click',function(){vDiff(this);});
 // 进本 tab 的判定全部在本文件（core.js 贴 M3 拆分线，setTab 里不再加钩子）：
@@ -136,5 +139,5 @@ function vMount(){if(!V.loaded)vLoad();}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',vBoot);
 else vBoot();
 window.__mdpubVersions={verPath:verPath,verOptions:verOptions,verDefaultPairs:verDefaultPairs,
-verRestoreLabel:verRestoreLabel,mount:vMount};
+verRestoreLabel:verRestoreLabel,mount:vMount,boot:vBoot};
 })();

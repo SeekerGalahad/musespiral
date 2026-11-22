@@ -23,7 +23,20 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-CSS = Path(__file__).resolve().parent.parent / "musespiral" / "studio" / "ui.css"
+STUDIO = Path(__file__).resolve().parent.parent / "musespiral" / "studio"
+
+
+def _css_text() -> str:
+    """CSS 源语料 = ui.css(core) + ui.views/*.css 合并（ARCH-1 ② 拆分等价域）。
+
+    :root/暗色覆写/.statusbar 留 core；radar-row(→insight)/syn-chip·sel-bar·
+    syn-step·syn-doc(→material) 等视图规则拆入 ui.views/<view>.css——断言语料
+    合并读保持等价域（=拆分前单文件），断言行零改动。
+    """
+    parts = [(STUDIO / "ui.css").read_text(encoding="utf-8")]
+    parts.extend(p.read_text(encoding="utf-8")
+                 for p in sorted((STUDIO / "ui.views").glob("*.css")))
+    return "\n".join(parts)
 
 
 # ── 纯函数：相对亮度与对比度（WCAG 2.x 定义）──────────────
@@ -61,7 +74,7 @@ def _badge_tint(color: str, pct: float = 0.12, base: str = "#ffffff") -> str:
 
 def _root_tokens() -> dict[str, str]:
     """从 ui.css :root 抽 token 现值（测真实产物，不二次硬编码）。"""
-    css = CSS.read_text(encoding="utf-8")
+    css = _css_text()
     root = re.search(r":root\{[^}]*\}", css)
     assert root is not None, "缺少 :root token 块"
     return dict(re.findall(r"(--(?:crimson|ink-1|ink-2|jade|amber|paper-0|paper-1)):(#[0-9a-fA-F]{6})",
@@ -136,7 +149,7 @@ def test_statusbar_text_meets_aa_on_opaque_paper() -> None:
     为旧产物实测口径，不与 token 对应）；不论原数如何，本门改为机械断言：
     实心底 + ink-2 双主题 ≥4.5，改回半透明底或换 ink-3 即红。
     """
-    css = CSS.read_text(encoding="utf-8")
+    css = _css_text()
     rule = re.search(r"\.statusbar\{[^}]*\}", css)
     assert rule is not None, "缺少 .statusbar 规则"
     # 底必须是不透明 var(--paper-1)（半透明 color-mix 会让对比度随下层内容漂移）
@@ -167,7 +180,7 @@ def test_radar_row_text_colors_meet_aa_both_themes() -> None:
         本门断言其确实没被用作正文色（ui.css 里 --ink-3 只出现在 border-left）
     底：浅色 --paper-1 卡片面；深色 html[data-theme="dark"] 的 --paper-1。
     """
-    css = CSS.read_text(encoding="utf-8")
+    css = _css_text()
     light, dark = _root_tokens(), _dark_tokens(css, 'html[data-theme="dark"]')
 
     # 浅色：卡片面 paper-1（#ffffff）
@@ -208,7 +221,7 @@ def test_tag_suggest_chip_colors_meet_aa() -> None:
     「已有」禁用档 --ink-3 删除线：WCAG 1.4.3 明确豁免非活动控件文本，故不入本门
     （仍在本测试里锁住「它确实只是禁用态、不会被当作正文」）。
     """
-    css = CSS.read_text(encoding="utf-8")
+    css = _css_text()
     light = _root_tokens()
     dblock = re.search(r'html\[data-theme="dark"\]\{([^}]*)\}', css)
     assert dblock is not None
@@ -241,7 +254,7 @@ def test_syn_panel_text_colors_meet_aa_both_themes() -> None:
     - 预算条（ui.js inline）--ink-3 是设计 §3.3 明文 micro 辅助档（与 fb-rate/
       coll-cap 等 10+ 处仓库惯例同档）——不入 AA 门，但锁「ink-3 必伴随 fs-micro」。
     """
-    css = CSS.read_text(encoding="utf-8")
+    css = _css_text()
     light = _root_tokens()
     light_all = dict(re.findall(r"(--(?:ink-2|ink-3|jade|vermilion)):(#[0-9a-fA-F]{6})",
                                 re.search(r":root\{[^}]*\}", css).group(0)))
@@ -262,7 +275,7 @@ def test_syn_panel_text_colors_meet_aa_both_themes() -> None:
     assert contrast_ratio(dark_all["--ink-2"], dark_all["--paper-1"]) >= 4.5
 
     # 预算条 inline（ui.js）：--ink-3 只许出现在 fs-micro 档行内
-    js = (CSS.parent / "ui.js").read_text(encoding="utf-8")
+    js = (STUDIO / "ui.js").read_text(encoding="utf-8")
     for line in js.splitlines():
         if "color:var(--ink-3)" in line:
             assert "font-size:var(--fs-micro)" in line, \
@@ -275,7 +288,7 @@ def test_syn_step_dots_meet_non_text_contrast() -> None:
     done=竹绿实心 / running=朱砂脉冲点都是 8px 图形指示器（非文字）——1.4.11
     要求图形组件对相邻色 ≥3:1，此处对卡片面 --paper-1 断言。
     """
-    css = CSS.read_text(encoding="utf-8")
+    css = _css_text()
     root = re.search(r":root\{[^}]*\}", css)
     assert root is not None
     light = dict(re.findall(r"(--(?:jade|vermilion)):(#[0-9a-fA-F]{6})", root.group(0)))
@@ -304,14 +317,14 @@ def test_syn_doc_indigo_marks_ai_and_adopt_btn_vermilion() -> None:
     - 青黛文字色双主题 AA 已由既有断言覆盖（浅 #2c5f8a 5.92:1 / 深 #7fb3d8）；
     - 「采纳所选」（人工动作）必须 btn-primary（朱砂）——纪律一反侧。
     """
-    css = CSS.read_text(encoding="utf-8")
+    css = _css_text()
     doc = re.search(r"\.syn-doc\{([^}]*)\}", css)
     assert doc is not None, "缺少 .syn-doc 容器（青黛专表 AI 纪律）"
     assert "border-left:2px solid var(--indigo)" in doc.group(1)
     for lvl in (1, 2, 3, 4):
         assert re.search(r"\.syn-doc h1,\.syn-doc h2,\.syn-doc h3,\.syn-doc h4"
                          r"\{color:var\(--indigo\)\}", css), "综合稿节标题未走青黛"
-    js = (CSS.parent / "ui.js").read_text(encoding="utf-8")
+    js = (STUDIO / "ui.js").read_text(encoding="utf-8")
     m = re.search(r"<button class=\"(btn[^\"]*)\" data-tsg=\"ok\"", js)
     assert m is not None and "btn-primary" in m.group(1), \
         "「采纳所选」是人工动作按钮，必须朱砂（btn-primary）——纪律一反侧"

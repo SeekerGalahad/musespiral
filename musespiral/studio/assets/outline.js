@@ -65,7 +65,14 @@ if(action==='expand')window.dispatchEvent(new Event('hashchange')); // 让 ui.js
 }catch(e){var n=olGet('cm-outline-note');if(n)n.textContent='大纲操作失败：'+e.message;}
 }
 
+// ARCH-1 幂等门：#cm-outline 骨架随 compose 视图懒注入——core 装载本文件时 DOM
+// 多半未到（早退不绑 hashchange），__onViewHtml('compose') 会再调 boot()；bound
+// 防双绑（重复 hashchange/click 监听=双请求）。
+var olBound=false;
 function olBoot(){
+if(olBound)return;
+if(!olGet('cm-outline'))return;
+olBound=true;
 var gen=olGet('cm-outline-gen'),exp=olGet('cm-outline-expand'),list=olGet('cm-outline-list');
 if(gen)gen.addEventListener('click',function(){olAction('generate');});
 if(exp)exp.addEventListener('click',async function(){
@@ -91,4 +98,5 @@ olRefresh();
 
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',olBoot);
 else olBoot();
+window.__mdpubOutline={boot:olBoot};
 })();

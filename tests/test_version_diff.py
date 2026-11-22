@@ -505,8 +505,9 @@ console.log(JSON.stringify({
 
 
 def test_versions_js_structure_and_loader() -> None:
-    """结构锚：tmpl 有 versions tab 与 panel-versions；ui.js 装载循环含 versions.js。"""
-    tmpl = TMPL.read_text(encoding="utf-8")
+    """结构锚：article 视图骨架有 versions tab 与 panel-versions（ARCH-1 起源在
+    ui.views/article.html，壳内为懒注入占位）；ui.js 装载循环含 versions.js。"""
+    tmpl = (STUDIO / "ui.views" / "article.html").read_text(encoding="utf-8")
     assert 'data-tab="versions"' in tmpl
     assert 'data-panel="versions"' in tmpl
     for anchor in ("ver-a", "ver-b", "ver-diff-btn", "ver-stage", "ver-note"):

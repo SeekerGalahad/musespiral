@@ -40,10 +40,12 @@
 <button class="chip" id="mat-coll-exit" data-mcoll="" hidden>✕ 退出集合</button>
 </div>
 <div class="pub-toolbar">
-<input id="mat-search" class="input" placeholder="全库搜索：标题/正文/标签/meta…"><button id="mat-search-x" type="button" class="coll-new" aria-label="清空搜索" hidden>✕ 清空</button>
+<div class="mat-search-wrap"><input id="mat-search" class="input" placeholder="全库搜索：标题/正文/标签/meta…"><button id="mat-search-x" type="button" class="coll-new" aria-label="清空搜索" hidden>✕ 清空</button></div>
+<div class="chips mat-search-modes" id="mat-modes" aria-label="搜索模式（可手动切换）"><button class="chip is-active" data-searchmode="auto" title="自动：自然语言走混合，其余走关键词">自动</button><button class="chip" data-searchmode="keyword" title="关键词：标题/正文/标签/meta 词面匹配">关键词</button><button class="chip" data-searchmode="semantic" title="语义：按自然语言描述找相关素材（需 embedding）">语义</button></div>
 <select id="mat-type" class="input" aria-label="类型筛选"><option value="">全部类型</option></select>
-<select id="mat-sort" class="input" aria-label="排序"><option value="score">评分降序</option><option value="time">时间降序</option><option value="title">标题</option></select>
+<select id="mat-sort" class="input" aria-label="排序"><option value="score">评分降序</option><option value="relevance">相关度</option><option value="time">时间降序</option><option value="title">标题</option></select>
 </div>
+<p class="action-hint mat-mode-hint" id="mat-mode-hint" hidden></p>
 <div class="sel-bar" id="sel-bar" hidden><span>已选 <b id="sel-n">0</b> 篇</span><button class="btn btn-primary" id="syn-btn" disabled>AI 综合</button><button class="btn btn-ghost" id="sel-clear">取消选择</button></div>
 <div class="drop-overlay" id="mat-drop" hidden>松开上传图片</div>
 <div id="mat-tray" hidden></div>

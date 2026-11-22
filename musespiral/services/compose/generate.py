@@ -21,6 +21,7 @@ from ...infra.storage.filesystem import atomic_write_bytes as _atomic_write
 from ...infra.storage.filesystem import backup_article as _backup_article
 from ...jobs.store import now_iso as _now_iso
 from .characters import scan_conflicts
+from .foreshadowing import open_foreshadowing
 from .outline import _load_outline
 from .prompt import build_messages
 from .store import (ComposeError, DECISIONS_SUFFIX, FEEDBACK_FILE, _draft_path,
@@ -83,6 +84,9 @@ def generate(
         "raw": str(rounds_dir / f"{n}.md"),
         # E-5（§3.6「AI 生成后自动检查」）：冲突=⚠️ 提示列表，**不拦截不改写**
         "conflicts": scan_conflicts(session, blocks),
+        # FEAT-4 伏笔检查：未回收（planted/escalated）清单随结果回传——提示
+        # 不拦截（同 conflicts 红线：账本是给作者看的，不拦生成不改文本）
+        "foreshadowing": open_foreshadowing(session.foreshadowing),
     }
 
 

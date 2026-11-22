@@ -136,8 +136,9 @@ hasNode:!!el('cm-rolling-text')}));
 
 
 def test_rolling_details_block_in_shell() -> None:
-    """右栏折叠区结构：details#cm-rolling + 只读展示 + 刷新 + 编辑 + 进度提示。"""
-    shell = _shell()
+    """右栏折叠区结构：details#cm-rolling + 只读展示 + 刷新 + 编辑 + 进度提示。
+    ARCH-1：compose 骨架源在 ui.views/compose.html（壳内为懒注入占位）。"""
+    shell = (UI_HTML.parent / "ui.views" / "compose.html").read_text(encoding="utf-8")
     assert 'id="cm-rolling"' in shell
     assert "📖 滚动摘要" in shell
     assert 'id="cm-rolling-view"' in shell and 'id="cm-rolling-text"' in shell

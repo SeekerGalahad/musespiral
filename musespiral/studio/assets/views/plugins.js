@@ -182,6 +182,7 @@ location.hash='#plugin-pipeline?id='+encodeURIComponent(pid);
 }catch(err){toast('保存失败：'+err.message,ER);}
 }
 async function pgEnter(params){
+if(!PG.list.length&&!PG.err){$('pg-grid').innerHTML=skelCards(4);$('pg-grid').hidden=false;$('pg-empty').hidden=true;}
 await pgLoad();
 var d=params.get('d'),seed=params.get('seed')||'';
 if(params.get('new')!=null){
@@ -215,6 +216,8 @@ this.disabled=false;
 toast('已重扫插件目录：已装 '+PG.list.length+' 个'+(PG.skipped.length?' · 跳过 '+PG.skipped.length+' 个':''),PG.skipped.length?WN:OK);
 });
 $('pg-new-btn').addEventListener('click',function(){location.hash='#plugins?new=1';});
+$('pg-empty-new').addEventListener('click',function(){location.hash='#plugins?new=1';});
+$('pg-empty-rescan').addEventListener('click',function(){$('pg-refresh-btn').click();});
 $('pg-detail-wrap').addEventListener('click',function(e){
 var b=e.target.closest('[data-pgback]');
 if(b){location.hash='#plugins';return;}

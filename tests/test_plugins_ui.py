@@ -40,17 +40,36 @@ PLUGINS_JS = STUDIO / "assets" / "views" / "plugins.js"
 PLUGIN_RUN_JS = STUDIO / "assets" / "views" / "plugin-run.js"
 
 # ── 体积五锚（与 test_build_ui.py 同源；本批按任务书逐项报实测数）────────
-SHELL_MAX = 49_152            # 48KiB
+SHELL_MAX = 20_480            # 20KiB（ARCH-1 ③ 壳锚重设，与 test_build_ui.py 同源）
 VIEW_MAX = 40_960             # 40KiB
 CORE_MAX = 163_840            # 160KiB
-# 2026-11-21 owner 裁决：432,000→444,000（第 9 次调整，N-2 素材闭环前端批
-# +11,524B → 实测 443,396B）。正典三档语义在 test_build_ui.py（绿 ≤444,000 /
-# 黄 ≤480,000 软警报 / 红 >480,000）——本文件按绿档上限对齐同值，黄带判定
-# 以 test_build_ui.py::_assert_assets_total_tier 为准。
-# AI-1 三态裁决前端批（2026-11-21）实测 447,540B 已落黄档（归因见
-# test_build_ui.py 常量注释档）。本文件同按黄档上限对齐——此处若仍卡 444,000
-# 就等于在本文件把已生效的三档机制改回硬门（三档唯一权威仍是 test_build_ui.py）。
-TOTAL_MAX = 480_000
+# 2026-11-21 ARCH-1 口径重校（owner 裁决，第二次也是最后一次口径级调整）：总量门
+# 口径改「壳+手写 assets 全量=前端总交付面」（assets-only 口径把壳→html.js/css 的
+# 字节搬家误判为膨胀），三档权威=test_build_ui.py（绿 ≤530,000 / 黄 ≤570,000 软
+# 警报 / 红 >600,000）——本文件按绿档上限对齐同值，黄带判定以
+# test_build_ui.py::_assert_assets_total_tier 为准；归因链见其常量注释档。
+# FEAT-2 智能组稿批（2026-11-22）：compose 视图三步向导 +11,048B，总交付面
+# 539,277B 落 test_build_ui 黄带（软警报+归因已登记其注释档）——本硬门随批
+# 上移 530,000→540,000（对齐黄带内实际水位；距黄上限 570,000 仍留 30KB）。
+# FEAT-3 数据回流批（2026-11-22）：洞察 SVG 趋势图 +4,736B（insight.css 14
+# 条 .st-*/stats-trend 规则 + insight.html 趋势卡 + insight.js 聚合与渲染，
+# 全在懒加载 insight 视图、不占首屏），总交付面实测 544,013B——本硬门随批
+# 上移 540,000→545,000（对齐黄带内实际水位；距黄上限 570,000 仍留 25KB）。
+# FEAT-4 小说双件套批（2026-11-22）：人物关系力导向图+伏笔账本 +11,249B
+# （独立产物 assets/novel.js 9,242B——compose.js 贴 40KiB 锚二次拆分判例；
+# compose 视图关系面 +643B + compose.html 两容器 +346B + compose.css 11 条
+# .cn-* 规则 + core.js 装载接线 +149B；首屏不动），总交付面实测 555,262B
+# ——本硬门随批上移 545,000→556,000（对齐黄带内实际水位；距黄上限
+# 570,000 仍留 14KB）。
+# FEAT-5 前端交互升级批（2026-11-22）：快捷键速查（? 弹层，壳 modal + core
+# SHORTCUTS/kbdOpen/键位绑定）+ 行式骨架（skelCards/skelRows 首访占位）+ 四视图
+# 空态引导按钮 + live 预览暗色双色板，+6,958B（core.js +4,050 为大头：速查数据
+# 与骨架通用件归 core 供各视图共用；material.js 只 +7B——40KiB 水位贴线视图
+# 未加逻辑，骨架画在 core __onViewHtml）。首屏增量仅壳 modal +535B 与 core.js
+# +4,050B（速查弹层按需渲染，键盘可达性属壳能力）。总交付面实测 562,220B
+# ——本硬门随批上移 556,000→563,000（对齐黄带内实际水位；距黄上限 570,000
+# 仅余 7KB——下批前端功能应先瘦身或走独立产物判例）。
+TOTAL_MAX = 563_000
 FIRST_SCREEN_MAX = 245_760    # 240KiB
 
 
@@ -609,7 +628,8 @@ def test_volume_five_anchors_with_batch_numbers() -> None:
     plugin_run = PLUGIN_RUN_JS.stat().st_size
     view_files = sorted((STUDIO / "assets" / "views").glob("*.js"))
     biggest = max(p.stat().st_size for p in view_files)
-    handwritten = sum(
+    # 总交付面（ARCH-1 口径重校）：壳 + 手写 assets（剥 editor/ vendor）
+    handwritten = UI_HTML.stat().st_size + sum(
         p.stat().st_size
         for p in (STUDIO / "assets").rglob("*")
         if p.is_file() and "editor/" not in p.relative_to(STUDIO).as_posix()

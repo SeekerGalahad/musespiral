@@ -1,0 +1,9 @@
+/* sources 视图专属样式（ARCH-1 ② 自 ui.css 拆出；构建产物=assets/views/sources.css，随视图懒加载注入） */
+.amb-sources{background:linear-gradient(90deg,var(--indigo),var(--viz-5))}
+/* 源中枢（§3.1）：生态带 + 健康灯三态 + 选中行 */
+.eco-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:var(--space-sm);margin-bottom:var(--space-md)}
+.eco-tile{display:flex;flex-direction:column;gap:2px;padding:var(--space-sm) var(--space-md);background:var(--paper-2);border-radius:var(--radius-btn)}
+.eco-n{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2}
+.eco-l{font-size:var(--fs-caption);color:var(--ink-2)}
+.eco-tile.amber .eco-n{color:var(--amber)}
+.src-table tr.sel>td:first-child{box-shadow:inset 3px 0 0 var(--vermilion)}

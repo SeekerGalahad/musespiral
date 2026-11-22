@@ -51,7 +51,8 @@ session.json novel_summary，**与 rolling_summary 并存**：rolling 记近期
 remove_character / set_session_kind。
 
 prompt 组装管线（E-5 后的固定序，见 _SLOT_ORDER）：style → sources →
-novel → characters → rolling → draft → decisions。
+novel → characters → foreshadowing → rolling → draft → decisions
+（{{foreshadowing}} 为 FEAT-4 未回收伏笔清单，空账本整节缺席）。
 
 红线：AI 产出永远先落 rounds/N.md 预览态，「采纳入稿」（adopt）才写
 draft.md——块级的人工最后一步。
@@ -241,6 +242,19 @@ from .characters import (  # noqa: F401
     session_characters,
     set_session_kind,
 )
+from .foreshadowing import (  # noqa: F401 —— FEAT-4 伏笔账本（CRUD + prompt 面）
+    FORESHADOWING_HEADER,
+    FORESHADOWING_HEADER as _FORESHADOWING_HEADER,
+    add_foreshadowing,
+    foreshadowing_block,
+    open_foreshadowing,
+    remove_foreshadowing,
+    update_foreshadowing,
+)
+from .smart import (  # noqa: F401 —— FEAT-2 智能组稿（主题→素材→会话+大纲）
+    smart_start,
+    suggest_materials,
+)
 
 __all__ = [
     "Block",
@@ -253,6 +267,7 @@ __all__ = [
     "DUAL_DRAFT_A",
     "DUAL_DRAFT_B",
     "FEEDBACK_FILE",
+    "FORESHADOWING_HEADER",
     "KIND_ARTICLE",
     "META_FILE",
     "NOVEL_SUMMARY_INPUT_MAX",
@@ -303,6 +318,7 @@ __all__ = [
     "_draft_path",
     "_excerpt_sources",
     "_fill_slots",
+    "_FORESHADOWING_HEADER",
     "_format_decisions",
     "_habits_pairs",
     "_load_decisions",
@@ -335,6 +351,7 @@ __all__ = [
     "_working_markdown",
     "_write_json_atomic",
     "add_character",
+    "add_foreshadowing",
     "add_source",
     "adopt",
     "apply_dual_pick",
@@ -350,6 +367,7 @@ __all__ = [
     "expand_section",
     "extract_habits",
     "functools",
+    "foreshadowing_block",
     "generate",
     "json",
     "keep_both_drafts",
@@ -364,6 +382,7 @@ __all__ = [
     "new_session",
     "novel_block",
     "novel_chapter_stats",
+    "open_foreshadowing",
     "outline_approve",
     "outline_from_json",
     "outline_generate",
@@ -376,6 +395,7 @@ __all__ = [
     "refresh_novel_summary",
     "refresh_rolling_summary",
     "remove_character",
+    "remove_foreshadowing",
     "remove_source",
     "rolling_block",
     "rolling_due",
@@ -390,8 +410,11 @@ __all__ = [
     "set_novel_summary",
     "set_rolling_summary",
     "set_session_kind",
+    "smart_start",
     "status",
     "style_block",
+    "suggest_materials",
     "threading",
+    "update_foreshadowing",
     "validate_sections",
 ]

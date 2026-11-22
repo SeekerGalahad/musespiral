@@ -97,7 +97,20 @@ def submit(article: str, draft_id: str) -> None:
     click.echo(f"✅ 发表成功!")
     if article_url:
         click.echo(f"   文章链接: {article_url}")
-        set_publish_url(default_log_path(), publish_id, article_url)
+        log_path = default_log_path()
+        set_publish_url(log_path, publish_id, article_url)
+        # FEAT-3：发表后自动拉一次微信统计回填该篇 stats（含在看）——best-effort，
+        # 不因统计失败阻塞已完成的发表；结果经回调回显（缺省静默）。
+        from ..infra.wechat.analytics import backfill_published_stats
+
+        done = backfill_published_stats(article_url, log_path=log_path, echo=click.echo)
+        if done.get("ok"):
+            click.echo(
+                f"   📊 数据已回填: 阅读 {done['reads']} · 在看 {done['zaikan']} · "
+                f"分享 {done['shares']}"
+            )
+        elif done.get("reason"):
+            click.echo(f"   📊 数据回填跳过: {done['reason']}")
 
 
 # ── stats ─────────────────────────────────────────────────

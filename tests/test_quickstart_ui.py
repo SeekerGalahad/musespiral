@@ -199,7 +199,10 @@ def test_quickstart_wiring_structure():
     src = QS_JS.read_text(encoding="utf-8")
     core = CORE_JS.read_text(encoding="utf-8")
     ui_js = UI_JS.read_text(encoding="utf-8")
-    css = UI_CSS.read_text(encoding="utf-8")
+    # CSS 语料=ui.css(core)+ui.views/*.css 合并（ARCH-1 ② 拆分等价域；qs-* 现落
+    # assets/views/insight.css 源 ui.views/insight.css）
+    css = (UI_CSS.read_text(encoding="utf-8") + "\n" + "\n".join(
+        p.read_text(encoding="utf-8") for p in sorted(UI_CSS.parent.glob("ui.views/*.css"))))
     # 端点链：new → add → generate → 轮询 jobs →（F1）decide keep-all → adopt
     for endpoint in ("/api/compose/new", "/api/compose/add", "/api/compose/generate",
                      "/api/jobs/", "/api/compose/decide", "/api/compose/adopt"):

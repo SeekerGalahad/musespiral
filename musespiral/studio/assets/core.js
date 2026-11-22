@@ -30,6 +30,8 @@ mtype:'',
 mspark:'',
 mconf:'', // N-4 低置信筛选（'low'=confidence<0.5；服务端 confidence 参数同值）
 mquery:'',
+searchMode:'auto', // FEAT-1：auto|keyword|语义搜索模式（auto 按输入形态自动选 hybrid/keyword）
+searchReady:null, // FEAT-1：语义路是否就绪（null=未探测；false=降级关键词）
 msort:'score',
 mdrawer:'',
 mcoll:'',
@@ -40,6 +42,7 @@ tagList:[],
 mqTotal:0,
 sview:'grid',
 irange:30,
+srange:'week',
 radar:null,
 syn:{},msel:[],
 srctype:'',
@@ -111,7 +114,9 @@ return data;
 }
 function getJSON(path){ return request('GET',path,undefined);}
 function postJSON(path,body){ return request('POST',path,body);}
-var QUEUED='已入队（进度见右上任务中心）',ER='error',WN='warning',OK='success',Z='</span>',D='</div>',QA=document.querySelectorAll.bind(document),EA=$('edit-area'),HL=$('edit-hl'),LF=$('live-frame'),AB=$('annot-bubble'),JM=$('jobs-menu'),AA=$('edit-annotate-ai'),MC=$('modal-confirm'),PB=$('publish-btn'),EG=$('edit-gutter'),ES=$('edit-save-btn');
+var QUEUED='已入队（进度见右上任务中心）',ER='error',WN='warning',OK='success',Z='</span>',D='</div>',QA=document.querySelectorAll.bind(document),JM=$('jobs-menu'),MC=$('modal-confirm');
+var EA=null,HL=null,LF=null,AB=null,AA=null,PB=null,EG=null,ES=null;
+function bindEditorRefs(){EA=$('edit-area');HL=$('edit-hl');LF=$('live-frame');AB=$('annot-bubble');AA=$('edit-annotate-ai');PB=$('publish-btn');EG=$('edit-gutter');ES=$('edit-save-btn');}
 var STATUS_LABELS={draft:'草稿',reviewed:'已审',published:'已发布',archived:'已归档'};
 function statusBadge(s){if(!STATUS_LABELS[s])s='draft';return '<span class="badge stamp '+s+'">'+STATUS_LABELS[s]+Z;}
 async function waitForJob(id){
@@ -373,12 +378,42 @@ if(el) el.hidden=name!==view;
 renderNav(view);
 }
 // M3 视图懒加载（幂等 Promise；失败清缓存可重试）。视图用顶层函数声明，注入即定义。
+// ARCH-1 壳 HTML 外移 + ② CSS 拆分：非 publish 视图的 HTML 骨架与专属样式都不在
+// 首屏（壳内是空占位 <section id="view-<name>" hidden>）——装载三步走：先
+// assets/views/<view>.css（<link> 样式先于骨架注入，进视图零裸闪）再
+// assets/views/<view>.html.js（innerHTML 填充占位 + __onViewHtml 补装钩子）最后
+// assets/views/<view>.js（行为脚本）；首屏 publish 的 HTML/CSS 都在壳+core.css，
+// 跳过前两步不触发懒加载。样式/骨架产物由 build_ui.py 每懒视图一份（缺文件即
+// 装载失败走 catch 清缓存可重试，与脚本缺文件同语义）。
 var __viewPromises={};
-function ensureView(view){
-if(!__viewPromises[view]){__viewPromises[view]=new Promise(function(res,rej){
-var s=document.createElement("script");s.src="assets/views/"+view+".js";
-s.onload=res;s.onerror=function(){delete __viewPromises[view];rej(new Error("视图脚本加载失败: "+view));};
+function __loadScript(src){return new Promise(function(res,rej){
+var s=document.createElement("script");s.src=src;
+s.onload=res;s.onerror=function(){rej(new Error("脚本加载失败: "+src));};
 document.head.appendChild(s);});}
+function __loadCss(src){return new Promise(function(res,rej){
+var l=document.createElement("link");l.rel="stylesheet";l.href=src;
+l.onload=res;l.onerror=function(){rej(new Error("样式加载失败: "+src));};
+document.head.appendChild(l);});}
+// HTML 注入后的补装钩子：①mountChrome 重跑（[data-icon] 图标装配在 core 装载时
+// 只覆盖壳，懒视图的图标在此补）；②article 编辑器全局重抓取；③绑定型独立产物
+// （outline/rolling/dual/tts/versions/quickstart）boot 时目标 DOM 未到即早退，
+// 在此重调（各文件自带幂等门，重复调用零副作用）。
+var VSTANDALONE={compose:['__mdpubOutline','__mdpubRolling','__mdpubDual','__mdpubNovel'],article:['__mdpubTts','__mdpubVersions'],insight:['__mdpubQuickstart']};
+function __onViewHtml(view){
+mountChrome();
+if(view==='article')bindEditorRefs();
+if(view==='sources'){on2('src-clip-btn',function(){clipOpen('clip');});on2('src-crawl-btn',function(){clipOpen('crawl');});}
+if(view==='material')on2('mat-reg-btn',function(){clipOpen('video');});
+// FEAT-5 骨架屏（首访窗口）：HTML 已注入、enter 的数据在途——列表区先画骨架，
+// 免「空白/空态误闪」（renderMaterials 首轮 state.mats=[] 时 mat-empty 会闪「暂无素材」）。
+// 只在首访走这段（ensureView 缓存后 __onViewHtml 不再执行；回访旧列表保持不闪）。
+if(view==='material'&&!(state.mats||[]).length){var ml=$('mat-list');if(ml)ml.innerHTML=skelCards(4);}
+if(view==='sources'&&!matSrcs().length){var sr=$('src-rows');if(sr)sr.innerHTML='<tr><td colspan="9"><div class="skel">'+skelRows(4)+'</div></td></tr>';}
+var xs=VSTANDALONE[view];
+if(xs)xs.forEach(function(g){var w=window[g];if(w&&w.boot)w.boot();});
+}
+function ensureView(view){
+if(!__viewPromises[view]){__viewPromises[view]=(view==='publish'?Promise.resolve():__loadCss("assets/views/"+view+".css").then(function(){return __loadScript("assets/views/"+view+".html.js");}).then(function(){__onViewHtml(view);})).then(function(){return __loadScript("assets/views/"+view+".js");}).catch(function(err){delete __viewPromises[view];throw new Error("视图装载失败: "+view+"（"+err.message+"）");});}
 return __viewPromises[view];}
 // ── 跨视图调用治理（2026-11-20 台账 A 类专项）──────────────────────────
 // M3 拆分初期靠「core 预置 no-op 占位符 + 视图顶层同名函数覆盖」兜底跨块调用——
@@ -464,6 +499,7 @@ var v=LIC[l]||['lic-unk','许可未知'];
 return '<span class="lic-badge '+v[0]+'" title="license 枚举">'+v[1]+Z+confBadge(m);
 }
 function renderCollRail(){
+if(!$('coll-static'))return; // ARCH-1：material HTML 未注入时 rail DOM 不在——维持 VAPI 同款「未注入即 no-op」语义（注入后 enter 必重绘）
 var L=state.mats||[],sn=0,ur=0,hi=0,de=0;
 L.forEach(function(m){var t=m.triage||{};if(t.starred)sn++;if(!t.read){ur++;if((m.score||0)>=80)hi++;}if(m.type==='derived')de++;});
 function ci(act,attrs,label,n){return '<button class="coll-item'+(act?' act':'')+'" '+attrs+'>'+label+(n==null?'':' <span class="coll-n">'+n+'</span>')+'</button>';}
@@ -672,6 +708,11 @@ var b=$('theme-toggle');
 if(b){var dk=mode==='dark'||(mode==='auto'&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
 b.title='主题：'+(mode==='auto'?'跟随系统（当前：'+(dk?'深色':'浅色')+'）':(dk?'深色':'浅色'))+'（点击切换）';
 b.setAttribute('aria-pressed',dk?'true':'false');}
+// FEAT-5 暗色补全：live 预览是独立 iframe（srcdoc 一次性注入，不随父文档 data-theme
+// 变化）——切主题后若文章预览可见即重注。视图函数经 VAPI 触达（跨视图治理契约），
+// article 块登记 live=renderLive；视图未注入时 VAPI.article 未登记即自然跳过。
+var va=VAPI.article;
+if(va&&va.live&&!$('view-article').hidden)va.live();
 }
 function cycleTheme(){
 // 基于已应用态轮换：applyTheme 后 DOM 属性即真值（auto=无属性）
@@ -694,7 +735,8 @@ probeHealth(); // 档A：静默徽章磁盘/凭证信号
 // 独立产物懒加载（quickstart E-4 §3.4 / outline G-T2 §三 / rolling G-T4 §五 / dual G-T3 §四 / tts G-T5 §六 / versions E-6 §3.7）：
 // core.js 贴 M3 拆分线，合并为单循环避免触线；字面量保留供各装载门断言
 // lineage.js=N-4 血统 tab（material.js 贴 40KiB 锚，同 iterations.js 判例独立产物）
-['assets/quickstart.js','assets/outline.js','assets/rolling.js','assets/dual.js','assets/tts.js','assets/versions.js','assets/iterations.js','assets/lineage.js'].forEach(function(s){var e=document.createElement('script');e.src=s;document.head.appendChild(e);});
+// novel.js=FEAT-4 小说双件套（人物关系力导向图 + 伏笔账本；compose.js 贴 40KiB 锚同判例）
+['assets/quickstart.js','assets/outline.js','assets/rolling.js','assets/dual.js','assets/tts.js','assets/versions.js','assets/iterations.js','assets/lineage.js','assets/novel.js'].forEach(function(s){var e=document.createElement('script');e.src=s;document.head.appendChild(e);});
 }
 init();
 
@@ -714,9 +756,8 @@ var u=$('clip-url').value.trim();
 if(!/^https:\/\/|^http:\/\//i.test(u)){$('clip-err').textContent='URL 须 http(s):// 开头';return;}
 return u;
 }
-on2('src-clip-btn',function(){clipOpen('clip');});
-on2('src-crawl-btn',function(){clipOpen('crawl');});
-on2('mat-reg-btn',function(){clipOpen('video');});
+// ARCH-1：src-clip-btn/src-crawl-btn/mat-reg-btn 三入口属懒视图骨架——原 top-level
+// on2 绑定迁 __onViewHtml（boot 时元素未到会抛 TypeError 中断 core 尾段执行）
 on2('clip-cancel',function(){$('clip-form').hidden=true;});
 $('clip-form').addEventListener('click',function(e){if(e.target===this)this.hidden=true;});
 $('clip-ok').addEventListener('click',async function(){
@@ -871,9 +912,84 @@ catch(err){state.tagList=[];}
 var dl=$('tag-dl');
 if(dl)dl.innerHTML=state.tagList.map(function(t){return '<option value="'+esc(t.name)+'">';}).join('');
 }
+// F64 结果高亮（自 @view:material 迁 core：view JS 贴 40KiB 体积锚；跨视图消费）
+function hl(raw){
+var s=String(raw==null?'':raw);
+if(!state.mquery)return esc(s);
+var toks=(String(state.mquery).match(/"[^"]+"|\S+/g)||[]).map(function(t){return t.replace(/^"|"$/g,'').replace(/\*+$/,'');}).filter(Boolean);
+if(!toks.length)return esc(s);
+var re;
+try{re=new RegExp('('+toks.map(function(t){return t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}).join('|')+')','gi');}
+catch(err){return esc(s);}
+var out='',last=0,m=re.exec(s);
+while(m){out+=esc(s.slice(last,m.index))+'<mark>'+esc(m[0])+'</mark>';last=m.index+m[0].length;m=re.exec(s);}
+return out+esc(s.slice(last));
+}
+// ── FEAT-1 语义搜索前端数据面（core 共享块；2026-11-22）────────────────
+// 三模式：auto=自然语言（含空格/≥6 字中文描述）走 hybrid，其余走 keyword；
+// keyword/semantic 手动锁定。semanticReady=false 时所有模式自动降级 keyword。
+var SEARCH_MODES={auto:'自动',keyword:'关键词',semantic:'语义'};
+function effectiveMode(q){
+if(!state.searchMode||state.searchMode==='auto')return looksNatural(q)?'hybrid':'keyword';
+return state.searchMode; // keyword | semantic
+}
+function looksNatural(q){
+q=String(q||'').trim();
+return /\s/.test(q)||q.length>=6; // 含空格或多字词描述视为自然语言
+}
+function simPct(v){
+if(typeof v!=='number'||!(v>0))return '';
+return '<span class="sim-badge" title="语义相关度">'+Math.round(v*100)+'%</span>';
+}
+// 语义搜索结果应用：裁剪面条目直接进 state.mats（排序统一由 matFiltered 处理）
+function applySearchResult(items){
+state.mats=Array.isArray(items)?items:[];
+state.mqTotal=state.mats.length;
+}
+async function matSearch(q){
+if(!q){state.mats=[];state.mqTotal=0;state.searchReady=null;viewRepaint('material');return;}
+var mode=effectiveMode(q);
+try{
+var d=await getJSON('/api/materials/search?q='+encodeURIComponent(q)+'&mode='+mode+'&limit=100');
+state.searchReady=(d&&typeof d.semantic_ready==='boolean')?d.semantic_ready:null;
+// 降级：显式语义但 embedding 不可用→自动切关键词并重搜 + 提示（不打扰）
+if(d&&d.ok===false&&mode==='semantic'&&state.searchReady===false){
+state.searchMode='keyword';syncMatModes();
+showMatHint('语义检索暂不可用（需本地 embedding 服务），已自动切换为关键词搜索');
+return matSearchBy('keyword',q);
+}
+hideMatHint();applySearchResult(d.items);
+}catch(err){state.mats=[];state.mqTotal=0;toast('搜索失败：'+err.message,ER);}
+viewRepaint('material');
+}
+async function matSearchBy(mode,q){
+try{var d=await getJSON('/api/materials/search?q='+encodeURIComponent(q)+'&mode='+mode+'&limit=100');
+applySearchResult(d.items);}catch(err){state.mats=[];state.mqTotal=0;toast('搜索失败：'+err.message,ER);}
+viewRepaint('material');
+}
+function syncMatModes(){
+QA('[data-searchmode]').forEach(function(el){el.classList.toggle('is-active',el.getAttribute('data-searchmode')===(state.searchMode||'auto'));});
+}
+function showMatHint(msg){var h=$('mat-mode-hint');if(h){h.textContent=msg;h.hidden=false;}}
+function hideMatHint(){var h=$('mat-mode-hint');if(h)h.hidden=true;}
+function lineageHtml(m){
+var refs=m.references||[];
+if(!refs.length)return '<p class="action-hint">血统：原始素材（provenance 空）</p>';
+return '<div class="lineage-chain"><span class="lineage-node self">'+I(MTYI[m.type]||'tag')+esc(m.id)+'</span>'+refs.map(function(r){
+var nid=esc(r.from_id);
+return '<span class="lineage-op">'+esc(r.op||'ref')+Z+(r.deleted?'<span class="badge fail" title="原料已删（墓碑），链接不跳转">素材已删</span>':'<a class="lineage-node" href="#material?m='+nid+'" title="跳到原料详情">'+nid+'</a>');
+}).join('')+'</div>';
+}
+// 语义相关摘要（详情抽屉 top-5 已随 detail 载荷下发，点击跳详情）
+function matRelatedHtml(related){
+if(!Array.isArray(related)||!related.length)return '';
+return '<div class="sim-related"><span class="action-title" style="font-size:var(--fs-caption)">语义相关</span>'+
+related.map(function(r){return '<div class="sim-rel" data-mrelated="'+esc(r.id)+'"><span class="sim-rel-t">'+esc(r.title||r.id)+'</span>'+simPct(r.similarity)+'</div>';}).join('')+'</div>';
+}
 function fillMatType(){
 var sel=$('mat-type');
 sel.innerHTML='<option value="">全部类型</option>'+Object.keys(MTY).map(function(k){return '<option value="'+k+'"'+(state.mtype===k?' selected':'')+'>'+MTY[k]+'</option>';}).join('');
+syncMatModes(); // FEAT-1：进视图时同步搜索模式激活态（降级切关键词后仍准确）
 // N-2 灵感 chip（2026-11-21）：挂类型筛选区（#mat-type 旁，与 7 类型筛选并列、
 // .chip-spark 虚线边视觉区分）——筛 meta.sub_type=spark 非 type。建在 core 的
 // fillMatType 而非 material.js：单视图 40KiB 锚余量仅 326B 装不下（本文件
@@ -931,8 +1047,42 @@ html+='<div class="article-card qcard skel" aria-hidden="true">' +
 $('article-list').innerHTML=html;
 $('queue-empty').hidden=true;
 }
+// ── FEAT-5 前端交互升级（2026-11-22）────────────────────────────────
+// 骨架屏通用件：首屏数据在途时替代空白/空态闪烁。skelCards=卡片墙（复用 qcard
+// 结构与 .skel/.skel-line 既有样式），skelRows=行式列表（表格/清单用，样式见
+// ui.css .skel-row）。纯字符串模板，调用方 innerHTML 自行覆盖。
+function skelCards(n){var h='';for(var i=0;i<(n||4);i++)h+='<div class="article-card qcard skel" aria-hidden="true"><div class="qcard-body"><div class="skel-line w70"></div><div class="skel-line w45"></div><div class="skel-line w90"></div></div></div>';return h;}
+function skelRows(n){var h='';for(var i=0;i<(n||3);i++)h+='<div class="skel-row" aria-hidden="true"><div class="skel-line w45"></div><div class="skel-line w70"></div><div class="skel-line w90"></div></div>';return h;}
+// 当前生效主题是否深色（三态：light/dark/auto——auto 按 prefers-color-scheme 实测）。
+// 供 iframe 类孤岛（live 预览 srcdoc）取色用：iframe 不继承父文档 data-theme。
+function themeDark(){
+var t=document.documentElement.getAttribute('data-theme');
+if(t)return t==='dark';
+return !!(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
+}
+// 快捷键速查（? 唤起）：数据驱动一张表，键盘可达（⌘K/⌘1-7/g 序列/⌘⇧I 既有绑定
+// 的可发现层——不新增键位只补说明）。组三元组 [路由名, 展示名, 行]：视图专属段
+// 仅当该路由在当前 hash 时展示（'全局' 恒展示）。
+var SHORTCUTS=[
+['全局','全局',[['⌘K / Ctrl+K','命令面板（文章/素材/命令混搜）'],['⌘1-7','按导航序切视图'],['g 然后 s/m/c/p/i/,','跳转 源/素材/工坊/发布/洞察/设置'],['⌘⇧I','灵感速记（任意视图）'],['/','聚焦当前视图搜索框'],['?','本速查'],['Esc','逐层关闭浮层']]],
+['article','文章详情',[['⌘1-4','编辑/变体/检查/预览'],['⌘S','保存'],['⌘⏎','主操作（保存/批量/发布）']]],
+['material','素材库',[['← →','灯箱上一张/下一张'],['Esc','关灯箱/抽屉']]],
+['design','视觉编辑',[['Esc','收行内编辑']]]
+];
+function kbdPaint(){
+var cur=routeInfo().name,h='';
+SHORTCUTS.forEach(function(g){
+if(g[0]!=='全局'&&g[0]!==cur)return;
+h+='<div class="kbd-grp"><div class="kbd-grp-t">'+esc(g[1])+'</div>'+g[2].map(function(r){
+return '<div class="kbd-row"><kbd>'+esc(r[0])+'</kbd><span>'+esc(r[1])+'</span></div>';}).join('')+'</div>';
+});
+$('kbd-body').innerHTML=h;
+}
+function kbdOpen(){kbdPaint();$('kbd-modal').hidden=false;$('kbd-close').focus();}
+function kbdClose(){$('kbd-modal').hidden=true;}
 function pPaint(){
 var p=state.pipe||{},b=$('pipe-progress');
+if(!b)return; // ARCH-1：article 未注入时面板 DOM 不在；重进 article 时 renderActions→pPaint 按 state.pipe 重绘，跳过不可观测
 b.innerHTML=stepRows(p.steps)+(p.err?'<p class="action-hint" style="color:var(--crimson)">'+esc(p.err)+'</p>':'');
 }
 function hlSeg(t){
@@ -960,22 +1110,28 @@ if(!(e.target.closest&&e.target.closest('input,select,textarea,[contenteditable]
 if((e.metaKey||e.ctrlKey)&&e.key>='1'&&e.key<='7'){
 e.preventDefault();
 var a1=VAPI.article;
-if(!$('view-article').hidden&&+e.key<=4){if(a1&&a1.setTab)return a1.setTab(['edit','variants','checks','preview'][+e.key-1],true);}
+if(!$('view-article').hidden&&+e.key<=4){if(a1&&a1.setTab)return a1.setTab(['edit','variants','checks','preview'][+e.key-1],true);return;}
 location.hash='#'+DNAV[+e.key-1];return;
 }
 if(!e.metaKey&&!e.ctrlKey&&!e.altKey&&!e.target.closest('input,select,textarea')){
 if(gSeq){gSeq=0;var gh=e.key===','?'settings':GK[e.key];if(gh){e.preventDefault();location.hash='#'+gh;}return;}
 if(e.key==='g'){gSeq=1;setTimeout(function(){gSeq=0;},600);return;}
+if(e.key==='?'){e.preventDefault();kbdOpen();return;}
+if(e.key==='/'){var kf=KFOCUS[routeInfo().name];if(kf){var ke=$(kf);if(ke){e.preventDefault();ke.focus();if(ke.select)ke.select();}}return;}
 }
 if(e.key==='Escape'){
 if(sparkBox){sparkClose();return;}
 if(!$('cp').hidden){cpClose();return;}
+if(!$('kbd-modal').hidden){kbdClose();return;}
 if(!$('ctx').hidden){ctxHide();return;}
-if(!AB.hidden)hideBubble();
+if(AB&&!AB.hidden)hideBubble();
 if(!$('viewer').hidden)$('viewer').hidden=true;
 if(!JM.hidden){JM.hidden=true;jobsPollStop();}
 }
 });
+var KFOCUS={material:'mat-search',books:'bk-search-box',publish:'fetch-url'};
+$('kbd-modal').addEventListener('click',function(e){if(e.target===this)kbdClose();});
+$('kbd-close').addEventListener('click',kbdClose);
 $('cp').addEventListener('click',function(e){if(e.target===this)cpClose();});
 $('cp-input').addEventListener('input',function(){CP.cur=0;cpBuild(this.value);});
 $('cp-input').addEventListener('keydown',function(e){

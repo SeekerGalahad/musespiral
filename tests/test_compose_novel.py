@@ -277,11 +277,13 @@ def test_novel_summary_task_key_is_chat_whitelisted() -> None:
 
 
 def test_prompt_slots_include_novel_and_characters() -> None:
-    """PROMPT_SLOTS 七槽（增 {{novel}}/{{characters}}）：设置面编辑器可见。"""
+    """PROMPT_SLOTS 八槽（E-5 增 {{novel}}/{{characters}}；FEAT-4 增
+    {{foreshadowing}} 未回收伏笔槽）：设置面编辑器可见。"""
     from musespiral.infra.ai.prompts import PROMPT_SLOTS
 
     assert "{{novel}}" in PROMPT_SLOTS and "{{characters}}" in PROMPT_SLOTS
-    assert len(PROMPT_SLOTS) == 7
+    assert "{{foreshadowing}}" in PROMPT_SLOTS
+    assert len(PROMPT_SLOTS) == 8
 
 
 # ══ c) 人物卡：素材面 + 注入 ═══════════════════════════════════════════
@@ -666,8 +668,11 @@ def test_contract_lock_membership() -> None:
 
     assert "/api/compose/novel-summary" in CONTRACT_POST_EXACT
     assert "/api/compose/novel-summary" in _ACTION_ROUTES
-    assert len(CONTRACT_POST_EXACT) == 73  # 72 + N-4 /api/materials/verify（§3.23，2026-11-21）
-    assert len(CONTRACT_GET_EXACT) == 47  # 46 + N-5 /api/article/pack（§3.22 并排预览读面）
+    # ARCH-5 语义基础设施批（2026-11-22）：POST 73→74（/api/materials/reindex
+    # 全量重建）/ GET 47→48（/api/materials/search 统一搜索读面）；
+    # FEAT-2 智能组稿批（2026-11-22）：POST 74→75（/api/compose/smart-start）
+    assert len(CONTRACT_POST_EXACT) == 75
+    assert len(CONTRACT_GET_EXACT) == 48
 
 
 def test_kind_field_backward_compatible_with_legacy_session(root: Path) -> None:
