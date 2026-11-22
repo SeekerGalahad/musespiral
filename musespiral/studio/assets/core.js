@@ -119,6 +119,11 @@ var EA=null,HL=null,LF=null,AB=null,AA=null,PB=null,EG=null,ES=null;
 function bindEditorRefs(){EA=$('edit-area');HL=$('edit-hl');LF=$('live-frame');AB=$('annot-bubble');AA=$('edit-annotate-ai');PB=$('publish-btn');EG=$('edit-gutter');ES=$('edit-save-btn');}
 var STATUS_LABELS={draft:'草稿',reviewed:'已审',published:'已发布',archived:'已归档'};
 function statusBadge(s){if(!STATUS_LABELS[s])s='draft';return '<span class="badge stamp '+s+'">'+STATUS_LABELS[s]+Z;}
+function cardStatusBadge(item){
+var c=item.checks||{},f=item.flags||{},s=item.status||'draft';
+var st=(f.published?'published':s==='reviewed'?'reviewed':s==='draft'&&(c.fail||0)===0&&(c.warn||0)===0?'pending':STATUS_LABELS[s]?s:'draft');
+var lb=st==='pending'?'待审':STATUS_LABELS[st];
+return '<span class="badge stamp '+st+'" title="阶段：'+lb+'（待审=检查全通过且未发布的草稿）">'+lb+Z;}
 async function waitForJob(id){
 for(var i=0;i<900;i++){var j=await getJSON(`/api/jobs/${id}`);
 if(j.kind==='pipeline'){state.pipe={steps:(j.result||{}).steps||[]};pPaint();}
@@ -217,6 +222,8 @@ catch(err){toast('标记已审失败：'+err.message,ER);}
 function dirOf(p){var i=String(p||'').lastIndexOf('/');return i>=0?p.slice(0,i+1):'';}
 function safeSrc(u,dir,img){
 if(img?/^(https?:|data:)/i.test(u):/^(https?:|#)/i.test(u))return u;
+u=String(u).replace(/[?#].*$/,'').replace(/^\.\//,'');
+try{u=decodeURIComponent(u);}catch(e2){}
 return img?'/asset?path='+encodeURIComponent(dir+u):'#';}
 function mdInl(s,dir){return s.replace(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g,function(m,a,u){return '<img alt="'+a+'" src="'+safeSrc(u,dir,true)+'">';}).replace(/\[([^\]]+)\]\(([^)\s]+)[^)]*\)/g,function(m,t,u){return '<a href="'+safeSrc(u,dir,false)+'">'+t+'</a>';}).replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/`([^`\n]+)`/g,'<code>$1</code>');}
 var BANCHOR=/^<!--b:[A-Za-z0-9_-]+-->[ \t]*$/;

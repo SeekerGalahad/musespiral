@@ -102,15 +102,17 @@ function renderIdeaFunnel(){
 var mats=state.mats||[],arts=state.articles||[],starred=0,drafted=0;
 mats.forEach(function(m){var t=m.triage||{};if(t.starred)starred++;if(m.drafted)drafted++;});
 var published=arts.filter(function(a){return (a.flags||{}).published;}).length;
-var segs=[
-['采集',mats.length,'#material','var(--viz-1,#2c5f8a)'],
-['收藏',starred,'#material?tab=starred','var(--viz-4,#9c5700)'],
-['骨架',drafted,'#material','var(--viz-5,#5d6d7e)'],
-['成稿',arts.length,'#publish?filter=draft','var(--viz-2,#c0392b)'],
-['发布',published,'#publish?filter=published','var(--viz-3,#1a7038)']];
-$('idea-funnel').innerHTML=segs.map(function(s,i){
-var rate=i&&segs[i-1][1]?Math.round(s[1]/segs[i-1][1]*100)+'%':'—';
-return '<a class="fb-seg" href="'+s[2]+'" title="「'+s[0]+'」'+s[1]+' · 深链 '+s[2]+'" style="flex:'+(s[1]||1)+'">' +
+	var segs=[
+	['采集',mats.length,'#material','var(--viz-1,#2c5f8a)','入库素材总数'],
+	['收藏',starred,'#material?tab=starred','var(--viz-4,#9c5700)','素材行首星标数'],
+	['骨架',drafted,'#material','var(--viz-5,#5d6d7e)','素材已生成骨架数'],
+	['成稿',arts.length,'#publish?filter=draft','var(--viz-2,#c0392b)','草稿文章数（含manual新建，可不经骨架）'],
+	['发布',published,'#publish?filter=published','var(--viz-3,#1a7038)','已发布文章数']];
+	$('idea-funnel').innerHTML=segs.map(function(s,i){
+	var rate=i&&segs[i-1][1]?Math.round(s[1]/segs[i-1][1]*100)+'%':'—';
+	var jump=(i&&s[1]>segs[i-1][1])?'（本阶段 > 上一阶段：来源不限于上一阶段）':'';
+	var tip='「'+s[0]+'」'+s[1]+' · '+s[4]+jump+' · '+((i&&segs[i-1][1])?'较上一阶段 '+rate:'起点')+' · 点击深链 '+s[2];
+	return '<a class="fb-seg" href="'+s[2]+'" title="'+esc(tip)+'" style="flex:'+(s[1]||1)+'">' +
 '<span class="fb-n" style="color:'+s[3]+'">'+s[1]+'</span><span class="fb-t">'+s[0]+(i?' <span class="fb-rate">←'+rate+'</span>':'')+'</span></a>';
 }).join('<span class="fb-arrow" aria-hidden="true">›</span>');
 }

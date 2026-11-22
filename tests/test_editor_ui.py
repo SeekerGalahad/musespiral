@@ -348,9 +348,9 @@ def test_editor_js_wiring_anchors():
                   "edRead", "400",  # 阅读时长
                   "__mdpubEditor"):  # 对 ui.js 暴露的装载契约
         assert token in src, token
-    # 工具栏 14 钮全在
+    # 工具栏 16 钮全在（UIX #9 增 focus/tw 显式专注+打字机入口）
     for btn in ("bold", "italic", "strike", "h1", "h2", "h3", "quote", "link",
-                "code", "table", "image", "mat", "ai", "full"):
+                "code", "table", "image", "mat", "ai", "full", "focus", "tw"):
         assert f"data-edb=\"{btn}\"" in src or f"['{btn}'" in src, btn
     # 数据回写契约：change → save() 写回 textarea → 派发 input（ui.js 链路零改动）
     assert "cm.save()" in src and "dispatchEvent(new Event('input'" in src

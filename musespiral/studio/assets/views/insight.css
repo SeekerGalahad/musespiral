@@ -36,6 +36,11 @@
 .au-n{font-variant-numeric:tabular-nums}
 #health-card[open] .health-sum{color:var(--ink-1)}
 .tiles .empty{grid-column:1/-1}
+#view-insight{display:flex;flex-direction:column}
+#view-insight .tiles{order:0}
+#view-insight .tiles:has(.empty){order:3;margin-top:14px}
+#view-insight .dash-grid{order:2}
+#view-insight #health-card{order:4}
 .radar-row{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;padding:5px 0;border-bottom:1px solid var(--line-1);font-size:var(--fs-caption);color:var(--ink-2)}
 .radar-row [data-t]{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink-1)}
 .radar-row .dc-bar{flex:none;width:56px}

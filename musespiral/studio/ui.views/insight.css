@@ -40,6 +40,13 @@
 #health-card[open] .health-sum{color:var(--ink-1)}
 /* P1-4 洞察零态引导卡：一张卡横跨四瓷砖位（grid 1/-1），非零态不产出该节点 */
 .tiles .empty{grid-column:1/-1}
+/* UIX #2：该卡在 DOM 上位于漏斗/图表之前，有真实数据时用 flex+order 排到仪表盘
+   之后——空态仍居首（无数据即引导），有数据则数据优先，避免「全页无数据」误读 */
+#view-insight{display:flex;flex-direction:column}
+#view-insight .tiles{order:0}
+#view-insight .tiles:has(.empty){order:3;margin-top:14px}
+#view-insight .dash-grid{order:2}
+#view-insight #health-card{order:4}
 /* 入口 C 选题雷达（设计 §五）：唯一新类 .radar-row（kind 徽=.badge 内联三色 / 评分=.dc-bar /
    标题截断=[data-t] / reasons 折叠=原生 details）。AI 角度行 em 整行 + 青黛左边线 2px + 斜体
    （AI 标记唯一色）；排除组 #radar-ex 以 --ink-3 装饰线灰化（正文 --ink-2 5.33:1，ink-3 仅 3:1） */

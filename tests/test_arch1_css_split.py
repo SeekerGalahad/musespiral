@@ -157,7 +157,21 @@ def test_css_split_rule_multiset_equivalent_to_head() -> None:
                    b".kbd-row span{min-width:0}",
                    b".skel-row{display:flex;flex-direction:column;gap:7px;padding:12px 0;border-bottom:1px solid color-mix(in srgb,var(--line-1) 55%,transparent)}",
                    b".skel-row:last-child{border-bottom:none}",
-                   b".empty-actions{justify-content:center;margin-top:6px}"}
+                   b".empty-actions{justify-content:center;margin-top:6px}",
+                   # UIX-REV 五角色评审修复批（2026-11-22）新规则——基线锚早于本批，
+                   # 合法新增登记：①洞察空态 order 排序（#view-insight flex+order 5 条）；
+                   # ②发布待审徽 .badge.stamp.pending；③源 ID 分行 .src-table meta-path 2 条；
+                   # ④书源导入折叠摘要 .im-collapse 2 条。
+                   b"#view-insight{display:flex;flex-direction:column}",
+                   b"#view-insight .tiles{order:0}",
+                   b"#view-insight .tiles:has(.empty){order:3;margin-top:14px}",
+                   b"#view-insight .dash-grid{order:2}",
+                   b"#view-insight #health-card{order:4}",
+                   b".badge.stamp.pending{color:var(--viz-1);background:color-mix(in srgb,var(--viz-1) 12%,transparent);border-color:color-mix(in srgb,var(--viz-1) 40%,transparent)}",
+                   b".src-table td:nth-child(2) .meta-path{display:block;margin-top:2px;color:var(--ink-3);font-size:11px;word-break:break-all}",
+                   b".src-table td:nth-child(2) .meta-path:before{content:'ID ';color:var(--ink-3);font-family:inherit}",
+                   b".im-collapse{display:block;width:100%;text-align:left;padding:8px 10px;margin:2px 0;background:color-mix(in srgb,var(--jade) 8%,var(--paper-1));border:1px solid color-mix(in srgb,var(--jade) 32%,transparent);border-radius:var(--radius-btn);color:var(--ink-1);font-size:var(--fs-caption);cursor:pointer}",
+                   b".im-collapse:hover{border-color:var(--jade)}"}
     assert set(missing) <= known_missing, f"有非预期规则丢失: {list(set(missing) - known_missing)[:3]}"
     assert set(extra) <= known_extra, f"有非预期规则新增: {list(set(extra) - known_extra)[:3]}"
 

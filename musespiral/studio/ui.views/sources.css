@@ -7,3 +7,6 @@
 .eco-l{font-size:var(--fs-caption);color:var(--ink-2)}
 .eco-tile.amber .eco-n{color:var(--amber)}
 .src-table tr.sel>td:first-child{box-shadow:inset 3px 0 0 var(--vermilion)}
+/* UIX #4：源名称与 ID 分行，ID 灰显细体 + 左分隔排版，消除「知识库kb」连读歧义 */
+.src-table td:nth-child(2) .meta-path{display:block;margin-top:2px;color:var(--ink-3);font-size:11px;word-break:break-all}
+.src-table td:nth-child(2) .meta-path:before{content:'ID ';color:var(--ink-3);font-family:inherit}

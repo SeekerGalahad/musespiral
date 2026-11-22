@@ -4,6 +4,15 @@ function pgKINDS(){return{source:'输入',process:'处理',sink:'输出'};}
 function pgKindIcon(kind){return kind==='source'?'download':kind==='sink'?'publish':'settings';}
 function pgName(m){return (m&&m.name&&m.name.zh)||(m&&m.id)||'';}
 function pgDesc(m){return (m&&m.description&&m.description.zh)||'';}
+function pgDescBrief(m){
+var s=pgDesc(m).replace(/\r/g,'');
+s=s.split(/[\n。；;]/)[0]||s;
+s=s.replace(/`[^`]*`/g,'').replace(/\[[^\]]*\]\([^)]*\)/g,''); // 代码片段+markdown 链接
+s=s.replace(/\([^)]*(task=|JSON|dep|node_id|v1\s*契约)[^)]*\)/gi,''); // 纯工程术语括号
+s=s.replace(/\b(MISSING_DEP|JSON\s+anchors?|frontmatter|artifacts?|config\.[a-z_.]+)\b/gi,'');
+s=s.replace(/\s{2,}/g,' ').replace(/^[，,、\s]+|[，,、\s]+$/g,'').trim();
+if(s.length>52)s=s.slice(0,52).replace(/[，,、\s]\S*$/,'')+'…';
+return s||'见详情';}
 function pgIoSummary(m){
 var a=Object.keys((m&&m.inputs)||{}).map(function(k){return m.inputs[k].type;});
 var b=Object.keys((m&&m.outputs)||{}).map(function(k){return m.outputs[k].type;});
@@ -15,6 +24,7 @@ Object.keys((m&&m.inputs)||{}).forEach(function(k){var p=m.inputs[k]||{};rows.pu
 Object.keys((m&&m.outputs)||{}).forEach(function(k){rows.push(['out',k,(m.outputs[k]||{}).type||'','输出']);});
 return rows;
 }
+// manifest 语法着色（行级解析；esc 先行——注入面只过 esc，本函数只加 span）
 function pgHi(json){
 return esc(json).split('\n').map(function(l){
 var m=l.match(/^(\s*)&quot;([^&]+)&quot;:(\s)(.*)$/);
@@ -23,7 +33,11 @@ var v=m[4],s=v.match(/^(&quot;.*&quot;)(,?)$/);
 return m[1]+'<span class="pg-k">&quot;'+m[2]+'&quot;</span>:'+m[3]+(s?'<span class="pg-s">'+s[1]+'</span>'+s[2]:v);
 }).join('\n');
 }
+// 契约兼容判定（core.plugins.types.types_compatible 前端镜像：完全相等才兼容）
 function pgTypeCompat(a,b){return typeof a==='string'&&typeof b==='string'&&a===b;}
+// 流水线静态契约校验（core.plugins.manifest.validate_pipeline_contract 前端镜像，
+// 四规则同语义：唯一非空 id / source 仅开头 / sink 仅结尾 / 必需输入端口须由更早
+// 节点供给）——新建页保存前标红阻止，非法顺序不发生任何请求（评审 §2.1「契约校验前置」）
 function pgValidateChain(nodes){
 var errs=[],seen={},i,n=nodes?nodes.length:0;
 if(!n){errs.push('流水线至少需要一个节点');return errs;}
@@ -86,12 +100,14 @@ return '<article class="pg-card" data-pgopen="'+esc(m.id)+'" tabindex="0" role="
 '<div class="pg-top"><span class="pg-glyph">'+I(ic)+'</span>'+
 '<span class="pg-topmain"><span class="pg-name">'+esc(pgName(m))+'</span><span class="pg-vendor">'+esc(m.id)+' · v'+esc(m.version)+'</span></span>'+
 '<span class="badge '+(m.uses_ai?'running':'pass')+'" title="'+(m.uses_ai?'声明 uses_ai：AI 由平台受管注入':'契约门全过')+'">'+(m.uses_ai?'AI':'就绪')+'</span></div>'+
-'<p class="pg-desc">'+esc(pgDesc(m))+'</p>'+
+'<p class="pg-desc" title="'+esc(pgDesc(m))+'">'+esc(pgDescBrief(m))+'</p>'+
 '<div class="pg-foot"><span class="badge queued">'+esc(ks[m.kind]||m.kind)+'</span><span class="pg-io">'+esc(pgIoSummary(m))+'</span></div></article>';
 }
 function pgRenderList(){
 pgChips();
 var L=PG.list.filter(function(it){return !PG.filter||it.manifest.kind===PG.filter;});
+// 复核 medium-5：有跳过目录时不再宣称「全部过契约门」（自相矛盾）；加载失败
+// 不误导成「用户没放插件」——空态文本区分 服务错误 vs 真空态。
 $('pg-sub').textContent='已装 '+PG.list.length+' 个'+(PG.skipped.length?' · 跳过 '+PG.skipped.length+' 个（未过契约门）':' · 全部过契约门');
 $('pg-grid').innerHTML=L.map(pgCard).join('');
 $('pg-grid').hidden=!L.length&&!!PG.list.length;
@@ -136,6 +152,9 @@ var m=PG.byId[id];if(!m)return;
 if(m.kind==='source')src=m;else if(m.kind==='sink')sink=m;else procs.push(m);
 });
 var nodes=[];
+// plugin 传 id 字符串而非完整 manifest——后端 plan_pipeline 按 id 从插件区
+// 解析 manifest。传对象会被判「缺少 plugin（插件 id）」拒收（2026-11-20 实测：
+// UI 形状 REJECTED / id 字符串 ACCEPTED）。
 if(src)nodes.push({id:src.id,plugin:src.id});
 procs.forEach(function(m){nodes.push({id:m.id,plugin:m.id});});
 if(sink)nodes.push({id:sink.id,plugin:sink.id});
@@ -172,7 +191,7 @@ if(save)save.disabled=errs.length>0;
 return errs;
 }
 async function pgBuildSave(){
-var errs=pgValidateChain(pgBuildNodes());
+var errs=pgValidateChain(pgBuildNodes()); // 前端阻止：非法顺序不发生任何请求
 if(errs.length){toast('契约校验未过：'+errs[0],ER);return;}
 var name=$('pg-build-name').value.trim(),pid=pgSlug(name);
 try{
@@ -182,6 +201,7 @@ location.hash='#plugin-pipeline?id='+encodeURIComponent(pid);
 }catch(err){toast('保存失败：'+err.message,ER);}
 }
 async function pgEnter(params){
+// FEAT-5 骨架屏：清单在途时网格先画骨架卡（首次进入 PG.list 空即数据未到；重访有缓存不闪）
 if(!PG.list.length&&!PG.err){$('pg-grid').innerHTML=skelCards(4);$('pg-grid').hidden=false;$('pg-empty').hidden=true;}
 await pgLoad();
 var d=params.get('d'),seed=params.get('seed')||'';
@@ -193,6 +213,8 @@ return;
 if(d)pgRenderDetail(d);
 else{pgRenderList();pgShow('list');}
 }
+// 路由入口（原 renderRoute plugins 分支 `await pgEnter(route.params)` 迁入；
+// return 透传 Promise——renderRoute 的 await 语义与原分支逐字等价）
 VAPI.plugins={enter:function(route){return pgEnter(route.params);}};
 function bindPlugins(){
 $('pg-kinds').addEventListener('click',function(e){
@@ -208,7 +230,7 @@ if(c)location.hash='#plugins?d='+encodeURIComponent(c.getAttribute('data-pgopen'
 $('pg-refresh-btn').addEventListener('click',async function(){
 this.disabled=true;
 try{
-await postJSON('/api/plugins/refresh',{confirm:true});
+await postJSON('/api/plugins/refresh',{confirm:true}); // 重扫（正典 §十二；v1 refresh ≡ 全量重扫）
 }catch(err){toast('重扫端点未接驳（后端批），改用清单直读：'+err.message,WN);}
 await pgLoad(true);
 pgRenderList();
@@ -216,6 +238,7 @@ this.disabled=false;
 toast('已重扫插件目录：已装 '+PG.list.length+' 个'+(PG.skipped.length?' · 跳过 '+PG.skipped.length+' 个':''),PG.skipped.length?WN:OK);
 });
 $('pg-new-btn').addEventListener('click',function(){location.hash='#plugins?new=1';});
+// FEAT-5 空态引导：真空态「你可以做什么」双 CTA（重扫=把目录放进插件区后的确认动作）
 $('pg-empty-new').addEventListener('click',function(){location.hash='#plugins?new=1';});
 $('pg-empty-rescan').addEventListener('click',function(){$('pg-refresh-btn').click();});
 $('pg-detail-wrap').addEventListener('click',function(e){

@@ -124,6 +124,14 @@ var EA=null,HL=null,LF=null,AB=null,AA=null,PB=null,EG=null,ES=null;
 function bindEditorRefs(){EA=$('edit-area');HL=$('edit-hl');LF=$('live-frame');AB=$('annot-bubble');AA=$('edit-annotate-ai');PB=$('publish-btn');EG=$('edit-gutter');ES=$('edit-save-btn');}
 var STATUS_LABELS={draft:'草稿',reviewed:'已审',published:'已发布',archived:'已归档'};
 function statusBadge(s){if(!STATUS_LABELS[s])s='draft';return '<span class="badge stamp '+s+'">'+STATUS_LABELS[s]+Z;}
+// UIX #6：卡片状态徽标区分草稿/待审/已审/已发布——头部统计四段齐全但卡片原只按
+// frontmatter.status 出「草稿」，认不出哪几篇在待审。口径与 pubCounts/filterArticles
+// 完全一致：published 标记 > status=reviewed > 无 FAIL/WARN 的 draft=待审 > 草稿。
+function cardStatusBadge(item){
+var c=item.checks||{},f=item.flags||{},s=item.status||'draft';
+var st=(f.published?'published':s==='reviewed'?'reviewed':s==='draft'&&(c.fail||0)===0&&(c.warn||0)===0?'pending':STATUS_LABELS[s]?s:'draft');
+var lb=st==='pending'?'待审':STATUS_LABELS[st];
+return '<span class="badge stamp '+st+'" title="阶段：'+lb+'（待审=检查全通过且未发布的草稿）">'+lb+Z;}
 async function waitForJob(id){
 for(var i=0;i<900;i++){var j=await getJSON(`/api/jobs/${id}`);
 if(j.kind==='pipeline'){state.pipe={steps:(j.result||{}).steps||[]};pPaint();}
@@ -224,6 +232,11 @@ catch(err){toast('标记已审失败：'+err.message,ER);}
 function dirOf(p){var i=String(p||'').lastIndexOf('/');return i>=0?p.slice(0,i+1):'';}
 function safeSrc(u,dir,img){ 
 if(img?/^(https?:|data:)/i.test(u):/^(https?:|#)/i.test(u))return u;
+// UIX #3：本地图片路径规范化——mdInl 捕获的 URL 可能带 ./ 前缀、查询/锚点片段
+// 或百分号编码（如 scene.png?v=2 / %E6%B5%B7.png），直拼进 /asset?path= 会 404
+// 裂图。此处在信任边界做规范化；解码失败（非法 %）保留原串不抛错。
+u=String(u).replace(/[?#].*$/,'').replace(/^\.\//,'');
+try{u=decodeURIComponent(u);}catch(e2){}
 return img?'/asset?path='+encodeURIComponent(dir+u):'#';}
 function mdInl(s,dir){return s.replace(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g,function(m,a,u){return '<img alt="'+a+'" src="'+safeSrc(u,dir,true)+'">';}).replace(/\[([^\]]+)\]\(([^)\s]+)[^)]*\)/g,function(m,t,u){return '<a href="'+safeSrc(u,dir,false)+'">'+t+'</a>';}).replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/`([^`\n]+)`/g,'<code>$1</code>');}
 var BANCHOR=/^<!--b:[A-Za-z0-9_-]+-->[ \t]*$/;
@@ -1305,7 +1318,7 @@ var rows=list.filter(function(s){return !state.srctype||s.type===state.srctype;}
 $('src-rows').innerHTML=rows.length?rows.map(function(s){
 var h=s.health||{},st=h.status||'unknown',un=unread[s.id]||0,n=counts[s.id]||0;
 var dot='<span class="health-dot '+st+'" title="'+(st==='ok'?'正常（上次 '+esc(h.last_ok||'刚刚')+'）':st==='down'?'down（上次正常 '+esc(h.last_ok||'—')+'）':'未探测（手动验证或刷新时回写）')+(h.last_refresh?'；上次拉取 '+esc(h.last_refresh):'')+'">'+(st==='down'?'!':st==='ok'?'':'·')+'</span>';
-return '<tr'+(state.ssrc===s.id?' class="sel"':'')+' data-srcrow="'+esc(s.id)+'"><td>'+dot+'</td><td>'+esc(s.label||s.id)+'<span class="meta-path">'+esc(s.id)+Z+'</td><td><span class="tag">'+esc(s.type)+Z+'</td><td>'+((s.subscriptions||[]).length||'—')+'</td><td>'+n+(un?' <span class="badge warn">'+un+' 未读</span>'+Z:'')+'</td><td>'+esc(h.last_ok||'从未')+'</td><td>'+(fails[s.id]?'<span class="badge fail" title="近 7 次拉取失败 '+fails[s.id]+' 次">'+fails[s.id]+Z:'—')+'</td><td><input type="checkbox" aria-label="启用源" data-srcen="'+esc(s.id)+'"'+(s.enabled?' checked':'')+'></td><td><button class="btn" data-srcverify="'+esc(s.id)+'">验证</button> <button class="btn" data-srcrefresh="'+esc(s.id)+'">刷新</button> <button class="btn" title="源级 AI 配置（只影响该源素材加工）" data-srcai="'+esc(s.id)+'">⚙</button></td></tr>';
+return '<tr'+(state.ssrc===s.id?' class="sel"':'')+' data-srcrow="'+esc(s.id)+'"><td>'+dot+'</td><td>'+esc(s.label||s.id)+'<span class="meta-path" title="源 ID：'+esc(s.id)+'">'+esc(s.id)+Z+'</td><td><span class="tag">'+esc(s.type)+Z+'</td><td>'+((s.subscriptions||[]).length||'—')+'</td><td>'+n+(un?' <span class="badge warn">'+un+' 未读</span>'+Z:'')+'</td><td>'+esc(h.last_ok||'从未')+'</td><td>'+(fails[s.id]?'<span class="badge fail" title="近 7 次拉取失败 '+fails[s.id]+' 次">'+fails[s.id]+Z:'—')+'</td><td><input type="checkbox" aria-label="启用源" data-srcen="'+esc(s.id)+'"'+(s.enabled?' checked':'')+'></td><td><button class="btn" data-srcverify="'+esc(s.id)+'">验证</button> <button class="btn" data-srcrefresh="'+esc(s.id)+'">刷新</button> <button class="btn" title="源级 AI 配置（只影响该源素材加工）" data-srcai="'+esc(s.id)+'">⚙</button></td></tr>';
 }).join(''):'<tr><td colspan="9" class="action-hint">暂无此类型源</td></tr>';
 $('src-empty').hidden=list.length>0;
 $('sources-sub').textContent='共 '+list.length+' 源 · 启用 '+en+' · 素材 '+(sc.total_materials!=null?sc.total_materials:mats.length)+' 条';
@@ -1471,7 +1484,8 @@ if(b.depth!=null)for(i=0;i<4;i++){h+='<div class="pbar"><span class="pbar-name">
 return '<details class="mat-row'+(state.mdens==='full'?' open':'')+'" data-mid="'+esc(m.id)+'">'+
 '<summary class="mat-row-sum" title="展开或收起评分与详情">'+
 '<button class="btn btn-ghost btn-icon dstar'+(tri.starred?' on':'')+'" data-mstar="'+esc(m.id)+'" title="'+st+'" aria-label="'+st+'">'+I('star')+'</button>'+
-(m.type==='image'?'<img class="mat-thumb" loading="lazy" data-mlight="'+esc(m.id)+'" src="'+esc('/api/materials/file?id='+encodeURIComponent(m.id)+'&variant=thumb')+'" alt="">':'')+
+(m.type==='image'?'<img class="mat-thumb" loading="lazy" data-mlight="'+esc(m.id)+'" src="'+esc('/api/materials/file?id='+encodeURIComponent(m.id)+'&variant=thumb')+'" alt="" onerror="this.style.visibility=\'hidden\';this.nextElementSibling.style.display=\'inline-flex\'">':'')+
+(m.type==='image'?'<span class="mty-ico mat-thumb-fb" title="'+esc(MTY[m.type]||m.type)+'" style="display:none">'+I('image')+'</span>':'')+
 '<span class="mty-ico" title="'+esc(MTY[m.type]||m.type)+'">'+I(MTYI[m.type]||'tag')+'</span>'+
 '<span class="mat-row-main"><span class="mat-row-title" data-mdrow="'+esc(m.id)+'">'+(tri.read?'':'<i class="unread-dot" title="未读"></i>')+hl(m.title||o.title||o.uri||m.id)+(m.drafted?' <span class="badge pass">已入队</span>'+Z:'')+(tri.enabled?'':' <span class="badge archived">已禁用</span>'+Z)+
 // R3.5 T3：「未提炼」琥珀徽（distilled=false 降级标记；AI-GENERATED=来源，两个维度可并存）
@@ -2252,7 +2266,7 @@ await new Promise(function(z){setTimeout(z,900)});
 // 行+title 悬浮原因。D5 同 URL 合并一行「名称（N 版本取最新）」+▸ 展开看版本。
 // D7 底部实时汇总。D8 kind≠bookSource→黄条类型化说明+表单灰显只读。
 /*__IM_BEGIN__*/
-var IM={st:'idle',tab:'paste',text:'',groups:[],skipped:[],counts:null,sel:{},exp:{},kw:'',stat:'all',grp:'',visible:[],kind:'bookSource',msg:''};
+var IM={st:'idle',tab:'paste',text:'',groups:[],skipped:[],counts:null,sel:{},exp:{},kw:'',stat:'all',grp:'',visible:[],kind:'bookSource',msg:'',allLatestOpen:false};
 var IM_ROW=30,IM_VIEW=400,IM_BUF=5,IM_GTOP=10;
 function imGroups(items,skipped){ // D5：同 URL 一组（首见序），组态取末条（apply 落库=最后一条）
 var by={},order=[],rows=[],i,u,g;
@@ -2324,7 +2338,21 @@ for(i=0;i<IM.visible.length;i++){r=IM.visible[i];if(r.t==='g'){n++;if(IM.sel[r.u
 $('im-selall-t').textContent='全选（当前筛选 '+n+' 条）'; // D3 语义明示
 $('im-shown').textContent='显示 '+IM.visible.length+' 行';
 $('im-selall').checked=n>0&&sel===n;
-imChips();imPaintWin();imSummary();}
+imChips();imPaintWin();imSummary();imCollapseSync();}
+// UIX #7：全部「已最新」（无新/无更新/无跳过）且未加任何筛选时，把 22 行平铺
+// 折叠为一行摘要——信息密度过高时默认收起，点「展开清单」才看全表。独立节点实现，
+// 不改 chips/全选/汇总既有口径（回归断言不受影响）。
+function imCollapseSync(){
+var cb=$('im-collapse'),lst=$('im-list'),sr=$('im-selrow');
+if(!cb||!lst)return;
+var allLatest=IM.groups.length>0&&!IM.skipped.length;
+for(var i=0;i<IM.groups.length;i++)if(IM.groups[i].t==='g'&&IM.groups[i].last.status!=='latest'){allLatest=false;break;}
+var plain=allLatest&&!IM.kw&&IM.stat==='all'&&!IM.grp;
+cb.hidden=!plain;
+if(!plain){lst.hidden=false;if(sr)sr.hidden=false;return;}
+cb.textContent=(IM.allLatestOpen?'▾ 收起清单':'▸ 全部 '+IM.groups.length+' 源均为「已最新」，无需导入 — 展开清单');
+lst.hidden=!IM.allLatestOpen;
+if(sr)sr.hidden=!IM.allLatestOpen;}
 function imSelN(){var n=0,u;for(u in IM.sel)if(IM.sel[u])n++;return n;}
 function imSelAll(v){ // D3：全选/清空=当前筛选结果（IM.visible 组行；跳过行不可选）
 var i,r;for(i=0;i<IM.visible.length;i++){r=IM.visible[i];if(r.t==='g')IM.sel[r.url]=v;}
@@ -2357,7 +2385,7 @@ $('im-paste').hidden=t!=='paste';$('im-url').hidden=t!=='url';$('im-file').hidde
 function imKeep(){return {keep_name:$('im-keep-name').checked,keep_group:$('im-keep-group').checked,keep_enable:$('im-keep-enable').checked};}
 function imBtns(on){QA('#im-parse,#im-parse-url,#im-parse-file').forEach(function(b){b.disabled=on;});}
 function imOpen(){ // 回 idle：清三入口与预览（状态机 §3.3 首态）
-IM.st='idle';IM.text='';imIngest(null);
+IM.st='idle';IM.text='';IM.allLatestOpen=false;imIngest(null);
 IM.kw='';IM.stat='all';IM.grp='';IM.visible=[];
 $('im-text').value='';$('im-url-in').value='';$('im-file-in').value='';$('im-kw').value='';
 $('im-warn').hidden=true;$('im-prog').hidden=true;imRo(false);
@@ -2461,6 +2489,7 @@ $('im-parse-url').addEventListener('click',function(){imParse($('im-url-in').val
 $('im-file-in').addEventListener('change',function(){
 var f=this.files&&this.files[0];if(!f)return;
 f.text().then(function(t){return imParse(t);}).catch(function(err){toast('读取文件失败：'+err.message,ER);});});
+$('im-collapse').addEventListener('click',function(){IM.allLatestOpen=!IM.allLatestOpen;imCollapseSync();});
 $('im-list').addEventListener('scroll',imPaintWin); // D1：滚动只重画窗口
 $('im-kw').addEventListener('input',function(){IM.kw=this.value.trim();imRepaint();});
 $('im-stat').addEventListener('click',function(e){var c=e.target.closest('[data-imstat]');if(!c)return;IM.stat=c.getAttribute('data-imstat');imRepaint();});
@@ -3550,7 +3579,7 @@ return '<a class="article-card qcard" href="'+href+'">' +
 '<div class="qcover-block"><span class="qcover-text">'+title+'</span></div></div>' +
 '<div class="qcard-body">' +
 '<h3 class="card-title qcard-title">'+title+'</h3>' +
-'<div class="qcard-meta">'+statusBadge(item.status)+'<span class="qcard-time">'+esc(item.date||'—')+'</span></div>' +
+'<div class="qcard-meta">'+cardStatusBadge(item)+'<span class="qcard-time">'+esc(item.date||'—')+'</span></div>' +
 (arts.length?'<div class="qcard-arts">'+arts.join('')+'</div>':'') +
 (variants.length?'<div class="tags qcard-variants">'+variants.map(function(code){
 return '<span class="tag accent">'+esc(code)+Z;}).join('')+'</div>':'') +
@@ -3638,7 +3667,7 @@ if(qsel>=0&&cards[qsel])location.hash=cards[qsel].getAttribute('href').slice(1);
 function pubRow(item){
 var href='#article?path='+encodeURIComponent(item.path)+'&tab=edit';
 var f=item.flags||{},variants=Array.isArray(f.variants)?f.variants:[];
-return '<a class="pub-row" href="'+href+'">'+statusBadge(item.status)+'<span class="pub-row-t">'+esc(item.title||item.path)+'</span><span class="pub-row-pl">'+(variants.length?variants.map(function(code){return '<span class="tag accent">'+esc(code)+Z;}).join(''):'<span class="muted">—')+'</span>'+checkSummary(item.checks)+'<button class="btn btn-ghost qcard-fb" data-fb="'+esc(item.path)+'" title="反哺素材库：全文归档 / 摘取段落 / AI 提炼论点">→素材库</button><span class="pub-row-time">'+esc(item.date||'—')+'</span></a>';
+return '<a class="pub-row" href="'+href+'">'+cardStatusBadge(item)+'<span class="pub-row-t">'+esc(item.title||item.path)+'</span><span class="pub-row-pl">'+(variants.length?variants.map(function(code){return '<span class="tag accent">'+esc(code)+Z;}).join(''):'<span class="muted">—')+'</span>'+checkSummary(item.checks)+'<button class="btn btn-ghost qcard-fb" data-fb="'+esc(item.path)+'" title="反哺素材库：全文归档 / 摘取段落 / AI 提炼论点">→素材库</button><span class="pub-row-time">'+esc(item.date||'—')+'</span></a>';
 }
 // ── N-2 文章反哺（2026-11-21，设计 §3.2 三路径）────────────────────────
 // 文章 → 素材库回程：mode=full 整篇归档（剥 frontmatter，provenance 记
@@ -3940,15 +3969,17 @@ function renderIdeaFunnel(){
 var mats=state.mats||[],arts=state.articles||[],starred=0,drafted=0;
 mats.forEach(function(m){var t=m.triage||{};if(t.starred)starred++;if(m.drafted)drafted++;});
 var published=arts.filter(function(a){return (a.flags||{}).published;}).length;
-var segs=[
-['采集',mats.length,'#material','var(--viz-1,#2c5f8a)'],
-['收藏',starred,'#material?tab=starred','var(--viz-4,#9c5700)'],
-['骨架',drafted,'#material','var(--viz-5,#5d6d7e)'],
-['成稿',arts.length,'#publish?filter=draft','var(--viz-2,#c0392b)'],
-['发布',published,'#publish?filter=published','var(--viz-3,#1a7038)']];
-$('idea-funnel').innerHTML=segs.map(function(s,i){
-var rate=i&&segs[i-1][1]?Math.round(s[1]/segs[i-1][1]*100)+'%':'—';
-return '<a class="fb-seg" href="'+s[2]+'" title="「'+s[0]+'」'+s[1]+' · 深链 '+s[2]+'" style="flex:'+(s[1]||1)+'">' +
+	var segs=[
+	['采集',mats.length,'#material','var(--viz-1,#2c5f8a)','入库素材总数'],
+	['收藏',starred,'#material?tab=starred','var(--viz-4,#9c5700)','素材行首星标数'],
+	['骨架',drafted,'#material','var(--viz-5,#5d6d7e)','素材已生成骨架数'],
+	['成稿',arts.length,'#publish?filter=draft','var(--viz-2,#c0392b)','草稿文章数（含manual新建，可不经骨架）'],
+	['发布',published,'#publish?filter=published','var(--viz-3,#1a7038)','已发布文章数']];
+	$('idea-funnel').innerHTML=segs.map(function(s,i){
+	var rate=i&&segs[i-1][1]?Math.round(s[1]/segs[i-1][1]*100)+'%':'—';
+	var jump=(i&&s[1]>segs[i-1][1])?'（本阶段 > 上一阶段：来源不限于上一阶段）':'';
+	var tip='「'+s[0]+'」'+s[1]+' · '+s[4]+jump+' · '+((i&&segs[i-1][1])?'较上一阶段 '+rate:'起点')+' · 点击深链 '+s[2];
+	return '<a class="fb-seg" href="'+s[2]+'" title="'+esc(tip)+'" style="flex:'+(s[1]||1)+'">' +
 '<span class="fb-n" style="color:'+s[3]+'">'+s[1]+'</span><span class="fb-t">'+s[0]+(i?' <span class="fb-rate">←'+rate+'</span>':'')+'</span></a>';
 }).join('<span class="fb-arrow" aria-hidden="true">›</span>');
 }
@@ -4709,6 +4740,18 @@ function pgKINDS(){return{source:'输入',process:'处理',sink:'输出'};}
 function pgKindIcon(kind){return kind==='source'?'download':kind==='sink'?'publish':'settings';}
 function pgName(m){return (m&&m.name&&m.name.zh)||(m&&m.id)||'';}
 function pgDesc(m){return (m&&m.description&&m.description.zh)||'';}
+// UIX #5：卡片描述只留用户价值句——manifest desc 倾倒工程术语（chat_policed(task=…)、
+// MISSING_DEP、JSON anchors、文件路径等）对非工程用户是噪音。取首个句末/换行前的
+// 短句，剥代码片段与括号术语，限长；详情页 pgDesc 原文照旧（工程用户可看全）。
+function pgDescBrief(m){
+var s=pgDesc(m).replace(/\r/g,'');
+s=s.split(/[\n。；;]/)[0]||s;                       // 首句（价值概述通常在第一句）
+s=s.replace(/`[^`]*`/g,'').replace(/\[[^\]]*\]\([^)]*\)/g,''); // 代码片段+markdown 链接
+s=s.replace(/\([^)]*(task=|JSON|dep|node_id|v1\s*契约)[^)]*\)/gi,''); // 纯工程术语括号
+s=s.replace(/\b(MISSING_DEP|JSON\s+anchors?|frontmatter|artifacts?|config\.[a-z_.]+)\b/gi,'');
+s=s.replace(/\s{2,}/g,' ').replace(/^[，,、\s]+|[，,、\s]+$/g,'').trim();
+if(s.length>52)s=s.slice(0,52).replace(/[，,、\s]\S*$/,'')+'…';
+return s||'见详情';}
 function pgIoSummary(m){
 var a=Object.keys((m&&m.inputs)||{}).map(function(k){return m.inputs[k].type;});
 var b=Object.keys((m&&m.outputs)||{}).map(function(k){return m.outputs[k].type;});
@@ -4796,7 +4839,7 @@ return '<article class="pg-card" data-pgopen="'+esc(m.id)+'" tabindex="0" role="
 '<div class="pg-top"><span class="pg-glyph">'+I(ic)+'</span>'+
 '<span class="pg-topmain"><span class="pg-name">'+esc(pgName(m))+'</span><span class="pg-vendor">'+esc(m.id)+' · v'+esc(m.version)+'</span></span>'+
 '<span class="badge '+(m.uses_ai?'running':'pass')+'" title="'+(m.uses_ai?'声明 uses_ai：AI 由平台受管注入':'契约门全过')+'">'+(m.uses_ai?'AI':'就绪')+'</span></div>'+
-'<p class="pg-desc">'+esc(pgDesc(m))+'</p>'+
+'<p class="pg-desc" title="'+esc(pgDesc(m))+'">'+esc(pgDescBrief(m))+'</p>'+
 '<div class="pg-foot"><span class="badge queued">'+esc(ks[m.kind]||m.kind)+'</span><span class="pg-io">'+esc(pgIoSummary(m))+'</span></div></article>';
 }
 function pgRenderList(){

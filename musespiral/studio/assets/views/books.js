@@ -145,7 +145,7 @@ if(j){BK.job.st='run';bkProg(j,run);}
 await new Promise(function(z){setTimeout(z,900)});
 }
 }
-var IM={st:'idle',tab:'paste',text:'',groups:[],skipped:[],counts:null,sel:{},exp:{},kw:'',stat:'all',grp:'',visible:[],kind:'bookSource',msg:''};
+var IM={st:'idle',tab:'paste',text:'',groups:[],skipped:[],counts:null,sel:{},exp:{},kw:'',stat:'all',grp:'',visible:[],kind:'bookSource',msg:'',allLatestOpen:false};
 var IM_ROW=30,IM_VIEW=400,IM_BUF=5,IM_GTOP=10;
 function imGroups(items,skipped){
 var by={},order=[],rows=[],i,u,g;
@@ -217,7 +217,18 @@ for(i=0;i<IM.visible.length;i++){r=IM.visible[i];if(r.t==='g'){n++;if(IM.sel[r.u
 $('im-selall-t').textContent='全选（当前筛选 '+n+' 条）';
 $('im-shown').textContent='显示 '+IM.visible.length+' 行';
 $('im-selall').checked=n>0&&sel===n;
-imChips();imPaintWin();imSummary();}
+imChips();imPaintWin();imSummary();imCollapseSync();}
+function imCollapseSync(){
+var cb=$('im-collapse'),lst=$('im-list'),sr=$('im-selrow');
+if(!cb||!lst)return;
+var allLatest=IM.groups.length>0&&!IM.skipped.length;
+for(var i=0;i<IM.groups.length;i++)if(IM.groups[i].t==='g'&&IM.groups[i].last.status!=='latest'){allLatest=false;break;}
+var plain=allLatest&&!IM.kw&&IM.stat==='all'&&!IM.grp;
+cb.hidden=!plain;
+if(!plain){lst.hidden=false;if(sr)sr.hidden=false;return;}
+cb.textContent=(IM.allLatestOpen?'▾ 收起清单':'▸ 全部 '+IM.groups.length+' 源均为「已最新」，无需导入 — 展开清单');
+lst.hidden=!IM.allLatestOpen;
+if(sr)sr.hidden=!IM.allLatestOpen;}
 function imSelN(){var n=0,u;for(u in IM.sel)if(IM.sel[u])n++;return n;}
 function imSelAll(v){
 var i,r;for(i=0;i<IM.visible.length;i++){r=IM.visible[i];if(r.t==='g')IM.sel[r.url]=v;}
@@ -250,7 +261,7 @@ $('im-paste').hidden=t!=='paste';$('im-url').hidden=t!=='url';$('im-file').hidde
 function imKeep(){return {keep_name:$('im-keep-name').checked,keep_group:$('im-keep-group').checked,keep_enable:$('im-keep-enable').checked};}
 function imBtns(on){QA('#im-parse,#im-parse-url,#im-parse-file').forEach(function(b){b.disabled=on;});}
 function imOpen(){
-IM.st='idle';IM.text='';imIngest(null);
+IM.st='idle';IM.text='';IM.allLatestOpen=false;imIngest(null);
 IM.kw='';IM.stat='all';IM.grp='';IM.visible=[];
 $('im-text').value='';$('im-url-in').value='';$('im-file-in').value='';$('im-kw').value='';
 $('im-warn').hidden=true;$('im-prog').hidden=true;imRo(false);
@@ -344,6 +355,7 @@ $('im-parse-url').addEventListener('click',function(){imParse($('im-url-in').val
 $('im-file-in').addEventListener('change',function(){
 var f=this.files&&this.files[0];if(!f)return;
 f.text().then(function(t){return imParse(t);}).catch(function(err){toast('读取文件失败：'+err.message,ER);});});
+$('im-collapse').addEventListener('click',function(){IM.allLatestOpen=!IM.allLatestOpen;imCollapseSync();});
 $('im-list').addEventListener('scroll',imPaintWin);
 $('im-kw').addEventListener('input',function(){IM.kw=this.value.trim();imRepaint();});
 $('im-stat').addEventListener('click',function(e){var c=e.target.closest('[data-imstat]');if(!c)return;IM.stat=c.getAttribute('data-imstat');imRepaint();});

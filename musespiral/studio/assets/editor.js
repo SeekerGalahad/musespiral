@@ -378,8 +378,10 @@ if(stage)stage.classList.add('ed-cm');
 var col=host.closest?host.closest('.ed-col'):null;
 if(!col)return;
 var layout=col.parentNode;
-// 工具栏（14 钮，§3.1：B I S │ H1 H2 H3 │ 引用 链接 代码 表格 图片 │ 素材 AI 全屏）
-var ED_SEP_AFTER=[3,6,11];
+// 工具栏（16 钮，§3.1：B I S │ H1 H2 H3 │ 引用 链接 代码 表格 图片 │ 素材 AI 全屏 │ 专注 打字机）
+// UIX #9：专注/打字机原只在状态栏细按钮（截图里几乎看不见）——增显式工具栏入口，
+// 复用既有 edFocusToggle/edTwToggle，is-on 态由两个函数同步切换。
+var ED_SEP_AFTER=[3,6,11,14];
 var bar=document.createElement('div');bar.className='ed-bar';bar.id='ed-bar';
 bar.innerHTML=ED_BTNS.map(function(b,i){
 return(i>0&&ED_SEP_AFTER.indexOf(i)>=0?'<span class="ed-sep"></span>':'')
@@ -524,7 +526,9 @@ var ED_BTNS=[
 ['table','表格','插入表格'],['image','图片','插入图片'],
 ['mat','📚','内联素材搜索（⌘⇧S）：编辑器底部实时搜素材库，点击即插入引用'],
 ['ai','✨AI','创作工坊 AI 块生成（F3 微操作落地前的入口）'],
-['full','⛶','全屏']];
+['full','⛶','全屏'],
+['focus','专注','专注模式（F11）：仅留编辑区，其它面板收起'],
+['tw','打字机','打字机滚动：当前行恒居视口中央']];
 
 // ── 工具栏动作 ──
 function edToolbar(k){
@@ -543,6 +547,9 @@ else if(k==='image')edSnippet('\n![图片描述](cover.png)\n');
 else if(k==='mat')return edRpToggle();
 else if(k==='ai')location.hash='#compose';
 else if(k==='full')edFullscreen();
+else if(k==='focus'){edFocusToggle();syncModeBtn('focus','ed-focus-btn',edFocus);}
+else if(k==='tw'){edTwToggle();syncModeBtn('tw','ed-tw',edTypewriter);}
+if(k==='focus'||k==='tw')return; // 保持编辑器光标，避免切换后滚动回顶部
 edCM.focus();
 }
 function edLinePrefixMark(m){return function(t,s,e){return edLinePrefix(t,s,e,m);};}
@@ -587,12 +594,17 @@ else if(document.documentElement.requestFullscreen)document.documentElement.requ
 }
 
 // ── 专注模式（F11）+ 段落聚焦 + 打字机 ──
+// UIX #9：工具栏与状态栏两套开关的 is-on 态互相同步（两边操作同一状态）
+function syncModeBtn(tbKey,statusId,on){
+var tb=$id('ed-bar')&&$id('ed-bar').querySelector('[data-edb="'+tbKey+'"]');
+if(tb)tb.classList.toggle('is-on',on);
+var sb=$id(statusId);
+if(sb)sb.classList.toggle('is-on',on);}
 function edFocusToggle(){
 edFocus=!edFocus;
 var panel=$id('panel-edit');
 if(panel)panel.classList.toggle('editor-focus',edFocus);
-var btn=$id('ed-focus-btn');
-if(btn)btn.classList.toggle('is-on',edFocus);
+syncModeBtn('focus','ed-focus-btn',edFocus);
 if(edFocus)edDimLine();else edUndim();
 }
 function edDimLine(){
@@ -611,8 +623,7 @@ if(panel)panel.classList.remove('ed-para');
 }
 function edTwToggle(on){
 edTypewriter=typeof on==='boolean'?on:!edTypewriter;
-var btn=$id('ed-tw');
-if(btn)btn.classList.toggle('is-on',edTypewriter);
+syncModeBtn('tw','ed-tw',edTypewriter);
 if(!edCM)return;
 if(edTypewriter){edCM.scrollCursorIntoView=edCenter;edCenter();}
 else delete edCM.scrollCursorIntoView;

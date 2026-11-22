@@ -38,7 +38,7 @@ return '<a class="article-card qcard" href="'+href+'">' +
 '<div class="qcover-block"><span class="qcover-text">'+title+'</span></div></div>' +
 '<div class="qcard-body">' +
 '<h3 class="card-title qcard-title">'+title+'</h3>' +
-'<div class="qcard-meta">'+statusBadge(item.status)+'<span class="qcard-time">'+esc(item.date||'—')+'</span></div>' +
+'<div class="qcard-meta">'+cardStatusBadge(item)+'<span class="qcard-time">'+esc(item.date||'—')+'</span></div>' +
 (arts.length?'<div class="qcard-arts">'+arts.join('')+'</div>':'') +
 (variants.length?'<div class="tags qcard-variants">'+variants.map(function(code){
 return '<span class="tag accent">'+esc(code)+Z;}).join('')+'</div>':'') +
@@ -122,7 +122,7 @@ if(qsel>=0&&cards[qsel])location.hash=cards[qsel].getAttribute('href').slice(1);
 function pubRow(item){
 var href='#article?path='+encodeURIComponent(item.path)+'&tab=edit';
 var f=item.flags||{},variants=Array.isArray(f.variants)?f.variants:[];
-return '<a class="pub-row" href="'+href+'">'+statusBadge(item.status)+'<span class="pub-row-t">'+esc(item.title||item.path)+'</span><span class="pub-row-pl">'+(variants.length?variants.map(function(code){return '<span class="tag accent">'+esc(code)+Z;}).join(''):'<span class="muted">—')+'</span>'+checkSummary(item.checks)+'<button class="btn btn-ghost qcard-fb" data-fb="'+esc(item.path)+'" title="反哺素材库：全文归档 / 摘取段落 / AI 提炼论点">→素材库</button><span class="pub-row-time">'+esc(item.date||'—')+'</span></a>';
+return '<a class="pub-row" href="'+href+'">'+cardStatusBadge(item)+'<span class="pub-row-t">'+esc(item.title||item.path)+'</span><span class="pub-row-pl">'+(variants.length?variants.map(function(code){return '<span class="tag accent">'+esc(code)+Z;}).join(''):'<span class="muted">—')+'</span>'+checkSummary(item.checks)+'<button class="btn btn-ghost qcard-fb" data-fb="'+esc(item.path)+'" title="反哺素材库：全文归档 / 摘取段落 / AI 提炼论点">→素材库</button><span class="pub-row-time">'+esc(item.date||'—')+'</span></a>';
 }
 var FB={slug:'',mode:'full'};
 function fbSlug(path){return String(path||'').replace(/\.md$/i,'').split('/').pop();}

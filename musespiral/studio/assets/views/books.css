@@ -39,6 +39,8 @@
 #im-filters{display:flex;flex-direction:column;gap:var(--space-sm);min-height:0}
 .im-kw{width:100%;max-width:520px}
 .im-chips{max-height:64px;overflow-y:auto}
+.im-collapse{display:block;width:100%;text-align:left;padding:8px 10px;margin:2px 0;background:color-mix(in srgb,var(--jade) 8%,var(--paper-1));border:1px solid color-mix(in srgb,var(--jade) 32%,transparent);border-radius:var(--radius-btn);color:var(--ink-1);font-size:var(--fs-caption);cursor:pointer}
+.im-collapse:hover{border-color:var(--jade)}
 .im-selrow{display:flex;align-items:center;justify-content:space-between;gap:var(--space-sm);font-size:var(--fs-caption);border-top:1px solid var(--line-1);padding-top:var(--space-sm)}
 .im-selall{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
 .im-list{position:relative;height:400px;overflow-y:auto;border:1px solid var(--line-1);border-radius:var(--radius-btn);background:var(--paper-1)}
