@@ -15,13 +15,14 @@
         （studio/__init__ 兼容 re-export，§七）
   - 六域拆分（方案 §一 R-2 + 行数门二拆）：handlers/compose（/api/compose/*
     11）/ materials（materials+sources+ingest+verify 17，N-2 批 +3、N-4 verify
-    +1、ARCH-5 reindex +1）/ article（article+editor+annotations+visual 11）/
+    +1、ARCH-5 reindex +1）/ article（article+editor+annotations+visual
+    +P1 双件 13，2026-11-23 quality_actions +2）/
     platform（action+jobs+settings+其余 22）/ discover（发现/回采 3）/
     assist（AI 辅助预览 3）；本表另有 4 条内联（pipelines 三条 + plugins/refresh）
   - 长动作契约不变：建 job 返 {ok, job_id}（R4），产物在 job.result；
     二进制旁路 /api/materials/upload 仍在 server._BINARY_POST_ROUTES
     （不占本表，契约锁取并集对拍）
-  - 契约锁：CONTRACT_POST_EXACT 75 = 本表 71 ∪ 动态段占位 3（plugin_actions.
+  - 契约锁：CONTRACT_POST_EXACT 77 = 本表 73 ∪ 动态段占位 3（plugin_actions.
     POST_DYNAMIC_SURFACE，AI-1 adopt/discard + AI-3 regenerate）∪ 二进制旁路 1，
     增删路由先改契约文档再改表（test_architecture 红灯兜底）；GET 面注册表
     仍在 routing.py（_GET_ROUTES，48 条，本文件不承载 GET）

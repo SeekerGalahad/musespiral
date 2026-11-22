@@ -64,7 +64,11 @@ JOBS_FILE = "jobs.jsonl"
 #   用户可编排流水线只占 1 个 kind（内部节点不是独立 job，节点生命周期
 #   归流水线管理）；steps 步级记账 {step,status,detail,artifacts}、失败
 #   即停、正文在 ~/.musespiral/pipeline_runs/<run_id>/（result 计数无正文）
-KINDS: frozenset[str] = frozenset({"adapt", "pack", "publish", "batch_adapt", "status", "annotate_rewrite", "fetch", "sync_stats", "compose_generate", "ingest", "clip", "visual_export", "agent_run", "topic_radar", "pipeline", "book_search", "book_fetch", "tts_generate", "plugin_pipeline"})
+# quality_loop：P1-A 质量循环（2026-11-23，契约 §3.26）——check→AI 修复
+#   →再 check 多轮长动作（每轮一次 chat_policed(task=rewrite)）；修复稿
+#   <stem>.quality_fix.md 预览（原文零触碰）；result={rounds,fixes_applied,
+#   final_result,output?}（19→20）
+KINDS: frozenset[str] = frozenset({"adapt", "pack", "publish", "batch_adapt", "status", "annotate_rewrite", "fetch", "sync_stats", "compose_generate", "ingest", "clip", "visual_export", "agent_run", "topic_radar", "pipeline", "book_search", "book_fetch", "tts_generate", "plugin_pipeline", "quality_loop"})
 STATUSES: frozenset[str] = frozenset({"queued", "running", "done", "failed"})
 
 # 模块级锁：jobs.jsonl 的读改写全串行（跨 runner/CLI 实例共享——同进程内

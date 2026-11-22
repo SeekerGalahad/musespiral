@@ -224,6 +224,10 @@ DIALECT_SCAN_FILES: tuple[str, ...] = (
     "services/materials_service.py",  # N-2（2026-11-21，素材闭环 §3.2 路径 C）：
                                      # distill 模板 DEFAULT_DISTILL_PROMPT（随
                                      # TASKS 扩 material_distill 键同批登记）
+    "services/quality_loop.py",       # P1-A（2026-11-23，契约 §3.26）：质量循环
+                                     # 修复模板 _PROMPT（复用 task=rewrite 通道）
+    "services/title_ab.py",           # P1-B（2026-11-23，契约 §3.26）：标题 A/B
+                                     # 三风格模板 _PROMPT（task=title 通道）
 )
 
 
@@ -538,6 +542,13 @@ CONTRACT_POST_EXACT = {
     # 统一端点（两形态载荷分流：无 material_ids=搜候选 / 有=建会话；confirm 闸门）。
     # POST 74→75。
     "/api/compose/smart-start",
+    # §3.26 新增（P1 AI 辅助创作增强批 2026-11-23）：质量循环 check→AI 修复
+    # →再 check 多轮长动作 → job quality_loop（KINDS 19→20；修复稿
+    # .quality_fix.md 预览零覆盖原文）+ 标题 A/B 三风格（mode 分流：generate
+    # 同步零落盘零 job / apply 三选一写回版本池先行；不接微信 A/B API）。
+    # POST 75→77。
+    "/api/action/quality_loop",
+    "/api/action/title_ab",
 }
 
 

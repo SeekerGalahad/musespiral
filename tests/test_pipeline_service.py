@@ -275,12 +275,13 @@ def test_unknown_skip_name_rejected_zero_job(
 
 # ── 红线 4：jobs KINDS 白名单（只增不减；15→17：R3 书源接驳批 2026-11-18
 # +book_search/+book_fetch；17→18：G-T5 TTS 朗读批 2026-11-19 +tts_generate；
-# 18→19：PL-2 插件流水线批 2026-11-20 +plugin_pipeline）
+# 18→19：PL-2 插件流水线批 2026-11-20 +plugin_pipeline；
+# 19→20：P1 批 2026-11-23 +quality_loop）
 # ────────────────────────────────────────────────────────────────────
 
 
 def test_jobs_kinds_include_pipeline() -> None:
-    assert {"pipeline", "plugin_pipeline"} <= KINDS and len(KINDS) == 19
+    assert {"pipeline", "plugin_pipeline"} <= KINDS and len(KINDS) == 20
     for kind in (
         "adapt", "pack", "publish", "batch_adapt", "status", "annotate_rewrite",
         "fetch", "sync_stats", "compose_generate", "ingest", "clip",

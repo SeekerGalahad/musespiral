@@ -480,11 +480,12 @@ def test_api_tts_file_serves_mp3_and_enforces_gates(server, root: Path) -> None:
 
 def test_jobs_kinds_include_tts_generate() -> None:
     """tts_generate 入白名单（17→18），存量项只增不减（18→19：PL-2 插件
-    流水线批 +plugin_pipeline，具名锚在 tests/test_pipeline_plugins.py）。"""
+    流水线批 +plugin_pipeline，具名锚在 tests/test_pipeline_plugins.py；
+    19→20：P1 批 +quality_loop，具名锚在 tests/test_quality_loop.py）。"""
     from musespiral.jobs.store import KINDS
 
     assert "tts_generate" in KINDS
-    assert len(KINDS) == 19
+    assert len(KINDS) == 20
     for kind in (
         "adapt", "pack", "publish", "batch_adapt", "status", "annotate_rewrite",
         "fetch", "sync_stats", "compose_generate", "ingest", "clip",

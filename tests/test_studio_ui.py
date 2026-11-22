@@ -199,6 +199,11 @@ CONTRACT_PATHS = {
     "/api/pipelines",
     "/api/pipelines/run",
     "/api/pipelines/runs/segments",
+    # P1 AI 辅助创作增强批（2026-11-23，契约 §3.26）：质量循环 job 提交 + 标题
+    # A/B 三风格（generate 同步 / apply 写回，mode 分流同一端点）——views/
+    # article.js 操作 tab 两动作组消费面
+    "/api/action/quality_loop",
+    "/api/action/title_ab",
 }
 
 # 38 个 monoline 图标（Phase 1 正典 §3.4 的 24 个 + Phase 2 追加 docs 空状态插画；

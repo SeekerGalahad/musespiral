@@ -207,6 +207,20 @@ SHELL_MAX_BYTES = 20 * 1024   # 20,480B（ARCH-1 ③；原 48KiB）
 # 红线（黄/深黄/红三段断言齐全度高于原版）；test_plugins_ui TOTAL_MAX 按其
 # 「随批对齐实际水位」协议 570,000→576,000。本批落深黄段（574,729B，距红线
 # ~25KB）：下批前端宜先清一笔瘦身再增。
+# **FEAT-P1A 批增长归因（2026-11-23，深黄段续增，+6,059B）**：AI 辅助创作
+# 增强 P1 双件——①质量循环（check→AI 修复→再 check，job kind=quality_loop，
+# KINDS 19→20）②标题 A/B 三风格（问题式/数字式/情感式，本地预览三选一，
+# 不接微信 A/B API）。增量分布：views/article.js +4,839B（ql*/ab* 六函数：
+# 质量循环提交/结果渲染/修复对比复用既有 viewer+diffHtml、A/B 生成/渲染/
+# askConfirm 应用）+ views/article.html.js +1,192B（操作 tab 两动作组骨架：
+# ql-btn/ql-rounds/ql-result、ab-btn/ab-result——role=status aria-live，
+# 按钮带 aria-label）+ core.js +28B（JN 任务面板 kind 标签 +quality_loop）。
+# 壳零增量（10,663B 不变，骨架全走懒加载 article 视图）；复用既有 vcard/
+# check-row/action-group 样式零新增 CSS。总交付面 574,729→580,788B，仍在
+# 深黄段（距红线 600,000 尚余 ~19KB）；test_plugins_ui TOTAL_MAX 随批
+# 576,000→581,000 对齐。⚠ article 视图两锚水位：article.js 32,136B（40KiB
+# 锚余 ~8.8KB）与 article.html.js 7,847B（8KiB 锚仅余 345B）——下批再动
+# article 视图 HTML 须先瘦身措辞或拆分骨架。
 ASSETS_TOTAL_GREEN_MAX = 530_000      # 523,079 + ~7K 缓冲
 ASSETS_TOTAL_YELLOW_MAX = 570_000     # 绿 ×1.075——软警报带
 ASSETS_TOTAL_RED_MAX = 600_000        # 硬上限：总交付面 600KB 对个人工具已极宽松

@@ -110,5 +110,20 @@ document.getElementById('view-article').innerHTML=`
 <p class="action-hint">publish · 仅创建草稿，绝不提交发表；需已配置凭证与封面。</p>
 <button class="btn btn-primary" id="publish-btn"><span data-icon="plus"></span>创建草稿</button>
 </div>
+<div class="action-group">
+<h3 class="action-title">质量循环</h3>
+<p class="action-hint">check → AI 修复 → 再 check；修复稿写 .quality_fix.md 预览（绝不覆盖原文），人工确认后手动替换。frontmatter/文件级问题 AI 修不了，会如实留在报告里。</p>
+<div class="action-row">
+<button class="btn" id="ql-btn"><span data-icon="refresh"></span>运行质量循环</button>
+<label class="field">最大轮数 <select id="ql-rounds" aria-label="质量循环最大轮数"><option value="1">1 轮</option><option value="2">2 轮</option><option value="3" selected>3 轮</option><option value="4">4 轮</option><option value="5">5 轮</option></select></label>
+</div>
+<div id="ql-result" role="status" aria-live="polite"></div>
+</div>
+<div class="action-group">
+<h3 class="action-title">A/B 标题</h3>
+<p class="action-hint">AI 三风格候选（问题式/数字式/情感式）本地预览三选一；应用写回 frontmatter.title（旧版入版本池）。不接微信 A/B 测试 API。</p>
+<button class="btn" id="ab-btn"><span data-icon="star"></span>生成 A/B 标题候选</button>
+<div id="ab-result" role="status" aria-live="polite"></div>
+</div>
 </div>
 `;

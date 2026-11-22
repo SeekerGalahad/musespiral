@@ -670,8 +670,10 @@ def test_contract_lock_membership() -> None:
     assert "/api/compose/novel-summary" in _ACTION_ROUTES
     # ARCH-5 语义基础设施批（2026-11-22）：POST 73→74（/api/materials/reindex
     # 全量重建）/ GET 47→48（/api/materials/search 统一搜索读面）；
-    # FEAT-2 智能组稿批（2026-11-22）：POST 74→75（/api/compose/smart-start）
-    assert len(CONTRACT_POST_EXACT) == 75
+    # FEAT-2 智能组稿批（2026-11-22）：POST 74→75（/api/compose/smart-start）；
+    # P1 批（2026-11-23，契约 §3.26）：POST 75→77（/api/action/quality_loop +
+    # /api/action/title_ab）
+    assert len(CONTRACT_POST_EXACT) == 77
     assert len(CONTRACT_GET_EXACT) == 48
 
 

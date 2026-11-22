@@ -643,8 +643,9 @@ def test_contract_locks_include_new_paths() -> None:
 def test_jobs_kinds_include_book_kinds() -> None:
     # 17→18：G-T5 TTS 朗读批（2026-11-19）新增 tts_generate；18→19：PL-2 插件
     # 流水线批（2026-11-20）新增 plugin_pipeline（计数随扩键同步；该批的具名
-    # 锚在 tests/test_pipeline_plugins.py::test_jobs_kinds_include_plugin_pipeline）
-    assert {"book_search", "book_fetch", "plugin_pipeline"} <= KINDS and len(KINDS) == 19
+    # 锚在 tests/test_pipeline_plugins.py::test_jobs_kinds_include_plugin_pipeline）；
+    # 19→20：P1 批（2026-11-23）新增 quality_loop（具名锚在 tests/test_quality_loop.py）
+    assert {"book_search", "book_fetch", "plugin_pipeline"} <= KINDS and len(KINDS) == 20
 
 
 def test_tasks_include_book_digest_keys() -> None:

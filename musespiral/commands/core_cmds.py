@@ -1,4 +1,4 @@
-"""核心内容命令组：generate / preview / check / review / digest / title。
+"""核心内容命令组：generate / preview / check / review / digest / title / quality-loop。
 
 R1 自 cli.py 拆分（正典 §四）；函数体逐字节保留，仅 @cli→@click 装饰器与
 函数内相对导入层级（from . → from ..）两类机械调整。
@@ -195,3 +195,37 @@ def title(article: str, platform_code: str | None, apply_n: int | None) -> None:
         "musespiral restore <article> 可查看/恢复；frontmatter 整体重写，键序可能重排、"
         "YAML 注释会丢失）"
     )
+
+
+# ── quality-loop（P1-A 质量循环：check→AI 修复→再 check）────
+@click.command()
+@click.argument("article", type=click.Path(exists=True, dir_okay=False))
+@click.option("--max-rounds", default=3, type=click.IntRange(1, 10), show_default=True, help="最大轮数（全过或达到即停）")
+@click.option("--no-fix", is_flag=True, help="只跑检查不 AI 修复（单轮报告）")
+def quality_loop(article: str, max_rounds: int, no_fix: bool) -> None:
+    """质量循环：检查 → AI 修复 → 再检查。
+
+    修复稿写 <stem>.quality_fix.md 预览文件（绝不覆盖原文）；人工确认后
+    手动替换原文。AI 未配置且有 FAIL 项时明确报「AI 不可用」（不静默假成功）。
+    """
+    from ..infra.ai import AIError
+    from ..services.quality_loop import fix_preview_path, loop
+
+    try:
+        out = loop(article, max_rounds=max_rounds, auto_fix=not no_fix)
+    except AIError as e:
+        click.echo(f"❌ {e}", err=True)
+        sys.exit(1)
+    fixes = out["fixes_applied"]
+    click.echo(f"质量循环完成：{out['rounds']} 轮检查，{len(fixes)} 次修复")
+    for line in fixes:
+        click.echo(f"  - {line}")
+    final = [tuple(r) for r in out["final_result"]]
+    click.echo(format_report(final))
+    preview = fix_preview_path(article)
+    if fixes and preview.exists():
+        click.echo(
+            f"\n修复稿（预览，原文未动）: {preview}\n"
+            f'   人工确认后手动替换: cp "{preview}" "{article}"'
+        )
+    sys.exit(1 if has_failures(final) else 0)

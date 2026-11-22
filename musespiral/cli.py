@@ -15,7 +15,7 @@ from .commands.cards_cmds import cards
 from .commands.compose_cmds import compose
 from .commands.config_cmds import config_cmd
 from .commands.cover_cmds import cover
-from .commands.core_cmds import check, digest, generate, preview, review, title
+from .commands.core_cmds import check, digest, generate, preview, quality_loop, review, title
 from .commands.discover_cmds import discover
 from .commands.fetch_cmds import fetch
 from .commands.imagehost_cmds import imagehost_cmd
@@ -75,6 +75,7 @@ cli.add_command(discover)  # F26-F29：知识库选题引擎（第十二期集�
 cli.add_command(backup)  # F35：文章库备份（独立先行切片，差距分析 §四）
 cli.add_command(cover)  # F31：封面生成（第十三期 Group A）
 cli.add_command(title)  # F32：标题多候选优选（第十三期 Group B，集成阶段注册）
+cli.add_command(quality_loop)  # P1-A：质量循环 check→AI 修复→再 check（修复稿预览不覆盖原文）
 cli.add_command(plan)  # F36/F36c：排期周历与人工发布登记（第十四期 Group A，集成阶段注册）
 cli.add_command(log)  # F36c：发布日志人工登记命令组（第十四期 Group A，集成阶段注册）
 cli.add_command(new)  # F38：模板新建文章（第十四期 Group B，集成阶段注册）

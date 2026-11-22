@@ -406,6 +406,70 @@ $('sbs-note').textContent='与原文差异：+'+(diff.added||0)+' 行 / −'+(di
 $('sbs-right').innerHTML=sbsMeta(d.payload)+'<div class="sbs-render">'+mdToHtml((d.payload||{}).body||'',dirOf(state.detailPath))+'</div>';
 $('sbs-diff').innerHTML=diff.html||'';
 }
+async function handleQualityLoop(btn){
+var path=state.detailPath;
+if(!path)return toast('先打开一篇文章',WN);
+btn.disabled=true;
+$('ql-result').innerHTML='<span class="badge queued" role="status">运行中…</span><span class="check-msg">多轮检查与 AI 修复进行中（每轮一次 AI 调用）</span>';
+try{
+var d=await postJSON('/api/action/quality_loop',{article:path,max_rounds:+($('ql-rounds').value||3),confirm:true});
+var j=await waitForJob(d.job_id);
+if(j.status==='failed'){$('ql-result').innerHTML='';toast('质量循环失败：'+(j.error||'未知错误'),ER);}
+else{renderQualityResult(j.result||{});toast('质量循环完成：'+((j.result||{}).rounds||'?')+' 轮',OK);}
+}catch(err){$('ql-result').innerHTML='';toast('质量循环提交失败：'+err.message,ER);}
+finally{btn.disabled=false;}
+}
+function renderQualityResult(r){
+var checks=Array.isArray(r.final_result)?r.final_result:[],fails=checks.filter(function(x){return (x.level||x[0])==='FAIL';});
+var fixes=Array.isArray(r.fixes_applied)?r.fixes_applied:[];
+var h='<div class="check-row"><span class="badge '+(fails.length?'fail':'pass')+'">'+(fails.length?'仍有 '+fails.length+' 项 FAIL':'全部通过')+Z+'<span class="check-msg">'+esc(r.rounds||1)+' 轮 · '+(fixes.length?esc(fixes.join('；')):'无修复')+'</span></div>';
+h+=fails.map(function(x){return '<div class="check-row fail"><span class="badge fail">'+esc(x.level||x[0])+Z+'<span class="check-msg">'+esc(x.message||x[1]||'')+'</span></div>';}).join('');
+if(r.output)h+='<div class="check-row"><span class="badge queued">预览</span><span class="check-msg">修复稿 <code>'+esc(r.output)+'</code>（原文未动） <button class="btn" data-ql-diff="'+esc(r.output)+'" aria-label="查看修复对比">查看修复对比</button></span></div>';
+$('ql-result').innerHTML=h;
+}
+async function handleQualityDiff(rel){
+try{
+var a=await getJSON(`/api/article/body?path=${encodeURIComponent(state.detailPath)}`);
+var b=await getJSON(`/api/article/body?path=${encodeURIComponent(rel)}`);
+$('viewer-title').textContent='质量循环修复对比（- 原文 / + 修复稿）';
+$('viewer-body').innerHTML=diffHtml(a.content||'',b.content||'');
+openDlg('viewer');
+}catch(err){toast('修复稿读取失败：'+err.message,ER);}
+}
+async function handleTitleAB(btn){
+var path=state.detailPath;
+if(!path)return toast('先打开一篇文章',WN);
+btn.disabled=true;
+$('ab-result').innerHTML='<span class="badge queued" role="status">生成中…</span>';
+try{
+var d=await postJSON('/api/action/title_ab',{article:path,confirm:true});
+renderTitleAB(d.variants||[],d.source||'heuristic');
+}catch(err){$('ab-result').innerHTML='';toast('A/B 标题生成失败：'+err.message,ER);}
+finally{btn.disabled=false;}
+}
+function renderTitleAB(vs,source){
+var h='<p class="action-hint">候选来源：'+(source==='ai'?'AI（三风格一次生成）':'启发式兜底（AI 未配置或调用失败，三风格仍互异）')+'——三选一；应用写回 frontmatter.title（旧版入版本池）。</p>';
+h+=vs.map(function(v,i){
+return '<div class="card vcard"><div class="vcard-head"><span class="platform-code">'+esc(v.style||'')+'</span><b>候选 '+(i+1)+'</b></div>'+
+'<h4 class="vcard-title">'+esc(v.title||'')+'</h4>'+
+'<div class="vcard-meta">'+esc(v.rationale||'')+'</div>'+
+(v.cover_spec?'<div class="vcard-meta">封面 spec：'+esc(v.cover_spec.size||'')+' · 「'+esc(v.cover_spec.headline||'')+'」 · '+(v.cover_spec.palette||[]).join('/')+'</div>':'')+
+'<div class="vcard-ops"><button class="btn btn-primary" data-ab-apply="'+esc(v.title||'')+'" aria-label="应用标题：'+esc(v.title||'')+'">应用此标题</button></div></div>';}).join('');
+$('ab-result').innerHTML=h;
+}
+async function handleTitleApply(title,btn){
+var path=state.detailPath;
+if(!path)return;
+var ok=await editConfirm({title:'应用 A/B 标题',message:'将「'+detailTitle(path)+'」的标题写回为：'+title+'（旧版入 .md.bak 版本池；frontmatter 整体重写，键序可能重排）',confirmText:'应用'});
+if(!ok)return;
+btn.disabled=true;
+try{
+await postJSON('/api/action/title_ab',{article:path,mode:'apply',title:title,confirm:true});
+toast('标题已写回（旧版在版本池）',OK);
+await refreshArticleState();renderDetail();
+}catch(err){toast('写回失败：'+err.message,ER);}
+finally{btn.disabled=false;}
+}
 function renderDetail(){
 var path=state.detailPath;
 var detail=state.detail||{};
@@ -468,6 +532,16 @@ $('pack-btn').addEventListener('click',function(){ handlePack($('pack-platform')
 PB.addEventListener('click',function(){ handlePublish(PB);});
 $('batch-btn').addEventListener('click',function(){handleBatch($('batch-btn'));});
 $('pipe-run').onclick=pRun;
+$('ql-btn').addEventListener('click',function(){handleQualityLoop($('ql-btn'));});
+$('ql-result').addEventListener('click',function(event){
+var b=event.target.closest('[data-ql-diff]');
+if(b) handleQualityDiff(b.getAttribute('data-ql-diff'));
+});
+$('ab-btn').addEventListener('click',function(){handleTitleAB($('ab-btn'));});
+$('ab-result').addEventListener('click',function(event){
+var b=event.target.closest('[data-ab-apply]');
+if(b) handleTitleApply(b.getAttribute('data-ab-apply'),b);
+});
 $('mark-reviewed-btn').addEventListener('click',handleMarkReviewed);
 ES.addEventListener('click',handleSaveBody);
 $('edit-annotate-toggle').addEventListener('click',toggleAnnotate);
