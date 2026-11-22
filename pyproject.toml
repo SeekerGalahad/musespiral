@@ -3,8 +3,39 @@ name = "musespiral"
 version = "0.5.0"
 license = "MIT"
 license-files = ["LICENSE"]
-description = "Markdown-driven WeChat Official Account publisher — generate & publish decoupled, with local preview"
+description = "Open content pipeline: media in, publishable drafts out — every AI judgement stays a suggestion you can accept, regenerate or discard"
+readme = "README.md"
 requires-python = ">=3.10"
+keywords = [
+    "content-pipeline",
+    "ai-writing",
+    "video-to-article",
+    "human-in-the-loop",
+    "llm",
+    "markdown",
+    "plugin-system",
+    "transcription",
+    "whisper",
+    "wechat",
+    "content-creation",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Natural Language :: Chinese (Simplified)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Text Processing :: Markup :: Markdown",
+    "Topic :: Text Processing :: Linguistic",
+]
 dependencies = [
     "requests>=2.31.0",
     "Pillow>=10.0.0",
@@ -43,6 +74,13 @@ dev = ["pytest", "pytest-cov", "mypy", "black", "isort", "flake8", "pre-commit"]
 
 [project.scripts]
 musespiral = "musespiral.cli:cli"
+
+[project.urls]
+Homepage = "https://github.com/SeekerGalahad/musespiral"
+Documentation = "https://github.com/SeekerGalahad/musespiral/blob/main/ARCHITECTURE.md"
+Repository = "https://github.com/SeekerGalahad/musespiral"
+Issues = "https://github.com/SeekerGalahad/musespiral/issues"
+Changelog = "https://github.com/SeekerGalahad/musespiral/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["setuptools>=68.0"]

@@ -3,9 +3,15 @@
 > **开源的内容流水线**：素材进来，成稿出去，每个 AI 判断你都能改。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/)
+[![Tests](https://img.shields.io/badge/tests-3212%20passed-success.svg)](tests/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 **视频 / 音频 / 字幕 / 文档 / 网页 / 书籍 → 转写切片 → 结构化成稿 → 多平台发布 → 反哺回素材库**
+
+![demo](docs/demo.gif)
+
+> 25 秒看完：素材库 → 创作工坊的逐块裁决 → 文章里的时间戳锚 → 洞察里的写作节奏。
 
 ---
 
@@ -88,6 +94,56 @@ AI 产出 → [draft 建议] → 人工裁决 → [adopted 正式]
 
 ---
 
+## 架构总览
+
+```mermaid
+flowchart TB
+    subgraph IN["① 输入层"]
+        direction LR
+        I1["视频 / 音频"]
+        I2["字幕 SRT/VTT"]
+        I3["文档 PDF/DOCX/EPUB"]
+        I4["网页 / 书籍"]
+    end
+    subgraph PROC["② 处理层 · 插件流水线"]
+        direction LR
+        P0{{"编排：switch / loop<br/>相邻节点契约类型校验"}}
+        P1["transcribe<br/>whisper"]
+        P2["key-segment"]
+        P3["frame-grab"]
+        P4["article-writer"]
+    end
+    subgraph JUDGE["③ 裁决层 · AI 只是建议"]
+        direction LR
+        J1["draft<br/>琥珀徽章"]
+        J2["adopt<br/>进版本链"]
+        J3["regenerate<br/>保留旧版对比"]
+    end
+    subgraph OUT["④ 输出层"]
+        direction LR
+        O1["公众号"]
+        O2["小红书"]
+        O3["知乎 / Markdown"]
+    end
+    LIB[("素材库<br/>血统链 · 打磨版本链")]
+    INS[("洞察<br/>写作节奏 · 发布数据")]
+
+    I1 & I2 & I3 & I4 --> P0
+    P0 --> P1 --> P2 --> P3 --> P4
+    P4 --> J1
+    J1 --> J2
+    J1 -.->|不满意| J3
+    J3 -.->|feedback 重生| J1
+    J2 --> O1 & O2 & O3
+    O1 & O2 & O3 -.->|发布数据回流| INS
+    INS -.->|反哺素材 / 论点| LIB
+    LIB --> P0
+```
+
+四个层各自独立可替换：换转写器只动 `transcribe`，换平台只动输出适配器；**裁决层是唯一的人工闸门**，AI 永远只产出 `draft`。
+
+---
+
 ## 快速开始
 
 ```bash
@@ -101,7 +157,7 @@ pip install faster-whisper
 # 可选：文档提取（PDF/DOCX，约 7MB）
 pip install pdfplumber python-docx
 
-pytest -q   # 2875 passed
+pytest -q   # 3212 passed, 1 skipped
 ```
 
 启动本地工作台（11 个视图，Studio 只绑 127.0.0.1，数据不出本机）：
@@ -153,7 +209,9 @@ musespiral studio --root tests/fixtures/studio_demo
 
 ---
 
-## 架构
+## 代码分层
+
+上面的架构总览讲的是**数据怎么流**，这一节讲的是**代码怎么分层**——两者是同一件事的两个视角。
 
 ```
 表示层    commands/ (CLI)  ·  studio/ (本地 Web 工作台)
@@ -197,7 +255,7 @@ musespiral 不与它们竞争单项能力，而是**把「素材 → 成稿 → 
 
 **Alpha**（v0.5 开发中）。核心链路已跑通：
 
-- **2875 个测试通过**
+- **3212 个测试通过**（1 个 e2e 需真机凭证，默认跳过）
 - 9 个插件、11 个前端视图
 - 真实素材验证：513 秒中文讲座 → 221 段转写 → 8 关键帧 → 带时间戳锚的图文稿 → 素材库
 
