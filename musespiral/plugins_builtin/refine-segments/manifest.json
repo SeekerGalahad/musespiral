@@ -1,0 +1,20 @@
+{
+  "id": "refine-segments",
+  "version": "1.0.0",
+  "kind": "process",
+  "name": { "zh": "逐段精炼", "en": "Refine Segments" },
+  "description": {
+    "zh": "控制流插件（插件 v2 DSL·loop 实战示例）：口语转写的**逐段**精炼工作件——loop 节点的 body 工人，每迭代吃一段（$item 注入单个 segment），经 chat_policed(task=plugin_refine_segment) 把口语（嗯/啊/然后然后/重复）精炼为通顺书面文字；AI 未配置或调用失败 → 原段透传（refined=false），绝不炸流水线。上游字段（avg_logprob 等质量信号）原样保留，start/end 不变——输出仍是合法 segments，loop 原生合并后可直接喂 article-writer。注意：本插件是 body 单项工人（输入端口 ext/segment 由 $item 注入，不走流水线供给），端口类型口径=合并值——输出端口声明 segments 型，因为 loop 的输出端口是 body 末节点输出的镜像、值=逐项合并的列表。一段一次 AI 调用（不是全篇一次）——逐段处理正是本插件的实战语义。"
+  },
+  "inputs": {
+    "segment": { "type": "ext/segment", "required": true }
+  },
+  "outputs": {
+    "refined_segments": { "type": "segments" }
+  },
+  "runtime": { "type": "python", "entry": "plugin.py:run", "timeout_s": 120 },
+  "requires": [],
+  "permissions": ["fs:read"],
+  "uses_ai": true,
+  "config_schema": {}
+}

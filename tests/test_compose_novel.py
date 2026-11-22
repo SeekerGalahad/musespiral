@@ -273,7 +273,7 @@ def test_novel_summary_task_key_is_chat_whitelisted() -> None:
     """TASKS 含 novel_summary（22→23）：routing/覆盖/ai check 自动继承。"""
     from musespiral.infra.ai.profiles import TASKS
 
-    assert "novel_summary" in TASKS and len(TASKS) == 26  # PL-6 批 24→25；N-2 批 25→26（material_distill）
+    assert "novel_summary" in TASKS and len(TASKS) == 27  # PL-6 24→25；N-2 25→26；插件 v2 验证批 26→27（plugin_refine_segment）
 
 
 def test_prompt_slots_include_novel_and_characters() -> None:

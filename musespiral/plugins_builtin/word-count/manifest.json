@@ -1,0 +1,21 @@
+{
+  "id": "word-count",
+  "version": "1.0.0",
+  "kind": "sink",
+  "name": { "zh": "字数统计", "en": "Word Count" },
+  "description": {
+    "zh": "exec runtime 实战示例（插件 v2·ARCH-4 §三）：入口是 bash 脚本 count.sh——stdin 收 inputs 的 JSON、stdout 回 outputs 的 JSON（exec 协议：JSON → stdin/stdout 往返），验证非 Python 插件经子进程接入流水线的全链路。统计口径：chars=字符数（含空白与标点，len 口径）；words=空白分词数（英文词按空格切，中文整句算一个词——中英混排文档的粗口径）；lines=splitlines 行数。macOS 自带 bash 3.2 无原生 JSON 解析——count.sh 只做依赖检查与进程壳，JSON 解析与计数调 python3 子进程（stdin 原样透传给 python，不经手 payload，大文本不受 shell 变量/参数长度限制）。manifest 声明 exec:subprocess 权限（exec runtime 二道门：plan 期与 run 期都查）。作为 sink 适合放链尾做稿面统计报表。"
+  },
+  "inputs": {
+    "text": { "type": "string", "required": true }
+  },
+  "outputs": {
+    "chars": { "type": "number" },
+    "words": { "type": "number" },
+    "lines": { "type": "number" }
+  },
+  "runtime": { "type": "exec", "entry": "./count.sh", "timeout_s": 30 },
+  "requires": ["python3"],
+  "permissions": ["exec:subprocess"],
+  "config_schema": {}
+}

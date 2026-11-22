@@ -1,0 +1,25 @@
+{
+  "id": "duration-switch",
+  "version": "1.0.0",
+  "kind": "control",
+  "name": { "zh": "时长路由", "en": "Duration Switch" },
+  "description": {
+    "zh": "控制流插件（kind=control，插件 v2 DSL·switch 实战示例）：从转写段落算出视频总时长（取各段 end 的最大值），超过阈值（默认 300s=5 分钟）输出 route=long，否则 route=short——引擎按 route 值执行且只执行 branch 里选中的分支。真实场景：短视频走快速路径（跳过切片抽帧直接全文成稿），长视频走完整流水线（切片→抽帧→成稿）。阈值可用节点 config.threshold_s 覆盖。本插件只产路由不产内容——route 值同时落 workspace，分支内外的下游节点都可消费。"
+  },
+  "inputs": {
+    "transcript": { "type": "segments", "required": true }
+  },
+  "outputs": {
+    "route": { "type": "string" }
+  },
+  "runtime": { "type": "python", "entry": "plugin.py:run", "timeout_s": 30 },
+  "requires": [],
+  "permissions": [],
+  "config_schema": {
+    "threshold_s": {
+      "type": "number",
+      "default": 300,
+      "description": "路由阈值（秒）：时长 > 阈值 → long（完整流水线），≤ 阈值 → short（快速路径）"
+    }
+  }
+}

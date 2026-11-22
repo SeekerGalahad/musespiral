@@ -139,6 +139,18 @@ TASKS: tuple[str, ...] = (
     # 等键直接生效）。cache=False（生成类恒不缓存——同一篇文章两次提炼
     # 产出本就允许不同）。AI 未配置 → AIError 可读引导（ok:false 降级面）。
     "material_distill",
+    # ── 插件 v2 DSL 验证批（2026-11-23，ARCH-4 控制流实战示例）：26 键 → 27 键
+    # ——refine-segments 插件（plugins_builtin/refine-segments/plugin.py）的
+    # 逐段精炼步：loop 节点 body 工人，口语转写一段一段经 chat_policed 精炼
+    # （AI 未配置/失败 → 原段透传不炸流水线）。**一插件一任务键**（PL-5/PL-6
+    # 纪律延续）：routing 可按插件独立路由、prompts.d/plugin_refine_segment.txt
+    # 可独立覆盖级联。是 **chat 键**（真走 chat() 端点经治理层）。扩键即自动
+    # 继承任务面全套机制（同 Phase D / PL-5 批注）：ai.json routing 按任务
+    # 路由 / prompts.d/<task>.txt 覆盖级联 / ai check 逐任务探测 / F45 方言
+    # 守门（plugins_builtin 目录已在 DIALECT_SCAN_DIRS，插件提示词自动纳管）/
+    # F79 per_task 预算（`per_task.plugin_refine_segment.daily_calls` 等键直接
+    # 生效）。cache=True（确定性校对变换，同段重跑零成本）。
+    "plugin_refine_segment",
     # G1 评审修正（2026-11-17，组合批评审点 1）：media 生成（image_generate）
     # **不进 TASKS**——media 走 /images/generations 不经 chat()，进 TASKS 会导致
     # ai check 用 chat 端点探测图像任务（check.run_check 逐 TASKS 键发 chat 请求）

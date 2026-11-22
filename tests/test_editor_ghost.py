@@ -272,7 +272,7 @@ def test_ghost_write_task_key_is_chat_whitelisted():
     """ghost_write 在 TASKS 白名单（routing/覆盖/ai check/per_task 预算自动继承）。"""
     assert "ghost_write" in TASKS
     # 21→22 计数锁（扩键必须在此显式登记新总数；与 test_editor_ai 的锁互为双保险）
-    assert len(TASKS) == 26  # PL-6 批 24→25；N-2 批 25→26（material_distill，素材闭环）
+    assert len(TASKS) == 27  # PL-6 24→25；N-2 25→26；插件 v2 验证批 26→27（plugin_refine_segment）
     assert "image_generate" not in TASKS, "chat 白名单不得被非 chat 键污染（G1 判例）"
 
 

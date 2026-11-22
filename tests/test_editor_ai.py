@@ -330,11 +330,12 @@ def test_tasks_contains_five_editor_keys():
     assert expected <= set(TASKS)
     # 21→22：G-T1 Ghost Text 扩 ghost_write（2026-11-19，调研吸收 §二）——
     # 本断言是 TASKS 全量的计数锁，扩键必须在此显式登记新总数。
-    assert len(TASKS) == 26, (
+    assert len(TASKS) == 27, (
         "15 → 20（E-3 批 +5）→ 21（G-T4 +1 rolling_summary）→ 22（G-T1 +1 ghost_write）"
         " → 23（E-5 +1 novel_summary）→ 24（PL-5 +1 plugin_key_segment，key-segment 插件）"
         " → 25（PL-6 +1 plugin_article_writer，article-writer 插件）"
         " → 26（N-2 +1 material_distill，素材闭环·路径 C 论点提炼）"
+        " → 27（插件 v2 DSL 验证批 +1 plugin_refine_segment，refine-segments 插件）"
     )
 
 

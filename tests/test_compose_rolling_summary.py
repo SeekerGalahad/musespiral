@@ -279,7 +279,7 @@ def test_rolling_summary_task_key_is_chat_whitelisted() -> None:
     assert "rolling_summary" in TASKS
     # 21（G-T4 批）→ 22：G-T1 Ghost Text 扩 ghost_write → 23：E-5 扩 novel_summary
     # → 24：PL-5 扩 plugin_key_segment → 25：PL-6 扩 plugin_article_writer
-    assert len(TASKS) == 26  # N-2 批 25→26（material_distill，素材闭环·路径 C）
+    assert len(TASKS) == 27  # N-2 25→26；插件 v2 验证批 26→27（plugin_refine_segment，refine-segments 插件）
 
 
 # ── d) 用户手改 + 手动刷新（服务层两函数）──────────────────────────

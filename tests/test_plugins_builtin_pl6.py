@@ -175,7 +175,7 @@ def _assert_anchors_traceable(
 
 def test_plugin_article_writer_task_registered() -> None:
     assert "plugin_article_writer" in TASKS
-    assert len(TASKS) == 26  # PL-6 批 24→25；N-2 批 25→26（material_distill，素材闭环）
+    assert len(TASKS) == 27  # PL-6 24→25；N-2 25→26；插件 v2 验证批 26→27（plugin_refine_segment）
     assert "plugin_article_writer" in prompt_tasks()  # prompts.d 覆盖级联面派生
 
 
