@@ -43,7 +43,7 @@ from .commands.visual_cmds import design
 
 @click.group()
 def cli() -> None:
-    """musespiral — Markdown 驱动的公众号发布工具（生成与发布解耦）。"""
+    """musespiral — 开源内容流水线：素材进来，成稿出去，每个 AI 判断你都能改。"""
 
 
 # 注册顺序与拆分前 cli.py 的命令定义顺序一致（help 清单 click 按字母序展示）
