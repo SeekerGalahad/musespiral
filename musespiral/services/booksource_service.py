@@ -36,6 +36,32 @@ _LOCK = threading.RLock()
 # 待确认缓存（silent_update=false 的订阅刷新产物；进程内，键=订阅 url）
 _PENDING: dict[str, list[dict[str, Any]]] = {}
 
+# URL→原文 一次性缓存（2026-11-23 修复实测判例）：前端 preview 传 URL、用户确认后
+# apply 再传**同一 URL**，旧实现服务端重复拉取 20MB——preview 17.2s + apply 13.3s
+# = 30.5s（用户感知「等很久」的直接主因）。容量=1：同 URL 连续 preview→apply 是
+# 唯一有收益的流（多 URL 并发无跨请求复用价值），后写覆盖即天然 LRU。
+_FETCHED_TEXT: dict[str, str] = {}
+
+
+def _fetch_with_cache(fetcher: Callable[[str], str] | None) -> Callable[[str], str]:
+    """包一层 URL 原文缓存：同 url 的第二次拉取直接命中（preview→apply 复用）。
+
+    只在「text 形态是 URL」时被 importer 内部调用（文本/JSON 形态不触网）；
+    命中返回同一文本对象（importer 只读不改），零额外拷贝。
+    """
+    base = fetcher if fetcher is not None else booksource_fetch.fetch
+
+    def _fetch(url: str) -> str:
+        hit = _FETCHED_TEXT.get(url)
+        if hit is not None:
+            return hit
+        body = base(url)
+        _FETCHED_TEXT.clear()
+        _FETCHED_TEXT[url] = body
+        return body
+
+    return _fetch
+
 
 # ── 索引/列表 ─────────────────────────────────────────────────────
 
@@ -172,7 +198,7 @@ def _preview_full(
     仅供 `import_apply` 取落库源——落库必须写全字段，不能吃 `import_preview`
     的轻量投影。任何对外的预览出口都走 `import_preview`。
     """
-    fetch = fetcher if fetcher is not None else booksource_fetch.fetch
+    fetch = _fetch_with_cache(fetcher)
     parsed = _candidates(text, fetch)
     zero_counts = {s: 0 for s in merge.STATUSES}
     if parsed["kind"] != classifier.KIND_BOOKSOURCE:
@@ -274,7 +300,7 @@ def import_apply(
     # 落库走全字段路径，不吃 import_preview 的轻量投影（投影缺规则字段，落库会丢数据）
     preview = _preview_full(
         text,
-        fetcher=fetcher,
+        fetcher=_fetch_with_cache(fetcher),
         keep_name=keep_name,
         keep_group=keep_group,
         keep_enable=keep_enable,

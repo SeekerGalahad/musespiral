@@ -323,3 +323,21 @@ def test_materials_meta_book_schema_constants() -> None:
         "original_chars", "distilled",
     )
     assert "book_fetch" in model.PROVENANCE_OPS
+
+def test_import_default_selection_uses_group_any_not_last() -> None:
+    """默认选中按「组内任一 selected」而非「末条 last.selected」（2026-11-23 判例）。
+
+    旧实现 `g.last.selected`：同 URL 多版本时末条可能是 latest（不选中），
+    整组被漏选——实测 3906 源包 preview 后 UI 显示 0 选中（后端返回 30 条
+    selected=True）。新实现由前端 imGroups 产 `sel` 字段；本测试锚定源文本
+    含 anySel 逻辑且不再读 last.selected 做选中判据。
+    """
+    from pathlib import Path as _P
+    # 读**构建源** ui.js（真源）——assets/views/books.js 是产物，改产物会被 build 覆盖
+    js = (
+        _P(__file__).resolve().parent.parent
+        / "musespiral" / "studio" / "ui.js"
+    ).read_text(encoding="utf-8")
+    assert "anySel" in js, "imGroups 应产组级 anySel"
+    assert "g.sel" in js, "默认选中应读 g.sel"
+    assert "g.last.selected" not in js, "不得回退到末条 last.selected 判选中"

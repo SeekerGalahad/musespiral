@@ -475,3 +475,40 @@ def test_engine_available_false_when_unreachable(monkeypatch) -> None:
     """真实回环探测（8792 没服务时 → False，不抛）。"""
     monkeypatch.delenv("MUSESPIRAL_ENGINE_MOCK", raising=False)
     assert bookengine.BookEngineClient(timeout=0.2).available() is False
+
+# ── URL 二次拉取缓存（2026-11-23 实测判例回归）───────────────────────
+
+def test_url_fetch_reused_between_preview_and_apply(home: Path) -> None:
+    """preview→apply 传同一 URL 时，网络只拉一次（旧实现两次=30.5s 实测）。
+
+    判例：前端 IM.text 存 URL 字符串、两个端点都传它——服务端旧实现
+    `_preview_full` 各自 fetch，20MB 包实测 preview 17.2s + apply 13.3s。
+    断言：counting fetcher 调用次数 == 1，且两次结果一致。
+    """
+    calls: list[str] = []
+    body = _dump(_src("https://c.com"), _src("https://d.com"))
+
+    def counting_fetcher(url: str) -> str:
+        calls.append(url)
+        return body
+
+    url = "https://example.com/sources.json"
+    svc._FETCHED_TEXT.clear()
+    preview = svc.import_preview(url, fetcher=counting_fetcher)
+    assert preview["kind"] == "bookSource"
+    applied = svc.import_apply(
+        url, [{"bookSourceUrl": "https://c.com", "selected": True}],
+        fetcher=counting_fetcher,
+    )
+    assert applied["ok"] is True and applied["stored"] == 1
+    assert len(calls) == 1, f"URL 应只拉取一次，实际 {len(calls)} 次: {calls}"
+    assert calls[0] == url
+
+def test_fetch_cache_does_not_affect_text_imports(home: Path) -> None:
+    """文本/JSON 形态导入不触缓存、不触网（缓存只服务 URL 流）。"""
+    svc._FETCHED_TEXT.clear()
+    def booby_fetcher(url: str) -> str:  # 文本形态不该调用它
+        raise AssertionError(f"文本导入不应触网: {url}")
+    preview = svc.import_preview(_dump(_src("https://e.com")), fetcher=booby_fetcher)
+    assert preview["counts"]["isNew"] == 1
+    assert svc._FETCHED_TEXT == {}

@@ -69,7 +69,7 @@ document.getElementById('view-books').innerHTML=`
 <div id="im-paste"><textarea id="im-text" class="input im-area" rows="4" placeholder="粘贴书源 JSON（数组或单对象均可）"></textarea><div class="action-row"><button class="btn btn-primary" id="im-parse" type="button">解析预览</button></div></div>
 <div id="im-url" hidden><input id="im-url-in" class="input" placeholder="订阅 URL（http(s) 开头，服务端 64MB 门内拉取）"><div class="action-row"><button class="btn btn-primary" id="im-parse-url" type="button">拉取并解析</button></div></div>
 <div id="im-file" hidden><input id="im-file-in" type="file" accept=".json,application/json"><div class="action-row"><button class="btn btn-primary" id="im-parse-file" type="button">读取并解析</button></div></div>
-<p class="action-hint" id="im-prog" hidden>解析中…（大包约 1-2s）</p>
+<p class="action-hint" id="im-prog" hidden>拉取并解析中…<span id="im-prog-t"></span>（大包 7–20MB 需 10–25 秒，请勿关闭窗口）</p>
 </div>
 <div id="im-filters" hidden>
 <input id="im-kw" class="input im-kw" placeholder="过滤：名称 / 分组 / URL 关键词">

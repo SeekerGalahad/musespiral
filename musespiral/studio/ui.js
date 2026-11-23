@@ -2361,7 +2361,9 @@ var by={},order=[],rows=[],i,u,g;
 for(i=0;i<items.length;i++){u=items[i].source.bookSourceUrl;
 if(!by[u]){by[u]={url:u,items:[]};order.push(u);}
 by[u].items.push(items[i]);}
-for(i=0;i<order.length;i++){g=by[order[i]];rows.push({t:'g',url:g.url,items:g.items,last:g.items[g.items.length-1],n:g.items.length});}
+for(i=0;i<order.length;i++){g=by[order[i]];
+var anySel=false,j;for(j=0;j<g.items.length;j++){if(g.items[j].selected){anySel=true;break;}}
+rows.push({t:'g',url:g.url,items:g.items,last:g.items[g.items.length-1],sel:anySel,n:g.items.length});}
 for(i=0;i<skipped.length;i++)rows.push({t:'s',idx:skipped[i].index,reason:skipped[i].reason||'条目缺少 bookSourceUrl'});
 return rows;}
 function imLinear(){ // ▸ 展开的版本子行插在组行后（选中态按 URL 记在组上）
@@ -2458,7 +2460,7 @@ IM.kind='bookSource';IM.msg='';
 IM.groups=imGroups(d.items||[],d.skipped||[]);
 IM.skipped=d.skipped||[];IM.counts=d.counts||{};IM.sel={};IM.exp={};
 var i,g;for(i=0;i<IM.groups.length;i++){g=IM.groups[i];
-if(g.t==='g'&&g.last.selected)IM.sel[g.url]=true;}
+if(g.t==='g'&&g.sel)IM.sel[g.url]=true;}
 return true;}
 function imRo(on){ // D8：表单灰显只读（可读边界说明，不是冷漠拒绝）
 $('im-src').classList.toggle('is-ro',on);
@@ -2486,6 +2488,9 @@ async function imParse(text){ // parsing→previewing；importKeep 开关变更�
 if(!text||!text.trim())return toast('内容为空：先粘贴 JSON / 填 URL / 选文件',WN);
 IM.st='parsing';IM.text=text;
 $('im-prog').hidden=false;imBtns(true);
+// 真实耗时可见（2026-11-23 判例：大包 7-20MB 需 10-25s，旧提示写「1-2s」致用户
+// 误判卡死而关窗口——虚假快提示比无提示更危险）
+var _t0=Date.now(),_tick=setInterval(function(){var el=$('im-prog-t');if(el)el.textContent=' 已等 '+Math.round((Date.now()-_t0)/1000)+'s';},1000);
 try{
 var d=await postJSON('/api/booksource/import',Object.assign({confirm:true,text_or_url:text},imKeep()));
 if(!imIngest(d)){imNonSource();imSummary();return;}
@@ -2496,7 +2501,7 @@ $('im-total').textContent='共 '+IM.groups.length+' 源'+(IM.counts.dupUrls?' ·
 $('im-list').scrollTop=0;
 imRepaint();
 }catch(err){toast('解析失败：'+err.message,ER);}
-finally{$('im-prog').hidden=true;imBtns(false);}}
+finally{clearInterval(_tick);$('im-prog').hidden=true;setTimeout(function(){var el=$('im-prog-t');if(el)el.textContent='';},300);imBtns(false);}}
 async function imApply(btn){ // importing→done；apply 后关窗+书源视图面刷新（引擎灯重探）
 var urls=[],i,g;for(i=0;i<IM.groups.length;i++){g=IM.groups[i];if(IM.sel[g.url])urls.push(g.url);}
 if(!urls.length)return toast('请先勾选要导入的书源（可配合过滤与全选当前筛选）',WN);
