@@ -65,8 +65,8 @@ dependencies = [
 # ARCH-3 工程基础设施（2026-11-21，正典=docs/项目方案/musespiral-极限架构与功能扩展总规划-2026-11-21.md §ARCH-3）
 # pytest-cov 进 test 组：CI 首步 `pytest -q --cov=musespiral`（ci.yml）依赖它，
 # 不在则 pytest 对未知参数直接报错退出——覆盖报告必须是 test 面自带能力。
-test = ["pytest", "pytest-cov"]
-docs = ["markitdown", "mammoth"]       # 文档提取（doc-extract 插件可选后端）
+test = ["pytest", "pytest-cov", "numpy", "pdfplumber", "python-docx"]  # CI 全量面：numpy=PCM fixture；pdfplumber/python-docx=doc-extract 后端（裸装判例 2026-11-23）
+docs = ["markitdown", "mammoth", "pdfplumber", "python-docx"]  # 文档提取全家（自研后端 pdfplumber/python-docx 2026-11-23 补声明——此前打包缺口：后端不在任何 extra）
 media = ["faster-whisper"]             # 音视频转写（subtitle 插件可选后端）
 browser = ["playwright>=1.40"]         # 视觉截图（browser 组，原有）
 # 开发全家桶：一条命令装齐测试/类型/格式/钩子工具
