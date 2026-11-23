@@ -414,6 +414,11 @@ CONTRACT_GET_EXACT = {
     # mode=keyword|semantic|hybrid（语义缺位自动降级为关键词+标签；
     # FEAT-1 的后端数据面，UI 归 FEAT-1 批）。GET 47→48。
     "/api/materials/search",
+    # W1-B1 新增（2026-11-23，正典=《musespiral-运维发布改良设计-2026-11-23》
+    # §二 W1-B1）：轻量探针面——恰五键（ok/version/uptime_s/jobs_pending/
+    # materials_total），供 ctl.sh smoke 与外部探针。与 F20 的 /api/health 九键
+    # 面板并存（该面板前端四处消费、形状不动——「前端零字节」验收）。GET 49→50。
+    "/api/healthz",
 }
 CONTRACT_POST_EXACT = {
     # §3.1 既有 27 条

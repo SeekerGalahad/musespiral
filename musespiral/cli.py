@@ -17,6 +17,7 @@ from .commands.config_cmds import config_cmd
 from .commands.cover_cmds import cover
 from .commands.core_cmds import check, digest, generate, preview, quality_loop, review, title
 from .commands.discover_cmds import discover
+from .commands.doctor_cmd import doctor
 from .commands.fetch_cmds import fetch
 from .commands.imagehost_cmds import imagehost_cmd
 from .commands.jobs_cmds import jobs
@@ -72,6 +73,7 @@ cli.add_command(fetch)  # R6：公众号文章抓取（同上）
 cli.add_command(cards)  # F22：小红书图文卡（第十期集成注册）
 cli.add_command(poster)  # F23：长图（同上）
 cli.add_command(discover)  # F26-F29：知识库选题引擎（第十二期集成注册）
+cli.add_command(doctor)  # W1-B1：环境预检五项绿黄红（运维发布改良 2026-11-23）
 cli.add_command(backup)  # F35：文章库备份（独立先行切片，差距分析 §四）
 cli.add_command(cover)  # F31：封面生成（第十三期 Group A）
 cli.add_command(title)  # F32：标题多候选优选（第十三期 Group B，集成阶段注册）

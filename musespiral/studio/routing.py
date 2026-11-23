@@ -27,7 +27,7 @@ from .booksource_actions import (  # R0 书源功能（契约 §3.9）：四读�
     _booksource_payload,
     _booksource_subs_payload,
 )
-from .health import _health_payload
+from .health import _health_payload, _healthz_payload  # W1-B1：+ /api/healthz 五键探针
 from .ingest_actions import _ingest_status_payload  # B 采集扩展：采集面状态（只读）
 from .media_actions import _media_preview_response  # G1 文生图：预览字节流（A-2）
 from .payload import (
@@ -154,6 +154,11 @@ _GET_ROUTES = _RouteSet(
             "/api/stats",
             "/api/meta",
             "/api/health",  # §十七 F20：环境健康面板（只读零新安全面）
+            # W1-B1 新增（2026-11-23，正典=《musespiral-运维发布改良设计-
+            # 2026-11-23》§二 W1-B1）：轻量探针五键（ok/version/uptime_s/
+            # jobs_pending/materials_total）——ctl.sh smoke 与外部探针消费；
+            # /api/health 九键形状不动（前端四消费方零字节）。GET 49→50。
+            "/api/healthz",
             "/api/jobs",  # R4：任务列表（顶栏任务面板数据面）
             "/api/discover",  # 第十二期 F30：知识库选题候选（KB 根内只读扫描；收编过渡期形状不变）
             "/api/discover/star",  # 档A M0：收藏星标 triage.starred（GET 读集合+最近记录）
@@ -246,6 +251,8 @@ def _get_response(
         return 200, _JSON_CTYPE, _json_bytes(_meta_payload(ctx))
     if path == "/api/health":
         return 200, _JSON_CTYPE, _json_bytes(_health_payload(ctx))
+    if path == "/api/healthz":  # W1-B1：轻量探针五键（jobs/materials 同源复用）
+        return 200, _JSON_CTYPE, _json_bytes(_healthz_payload())
     if path == "/api/jobs":
         return 200, _JSON_CTYPE, _json_bytes(_jobs_payload())
     if path == "/api/discover":

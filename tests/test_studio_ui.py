@@ -82,6 +82,10 @@ CONTRACT_PATHS = {
     "/api/action/pack",
     "/api/action/publish",
     "/api/action/batch_adapt",
+    # W1-B1（2026-11-23）：/api/healthz（轻量探针五键）**刻意不入本集**——它是
+    # ctl.sh smoke / 外部探针的机读面，前端零消费（前端仍用九键 /api/health
+    # 面板）。本集=前端字面量集合，加入未消费端点会与 test_fetch_paths_match_api_contract
+    # 的等值断言冲突；后端路由锁在 test_architecture.CONTRACT_GET_EXACT 单独立册。
     "/api/health",
     "/api/action/fetch",
     # FEAT-P1B 写作节奏（2026-11-23）：洞察「写作节奏」卡数据面（纯读 GET）

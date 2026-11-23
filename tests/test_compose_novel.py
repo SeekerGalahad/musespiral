@@ -675,9 +675,10 @@ def test_contract_lock_membership() -> None:
     # /api/action/title_ab）
     # P1 批（2026-11-23，契约 §3.26）：POST 75→77（/api/action/quality_loop +
     # /api/action/title_ab）；FEAT-P1B 批（2026-11-23）：GET 48→49
-    # （/api/writing_stats 写作节奏读面）
+    # （/api/writing_stats 写作节奏读面）；W1-B1 批（2026-11-23）：GET 49→50
+    # （/api/healthz 轻量探针五键——/api/health 九键面板不动）
     assert len(CONTRACT_POST_EXACT) == 77
-    assert len(CONTRACT_GET_EXACT) == 49
+    assert len(CONTRACT_GET_EXACT) == 50
 
 
 def test_kind_field_backward_compatible_with_legacy_session(root: Path) -> None:
