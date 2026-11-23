@@ -15,6 +15,8 @@ import ast
 import bisect
 import re
 import tempfile
+
+import pytest  # noqa: E402 —— CI 独立仓守卫用（NameError 判例：守卫代码必须在它执行的环境里也成立）
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -912,6 +914,11 @@ def test_detector_selftest_cli_green() -> None:
     import sys
 
     script = REPO_ROOT / "scripts" / "audit_cross_view_deps.py"
+    if not script.is_file():
+        # 同 _load_detector 的独立仓守卫（CI NameError/自测红判例 2026-11-23——
+        # 守卫代码必须在它执行的环境里成立：独立仓脚本缺席时 subprocess 会以
+        # 「can't open file」退出码 2，落到断言就是假红）
+        pytest.skip(f"跨视图检测器缺席（monorepo 级治理脚本，独立仓不随包分发）: {script}")
     proc = subprocess.run(
         [sys.executable, str(script), "--selftest"],
         capture_output=True,
