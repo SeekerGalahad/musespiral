@@ -40,6 +40,9 @@ jobs:
 
       # 门：release.yml 自身有 High 级发现 → 本 job 红 → 下游 release 不发
       - name: 门——release.yml 有 High 即红（Medium 及以下不阻塞）
+      - name: 装 uv（runner 不预装 uvx——2026-11-23 实测判例）
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+      - name: zizmor 门（High 即红）
         run: uvx zizmor@1.33.1 --no-online-audits --persona auditor --min-severity high .github/workflows/release.yml
 
       # 记录面：全工作流目录扫描——既有 ci.yml 的发现只记录不阻塞（既有 CI 改良不在本批范围）
@@ -68,7 +71,7 @@ jobs:
         run: pip install -e ".[test]" build
 
       - name: 全量测试（与 ci.yml 同命令）
-        run: pytest -q --cov=musespiral --cov-report=term
+        run: python -m pytest -q --cov=musespiral --cov-report=term  # python -m 才把 CWD 入 sys.path（tests 互 import 需要）
 
       - name: 构建前清理 __pycache__（判例 J4 第一道防线）
         run: find musespiral -name __pycache__ -exec rm -rf {} +
