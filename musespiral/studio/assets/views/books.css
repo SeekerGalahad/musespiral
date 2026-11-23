@@ -60,3 +60,11 @@
 .im-sum{margin-left:auto;font-size:var(--fs-caption);color:var(--ink-2)}
 .im-foot-btns{display:inline-flex;gap:10px}
 @media (max-width:900px){.im-modal{width:100%}.im-row .im-grp{max-width:120px}.im-sum{margin-left:0}}
+#bk-results{margin-top:12px}
+.bk-res-head{display:flex;align-items:baseline;gap:6px;font-size:var(--fs-small);color:var(--ink-2);padding:6px 2px;border-bottom:1px solid var(--line-1)}
+.bk-res-row{display:flex;align-items:baseline;gap:10px;width:100%;text-align:left;padding:10px 8px;border:none;border-bottom:1px solid var(--line-1);background:none;cursor:pointer;font:inherit;color:inherit}
+.bk-res-row:hover,.bk-res-row:focus-visible{background:var(--paper-2)}
+.bk-res-name{font-weight:600;color:var(--ink-1)}
+.bk-res-author{color:var(--ink-2);font-size:var(--fs-small)}
+.bk-res-kind,.bk-res-ch{color:var(--ink-2);font-size:var(--fs-micro)}
+.bk-res-src{margin-left:auto;color:var(--ink-3);font-size:var(--fs-micro)}

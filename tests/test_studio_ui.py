@@ -180,6 +180,7 @@ CONTRACT_PATHS = {
     # POST /api/book/search 本批未接（搜索态占位，结果渲染 R4 批）——不入前端契约。
     "/api/booksource/engine",
     "/api/action/bookengine_demo",
+    "/api/book/search",
     # R4 导入弹窗批（2026-11-18，书源实弹修复与导入弹窗设计 §三）：解析预览
     # POST /api/booksource/import（零落库）+ 落库 POST /api/booksource/import_apply
     # （selections 按 URL + importKeep 三开关）——订阅态「导入书源」入口两步链。
@@ -3800,8 +3801,8 @@ def test_books_search_subs_placeholder_and_engine_lamp() -> None:
     assert 'id="im-open"' in src and "导入书源" in src
     assert "订阅表 R4 批落地" in src
     assert "musespiral booksource" in src
-    # 搜索提交未接（任务书裁决：结果渲染 R4 批）——契约锁同步排除
-    assert "'/api/book/search'" not in all_src
+    # 搜索已接线（2026-11-23）：前端真消费 /api/book/search（不再是 R4 批占位）
+    assert "'/api/book/search'" in all_src
 
 
 # ── M3 视图拆分归属断言（2026-11-19；题面第 6 条：视图专属断言改读对应 views/*.js）──

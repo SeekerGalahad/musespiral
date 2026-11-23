@@ -322,6 +322,7 @@ $('bk-subs-btn').addEventListener('click',function(){location.hash='#books?tab=s
 $('bk-subs-back').addEventListener('click',function(){location.hash='#books';});
 $('bk-guide-subs').addEventListener('click',function(){location.hash='#books?tab=subs';});
 $('bk-guide-import').addEventListener('click',imOpen);
+bkResBind();
 $('bk-guide-demo').addEventListener('click',async function(){
 var btn=this;btn.disabled=true;
 try{
@@ -332,7 +333,46 @@ finally{btn.disabled=false;}});
 $('bk-search-box').addEventListener('keydown',function(e){
 if(e.isComposing||e.keyCode===229||e.key!=='Enter')return;
 if(!this.value.trim())return;
-toast('搜索结果渲染 R4 批开放——可从素材行《书名》深链进入书籍详情',WN);});
+bkSearch(this.value.trim());});
+async function bkSearch(key){
+var box=$('bk-search-box');if(box.disabled)return;
+$('bk-guide').hidden=true;$('bk-results').hidden=false;
+$('bk-res-n').textContent='…';$('bk-res-meta').textContent=' 搜索中';
+$('bk-res-list').innerHTML='<div class="skel"><div class="skel-line w90"></div><div class="skel-line w70"></div></div>';
+try{
+var d=await postJSON('/api/book/search',{confirm:true,key:key});
+if(!d.ok){bkResEmpty(d.error||d.message||'搜索失败');return;}
+var j=await waitForJob(d.job_id);
+var r=j.result||{};
+if(j.status!=='done'){bkResEmpty(r.error||('搜索失败（'+j.status+'）'));return;}
+bkResPaint(key,r);
+}catch(err){bkResEmpty(err.message||'搜索失败');}
+}
+function bkResEmpty(msg){
+$('bk-res-n').textContent='0';$('bk-res-meta').textContent='';
+$('bk-res-list').innerHTML='<div class="empty"><div class="empty-text">'+esc(msg)+'</div></div>';
+}
+function bkResPaint(key,r){
+var items=r.items||[];
+$('bk-res-n').textContent=String(items.length);
+var meta=[];if(r.total!=null)meta.push('共 '+r.total);if(r.searched!=null)meta.push('搜 '+r.searched+' 源');
+$('bk-res-meta').textContent=meta.length?' · '+meta.join(' · '):'';
+if(!items.length){bkResEmpty('没有找到与「'+key+'」相关的书');return;}
+var h='',i,it;
+for(i=0;i<items.length;i++){it=items[i]||{};
+h+='<button class="bk-res-row" type="button" data-bku="'+esc(it.bookUrl||'')+'" data-bks="'+esc(it.origin||'')+'" data-bkn="'+esc(it.name||'')+'" aria-label="打开书籍 '+esc(it.name||'')+'">'
++'<span class="bk-res-name">'+esc(it.name||'(未命名)')+'</span>'
++'<span class="bk-res-author">'+esc(it.author||'')+'</span>'
++(it.kind?'<span class="bk-res-kind">'+esc(it.kind)+'</span>':'')
++(it.lastChapter?'<span class="bk-res-ch">'+esc(it.lastChapter)+'</span>':'')
++'<span class="bk-res-src">'+esc(it.originName||'')+'</span></button>';}
+$('bk-res-list').innerHTML=h;
+}
+function bkResBind(){var el=$('bk-res-list');if(!el)return;
+el.addEventListener('click',function(e){
+var row=e.target.closest('[data-bku]');if(!row)return;
+var bu=row.getAttribute('data-bku'),su=row.getAttribute('data-bks'),nm=row.getAttribute('data-bkn');
+if(bu)bkOpen(bu,su,nm);});}
 $('bk-filter').addEventListener('input',function(){
 var v=this.value.trim(),had=!!BK.filter;BK.filter=v;
 if(!v){if(had)bkPaint();return;}

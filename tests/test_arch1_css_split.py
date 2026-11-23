@@ -108,6 +108,15 @@ def test_css_split_rule_multiset_equivalent_to_head() -> None:
                    b".sim-rel{display:flex;align-items:center;gap:6px;padding:4px 2px;font-size:var(--fs-caption);cursor:pointer;border-radius:var(--radius-btn)}",
                    b".sim-rel:hover{background:var(--wash)}",
                    b".sim-rel-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+    # 书籍搜索结果（2026-11-23 接线批）：把「R4 批开放」占位换成真搜索渲染
+                   b"#bk-results{margin-top:12px}",
+                   b".bk-res-head{display:flex;align-items:baseline;gap:6px;font-size:var(--fs-small);color:var(--ink-2);padding:6px 2px;border-bottom:1px solid var(--line-1)}",
+                   b".bk-res-row{display:flex;align-items:baseline;gap:10px;width:100%;text-align:left;padding:10px 8px;border:none;border-bottom:1px solid var(--line-1);background:none;cursor:pointer;font:inherit;color:inherit}",
+                   b".bk-res-row:hover,.bk-res-row:focus-visible{background:var(--paper-2)}",
+                   b".bk-res-name{font-weight:600;color:var(--ink-1)}",
+                   b".bk-res-author{color:var(--ink-2);font-size:var(--fs-small)}",
+                   b".bk-res-kind,.bk-res-ch{color:var(--ink-2);font-size:var(--fs-micro)}",
+                   b".bk-res-src{margin-left:auto;color:var(--ink-3);font-size:var(--fs-micro)}",
     # FEAT-2 智能组稿（2026-11-22）在 ui.views/compose.css 新增的 .sc-* 向导
     # 规则族（步骤条/素材列表/大纲编辑，19 条）——基线锚早于本批，合法新增登记。
                    b".sc-list{border:1px solid var(--line-1);border-radius:var(--radius-btn);max-height:300px;overflow:auto}",
