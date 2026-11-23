@@ -47,13 +47,21 @@ def _isolate_home(tmp_path: Path, monkeypatch) -> Path:
     return home
 
 
+def _require_sample(path: Path) -> None:
+    """真实样本按需守卫：这些是 monorepo 本地资产（docs/patents、docs/pdf），
+    不随 musespiral 独立仓分发——CI 检出天然缺席，缺席即 skip；本地
+    （monorepo 工作区）样本在位时断言照常严格执行，不做弱化。"""
+    if not path.is_file():
+        pytest.skip(f"真实样本缺席（monorepo 本地资产，不入独立仓）: {path}")
+
+
 def _pdf_bytes() -> bytes:
-    assert REAL_PDF.is_file(), f"真实 PDF 样本缺席: {REAL_PDF}"
+    _require_sample(REAL_PDF)
     return REAL_PDF.read_bytes()
 
 
 def _docx_bytes() -> bytes:
-    assert REAL_DOCX.is_file(), f"真实 DOCX 样本缺席: {REAL_DOCX}"
+    _require_sample(REAL_DOCX)
     return REAL_DOCX.read_bytes()
 
 
@@ -91,7 +99,7 @@ def test_upload_real_docx_lands_text_material(_isolate_home: Path) -> None:
 
 
 def test_upload_real_epub_lands_text_material(_isolate_home: Path) -> None:
-    assert REAL_EPUB.is_file(), f"真实 EPUB 样本缺席: {REAL_EPUB}"
+    _require_sample(REAL_EPUB)
     res = ms.add_uploaded(REAL_EPUB.read_bytes(), name="宏观经济学.epub")
     mat = res["material"]
     assert mat["type"] == "text"

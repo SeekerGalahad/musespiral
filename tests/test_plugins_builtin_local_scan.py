@@ -414,11 +414,13 @@ def test_min_size_filter_zero_means_all(ls_mod: ModuleType, tmp_path: Path, monk
     assert out2["count"] == 0
 
 
-# ── h) 探针脚本冒烟（子进程真跑，路径固定 modules/musespiral/scripts/scan_probe.py）──
+# ── h) 探针脚本冒烟（子进程真跑，脚本随模块分发：scripts/scan_probe.py）──
 
 
 def test_scan_probe_script_smoke(tmp_path: Path) -> None:
-    probe = REPO_ROOT / "modules" / "musespiral" / "scripts" / "scan_probe.py"
+    # 脚本锚定模块根（tests→musespiral 模块根），monorepo 与独立仓两种
+    # 检出布局同一路径成立——不借 REPO_ROOT 的 monorepo 层级假设。
+    probe = Path(__file__).resolve().parents[1] / "scripts" / "scan_probe.py"
     assert probe.is_file()
     base = tmp_path / "probe-fixture"
     _make_fixture(base)

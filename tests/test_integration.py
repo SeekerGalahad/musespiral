@@ -833,11 +833,26 @@ DEMO_CHANNELS_PACK = FIXTURES / "studio_demo" / "03_photo_essay.channels.pack"
 WX_SAMPLE_HTML = FIXTURES / "wx_article_sample.html"
 
 
-def test_upload_publish_dry_run_prints_step_list(tmp_path: Path, monkeypatch) -> None:
+@pytest.fixture(scope="module")
+def demo_channels_pack() -> Path:
+    """演示物料包按需就位：*.pack/ 在 .gitignore（生成产物不入库），CI 检出
+    天然缺席——现场用 build_pack_for 从已入库的 03_photo_essay.md + cover.png
+    确定性重建（payload/checks/cover 内容只依赖 fixture 文章与平台档案，两次
+    构建逐字节同）。本地已有产物直接复用，不重复写盘。"""
+    if not DEMO_CHANNELS_PACK.is_dir():
+        from musespiral.services.pack_service import build_pack_for
+
+        build_pack_for(FIXTURES / "studio_demo" / "03_photo_essay.md", "channels")
+    return DEMO_CHANNELS_PACK
+
+
+def test_upload_publish_dry_run_prints_step_list(
+    tmp_path: Path, monkeypatch, demo_channels_pack: Path
+) -> None:
     """upload publish --dry-run：exit 0，打印步骤清单（入口/字段/选择器/人工发布项）。"""
     monkeypatch.setenv("MUSESPIRAL_HOME", str(tmp_path))
     result = CliRunner().invoke(
-        cli, ["upload", "publish", "--platform", "channels", "--pack", str(DEMO_CHANNELS_PACK), "--dry-run"]
+        cli, ["upload", "publish", "--platform", "channels", "--pack", str(demo_channels_pack), "--dry-run"]
     )
     assert result.exit_code == 0, result.output
     assert "视频号（channels）dry-run 步骤清单" in result.output
@@ -849,13 +864,13 @@ def test_upload_publish_dry_run_prints_step_list(tmp_path: Path, monkeypatch) ->
 
 
 def test_upload_publish_real_mode_without_cookie_prompts_login(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, demo_channels_pack: Path
 ) -> None:
     """真实模式缺 cookie：确认后在起浏览器前快败，可读提示先 login（exit 1）。"""
     monkeypatch.setenv("MUSESPIRAL_HOME", str(tmp_path))  # 无 cookies/channels.json
     result = CliRunner().invoke(
         cli,
-        ["upload", "publish", "--platform", "channels", "--pack", str(DEMO_CHANNELS_PACK)],
+        ["upload", "publish", "--platform", "channels", "--pack", str(demo_channels_pack)],
         input="y\n",
     )
     assert result.exit_code == 1, result.output
@@ -879,11 +894,13 @@ def test_upload_login_without_playwright_prints_install_hint(
     assert "playwright install chromium" in result.output
 
 
-def test_upload_unknown_platform_readable_error(tmp_path: Path, monkeypatch) -> None:
+def test_upload_unknown_platform_readable_error(
+    tmp_path: Path, monkeypatch, demo_channels_pack: Path
+) -> None:
     """未知平台：选择器文件缺失转可读错误（列出可用平台）exit 1。"""
     monkeypatch.setenv("MUSESPIRAL_HOME", str(tmp_path))
     result = CliRunner().invoke(
-        cli, ["upload", "publish", "--platform", "nosuch", "--pack", str(DEMO_CHANNELS_PACK), "--dry-run"]
+        cli, ["upload", "publish", "--platform", "nosuch", "--pack", str(demo_channels_pack), "--dry-run"]
     )
     assert result.exit_code == 1, result.output
     assert "不支持的平台" in result.output or "平台选择器文件不存在" in result.output

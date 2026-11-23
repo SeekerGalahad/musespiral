@@ -71,6 +71,14 @@ def test_transition_matrix_full_enumeration(tmp_path: Path, cur: str, new: str) 
 # ---- set_status 只改 status 键（字节级）----
 
 
+def _read_lines_untranslated(p: Path) -> list[str]:
+    """禁换行翻译读全文并按行尾切分。Path.read_text(newline=) 是 3.13+ API
+    （3.10 无 newline 参，CI TypeError），退回 open(newline="") 同语义：
+    CRLF 原样保留不翻译，字节级断言口径不变。"""
+    with open(p, "r", encoding="utf-8", newline="") as f:
+        return f.read().splitlines(keepends=True)
+
+
 def test_set_status_replaces_only_status_line_bytes(tmp_path: Path) -> None:
     """重写后除 status 行外逐字节一致：inline 列表/注释/键序/CRLF 全保留。"""
     p = tmp_path / "rich.md"
@@ -86,9 +94,9 @@ def test_set_status_replaces_only_status_line_bytes(tmp_path: Path) -> None:
         "## 小节\r\n\r\n"
         "要点。\r\n".encode("utf-8")
     )
-    old_lines = p.read_text(encoding="utf-8", newline="").splitlines(keepends=True)
+    old_lines = _read_lines_untranslated(p)
     set_status(p, REVIEWED)
-    new_lines = p.read_text(encoding="utf-8", newline="").splitlines(keepends=True)
+    new_lines = _read_lines_untranslated(p)
     # 唯一差异：status 行值替换（行尾风格原样），其余行逐字节一致
     assert new_lines == [*old_lines[:3], "status: reviewed\r\n", *old_lines[4:]]
 

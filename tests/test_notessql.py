@@ -15,6 +15,30 @@ def _ts(y: int, m: int, d: int) -> float:
     return _dt.datetime(y, m, d, 10, 0, 0).timestamp()
 
 
+def _sqlite_treats_view_rowid_as_error() -> bool:
+    """能力探测：当前 sqlite 构建对「SELECT rowid FROM 视图」是否报错。
+
+    不能按版本号判断——sqlite 官方 ≥3.36 报 no such column，但 Debian/Ubuntu
+    发行版构建带 ``-DSQLITE_ALLOW_ROWID_IN_VIEW`` 兼容开关（debian/rules
+    CFLAGS，2026-11-23 CI ubuntu-26.04 runner 实证 sqlite 3.46.1 同样放行），
+    版本 ≥3.36 也可返回 NULL rowid 而不报错。放行时 _resolve_id_column 的
+    rowid 探测成功走 rowid 分支，「无 rowid 也无主键」的可读错误契约前提
+    不成立，视图分支断言（本文件该用例）按环境前提跳过；macOS 自带库与
+    python-build-standalone 构建无此开关，探测为 False，断言照常执行。
+    """
+    con = sqlite3.connect(":memory:")
+    try:
+        con.execute("CREATE TABLE _probe_t (x TEXT)")
+        con.execute("CREATE VIEW _probe_v AS SELECT x FROM _probe_t")
+        try:
+            con.execute('SELECT rowid FROM "_probe_v" LIMIT 0')
+            return False  # 放行（发行版兼容开关）→ 契约前提不成立
+        except sqlite3.OperationalError:
+            return True  # 报错（官方 ≥3.36 行为）→ 契约成立
+    finally:
+        con.close()
+
+
 def _make_db(tmp_path: Path) -> tuple[Path, dict[int, str]]:
     """建含 FTS5 表的临时笔记库，返回 (db 路径, rowid->正文 映射)。"""
     db = tmp_path / "vault.db"
@@ -199,6 +223,12 @@ def test_without_rowid_int_pk_get(tmp_path):
     assert notessql.get_by_id(db, 8) is None
 
 
+@pytest.mark.skipif(
+    not _sqlite_treats_view_rowid_as_error(),
+    reason="当前 sqlite 构建允许视图 rowid（Debian/Ubuntu -DSQLITE_ALLOW_ROWID_IN_VIEW "
+    "兼容开关，能力探测见 _sqlite_treats_view_rowid_as_error），「无 rowid 也无主键」"
+    "错误路径在该环境不可达，视图分支断言前提不成立",
+)
 def test_view_without_rowid_or_pk_readable_error(tmp_path):
     """无 rowid 也无主键（视图）→ ValueError 指明根因；list/get 同样报错。"""
     db = tmp_path / "view.db"

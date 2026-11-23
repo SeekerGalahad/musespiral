@@ -19,6 +19,18 @@ from musespiral.core.visual.canvas.model import CanvasDoc, Element, TextBlock
 FONT = load_font(56)
 
 
+def _cjk_font_usable() -> bool:
+    """探测 load_font 解析到的字体是否具备真实 CJK 度量能力。
+
+    load_font 候选清单全是本机路径（PingFang/Noto CJK/wqy），CI 容器常无
+    CJK 字体 → 退 Pillow 默认位图字体，CJK 字形 advance 极窄（~10px），
+    30 字也装得进一行——换行断言在该环境测的是兜底字体行为而非引擎逻辑，
+    前提不成立。真实 CJK 字体 56px 下单字 advance ≈ 56px，阈值 20px 稳定
+    区分两种环境（macOS 本地 / 装 Noto CJK 的机器照常严格执行）。
+    """
+    return load_font(56).getlength("数") >= 20
+
+
 def _assert_widths(lines: list[str], max_width: int, font=None) -> None:
     font = font or FONT
     for ln in lines:
@@ -30,6 +42,11 @@ def _assert_widths(lines: list[str], max_width: int, font=None) -> None:
 # ── F70-T3 黄金三态 ──────────────────────────────────────────
 
 
+@pytest.mark.skipif(
+    not _cjk_font_usable(),
+    reason="本机无 CJK 字体（load_font 退 Pillow 默认位图字体，CJK 度量非真实字形），"
+    "换行断言测的是兜底字体行为而非引擎逻辑，前提不成立——见 _cjk_font_usable",
+)
 def test_f70t3_cjk_30_chars_no_space() -> None:
     """态一：CJK 无空格 30 字 → 多行，每行 ≤ max_width，字符零丢失。"""
     text = "数" * 30
@@ -112,6 +129,11 @@ def _doc_with_text(block: TextBlock, w: float = 400.0) -> CanvasDoc:
     )
 
 
+@pytest.mark.skipif(
+    not _cjk_font_usable(),
+    reason="本机无 CJK 字体（load_font 退 Pillow 默认位图字体，CJK 度量非真实字形），"
+    "换行断言测的是兜底字体行为而非引擎逻辑，前提不成立——见 _cjk_font_usable",
+)
 def test_layout_document_fills_lines() -> None:
     block = TextBlock("数" * 30, font_size=56)
     doc = _doc_with_text(block, w=300)
@@ -159,6 +181,11 @@ def test_layout_max_width_priority() -> None:
     )
 
 
+@pytest.mark.skipif(
+    not _cjk_font_usable(),
+    reason="本机无 CJK 字体（load_font 退 Pillow 默认位图字体，CJK 度量非真实字形），"
+    "换行断言测的是兜底字体行为而非引擎逻辑，前提不成立——见 _cjk_font_usable",
+)
 def test_layout_walks_g_children() -> None:
     block = TextBlock("数" * 30, font_size=48)
     doc = CanvasDoc(

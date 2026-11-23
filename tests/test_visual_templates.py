@@ -10,7 +10,11 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from musespiral.core.visual.canvas.layout import layout_document, relayout_vertical
+from musespiral.core.visual.canvas.layout import (
+    layout_document,
+    load_font,
+    relayout_vertical,
+)
 from musespiral.core.visual.canvas.model import ELEMENT_WHITELIST, SPECS
 from musespiral.core.visual.canvas.svg import render_svg
 from musespiral.core.visual.canvas.templates import (
@@ -19,6 +23,15 @@ from musespiral.core.visual.canvas.templates import (
     resolve,
     validate_params,
 )
+
+
+def _cjk_font_usable() -> bool:
+    """探测 load_font 解析到的字体是否具备真实 CJK 度量能力（与
+    tests/test_canvas_layout.py 同判据——候选清单全是本机路径，CI 容器常
+    无 CJK 字体 → 退 Pillow 默认位图字体，90 字标题不换行，D-1 的
+    「≥5 行」场景构造不出来，断言前提不成立；真实 CJK 字体 64px 单字
+    advance ≈ 64px，阈值 20px 稳定区分两环境）。"""
+    return load_font(56).getlength("数") >= 20
 
 # mock theme 色板（服务层 load_theme 解析后的形态——本层只收 hex）
 COLORS = {
@@ -272,6 +285,11 @@ def _rects_of(doc) -> list[tuple[float, float, float, float]]:
     return [(e.x, e.y, e.w, e.h) for e in doc.elements if e.kind == "rect"]
 
 
+@pytest.mark.skipif(
+    not _cjk_font_usable(),
+    reason="本机无 CJK 字体（load_font 退 Pillow 默认位图字体），90 字标题不换行，"
+    "D-1 的「标题 ≥5 行」场景构造不出来，断言前提不成立——见 _cjk_font_usable",
+)
 def test_d1_xhs_card_long_title_hook_pushed_below_title_band() -> None:
     """D-1 修复断言：5+ 行标题 → hook.y ≥ title.y + 行数×fs×lh（无重叠）。
 

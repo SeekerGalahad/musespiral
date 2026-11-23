@@ -19,6 +19,8 @@ import subprocess
 from collections import Counter
 from pathlib import Path
 
+import pytest
+
 STUDIO = Path(__file__).resolve().parent.parent / "musespiral" / "studio"
 REPO = Path(__file__).resolve().parents[3]
 LAZY = ["sources", "material", "books", "compose", "design", "insight",
@@ -59,16 +61,30 @@ def _rule_units(data: bytes) -> Counter:
     return out
 
 
+# 基线锚=拆分提交 73f647ad66 的父提交（5a5ad5433e，拆分前 core.css 77,416B
+# 单体）。基线不能追 HEAD：拆分落库后 HEAD 的 core.css 已是瘦身版，
+# 级联对它全是「新增」——等价断言会永久红（2026-11-22 集成修红判例）。
+_CSS_SPLIT_BASELINE_SHA = "5a5ad5433e2696d835acf6b90602a74b2b4f86d8"
+
+
 def test_css_split_rule_multiset_equivalent_to_head() -> None:
     """产物级规则多重集等价：拆分前 HEAD 的 core.css（77,416B）vs 拆分后
     assets/core.css + assets/views/*.css 级联——所有 CSS 规则逐字节保留。
     唯一有意例外=逗号选择器组 .pg-detail,.pr-rungrid 按视图拆两条（声明逐字节同）。"""
-    # 基线锚=拆分提交 73f647ad66 的父提交（5a5ad5433e，拆分前 core.css 77,416B
-    # 单体）。基线不能追 HEAD：拆分落库后 HEAD 的 core.css 已是瘦身版，
-    # 级联对它全是「新增」——等价断言会永久红（2026-11-22 集成修红判例）。
+    # 基线锚对象在 monorepo 历史里（对象路径 modules/musespiral/...），
+    # 独立仓检出（SeekerGalahad/musespiral，CI 浅克隆）不含该对象——
+    # 缺席即 skip；本地 monorepo 工作区锚可达，等价断言照常严格执行。
+    probe = subprocess.run(
+        ["git", "cat-file", "-e", f"{_CSS_SPLIT_BASELINE_SHA}^{{commit}}"],
+        capture_output=True, cwd=REPO, check=False)
+    if probe.returncode != 0:
+        pytest.skip(
+            f"CSS 等价基线锚 {_CSS_SPLIT_BASELINE_SHA[:10]} 在当前仓不可达"
+            f"（monorepo 历史对象，独立仓/浅克隆检出缺席）: {probe.stderr.decode(errors='replace').strip()}"
+        )
     original = subprocess.run(
         ["git", "show",
-         "5a5ad5433e2696d835acf6b90602a74b2b4f86d8:modules/musespiral/musespiral/studio/assets/core.css"],
+         f"{_CSS_SPLIT_BASELINE_SHA}:modules/musespiral/musespiral/studio/assets/core.css"],
         capture_output=True, cwd=REPO, check=True).stdout
     split = (STUDIO / "assets" / "core.css").read_bytes()
     for name in LAZY:

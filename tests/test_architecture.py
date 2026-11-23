@@ -695,7 +695,11 @@ def _load_cross_view_detector():
     import importlib.util
 
     script = REPO_ROOT / "scripts" / "audit_cross_view_deps.py"
-    assert script.is_file(), f"跨视图检测器缺失: {script}"
+    if not script.is_file():
+        # 检测器是 monorepo 级治理脚本（仓库根 scripts/，不随 musespiral
+        # 独立仓分发）——独立仓 CI 检出（SeekerGalahad/musespiral 单仓根）
+        # 天然缺席，五条 V1 门在本地 monorepo 照常严格执行。
+        pytest.skip(f"跨视图检测器缺席（monorepo 级治理脚本，独立仓不随包分发）: {script}")
     spec = importlib.util.spec_from_file_location("musespiral_audit_cross_view_deps", script)
     assert spec is not None and spec.loader is not None, f"检测器加载失败: {script}"
     module = importlib.util.module_from_spec(spec)
