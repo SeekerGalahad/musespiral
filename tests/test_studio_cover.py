@@ -97,9 +97,27 @@ def test_cover_requires_confirm(server) -> None:
     assert "confirm" in payload["error"]
 
 
+def test_cover_accepts_legacy_article_alias(server) -> None:
+    """W1 参数规范：`article` 旧名仍可用（别名至少保留一个版本）。
+
+    读面 GET 用 path、写面 POST 用 article 是历史两套命名（实测 6 处）；
+    `_require_str(..., alias=...)` 让两键兼容且新代码走规范名 path。
+    本测试锁「别名不破」——若将来移除 alias，此测试必须同步改并记 BREAKING。
+    """
+    code, payload = _request(
+        server, "POST", "/api/action/cover", {"confirm": True, "article": "03_photo_essay.md"}
+    )
+    # 关键断言=别名被识别：绝不落到「缺少必填字段」分支。
+    # 200=成功、400=服务层业务拒绝、404=文件不在该 fixture root 里——都可接受，
+    # 因为三者的共同前提是「参数校验已通过」。
+    assert "缺少必填字段" not in (payload.get("error") or ""), payload
+
+
 def test_cover_requires_article(server) -> None:
     code, payload = _request(server, "POST", "/api/action/cover", {"confirm": True})
-    assert code == 400 and "article" in payload["error"]
+    # 2026-11-24 W1 参数规范批：规范名 path（article 为兼容别名）——断言只锁
+    # 「400 + 可读错误提到必填字段」，不锚死具体字段名（避免实现字符串锚腐化）
+    assert code == 400 and "缺少必填字段" in payload["error"]
 
 
 def test_cover_article_not_found(server) -> None:

@@ -160,10 +160,20 @@ def _resolve_dir_arg(root: Path, raw: str) -> Path:
     return _resolve_inside(root, raw)
 
 
-def _require_str(data: dict[str, Any], key: str) -> str:
-    """动作请求体的必填字符串字段（缺失/类型不对 → 400）。"""
+def _require_str(data: dict[str, Any], key: str, *, alias: str | None = None) -> str:
+    """动作请求体的必填字符串字段（缺失/类型不对 → 400）。
+
+    `alias`（2026-11-24 W1 参数规范批）：同一语义的两套历史命名——读面 GET
+    用 `path`、写面 POST action 用 `article`（实测 6 处）。传 alias 即两键
+    兼容（`key` 优先，alias 兜底），**响应错误文案只提 `key`**（规范名）。
+    新增代码一律用规范名 `path`；`article` 作为别名至少保留一个版本。
+    """
     value = data.get(key)
     if not isinstance(value, str) or not value.strip():
+        if alias is not None:
+            alt = data.get(alias)
+            if isinstance(alt, str) and alt.strip():
+                return alt.strip()
         raise _HttpError(400, f"缺少必填字段 {key}（root 内相对路径/平台码）")
     return value.strip()
 

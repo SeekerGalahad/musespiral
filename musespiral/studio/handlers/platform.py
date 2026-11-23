@@ -155,7 +155,7 @@ def _adapt_warnings(output: Path) -> list[str]:
 
 def _action_adapt(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
     """生成平台文字变体（adapt_service.generate_variant 进 job；AI 是长动作）。"""
-    article_rel = _require_str(data, "article")
+    article_rel = _require_str(data, "path", alias="article")
     platform = _require_str(data, "platform")
     article_path = _resolve_file(ctx.root, article_rel)
 
@@ -172,7 +172,7 @@ def _action_batch_adapt(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, 
     幂等续跑/部分失败清单在 adapt_service.generate_batch（BatchAdaptError），
     本层转 JobFailure(result=partial) 入库。
     """
-    article_rel = _require_str(data, "article")
+    article_rel = _require_str(data, "path", alias="article")
     platforms_raw = data.get("platforms")
     if (
         not isinstance(platforms_raw, list)
@@ -210,7 +210,7 @@ def _action_batch_adapt(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, 
 
 def _action_pack(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
     """生成物料包（pack_service.build_pack_for 进 job；limits 由服务层注入）。"""
-    article_rel = _require_str(data, "article")
+    article_rel = _require_str(data, "path", alias="article")
     platform = _require_str(data, "platform")
     variant_rel = data.get("variant")
     if variant_rel is not None and not isinstance(variant_rel, str):
@@ -248,7 +248,7 @@ def _action_publish(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]
     from ..payload import _render
     from ..scan import _log_path
 
-    article_rel = _require_str(data, "article")
+    article_rel = _require_str(data, "path", alias="article")
     article_path = _resolve_file(ctx.root, article_rel)
     try:
         article = parse_article(article_path)
@@ -290,7 +290,7 @@ def _action_status(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
     白名单=MANUAL_SETTABLE（published 只由 publish 自动回写，§三-2 红线）；
     迁移合法性由 core.article.set_status 把关。
     """
-    article_rel = _require_str(data, "article")
+    article_rel = _require_str(data, "path", alias="article")
     status = _require_str(data, "status")
     if status not in MANUAL_SETTABLE:
         raise _HttpError(

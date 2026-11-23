@@ -34,7 +34,7 @@ def _action_cover(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
     from ...core.visual.cover import ROUTES as _COVER_ROUTES
     from ...services import cover_service
 
-    article_rel = _require_str(data, "article")
+    article_rel = _require_str(data, "path", alias="article")
     article_path = _resolve_file(ctx.root, article_rel)
     kwargs: dict[str, Any] = {}
     route = data.get("route")
