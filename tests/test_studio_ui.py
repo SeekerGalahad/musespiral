@@ -710,7 +710,10 @@ def test_shell_topbar_and_statusbar() -> None:
     # 顶栏/底栏尺寸 token 与类
     assert "--topbar-h:48px" in src and "--statusbar-h:32px" in src
     assert ".topbar{" in src and ".statusbar{" in src
-    assert "musespiral v0.5.1" in src  # 底栏版本号（随 __version__ 收口同步）
+    # 底栏版本号：从 __version__ 动态锚（2026-11-23 实测批——写死版本号每次发版必红，
+    # 是「测试锚常量」类腐化；改为断言产物与包版本一致，发版零维护）
+    from musespiral import __version__ as _pkg_ver
+    assert f"musespiral v{_pkg_ver}" in src, f"底栏版本应随 __version__={_pkg_ver}（实测批根治写死）"
     assert "root: " in src  # 底栏工作目录前缀
 
 
@@ -1859,9 +1862,14 @@ def test_material_card_score_bar_and_breakdown() -> None:
     assert "--wash:color-mix(in srgb,var(--ink-1) 8%,transparent)" in src
     assert "--wash:var(--wash)" not in all_src
     # mat-row 卡壳（chevron affordance 见专用测试）+ 类型/评级 tag + 未读点/禁用徽章 + 评分数字入展开区
+    # 2026-11-23 实测修复：`open` 必须是 details 的**属性**而非 class 名——
+    # 旧写法 `class="mat-row open"` 让「沉浸」布局 200 行全不展开（实测 0/200）。
+    # 该断言原先锚定的正是 bug 文本（「测试把 bug 锁成语义」判例的又一例）。
     assert (
-        "'<details class=\"mat-row'+(state.mdens==='full'?' open':'')+'\" data-mid=\"'+esc(m.id)+'\">'" in src
+        "'<details class=\"mat-row\"'+(state.mdens==='full'?' open':'')+' data-mid=\"'+esc(m.id)+'\">'" in src
     )
+    # 反向锚：修复后的文本不得回退
+    assert "'<details class=\"mat-row'+(state.mdens==='full'?' open':'')\"" not in src
     assert "g+=(g?'·':'')+DD[i][0]+(b[DD[i][1]]||0)+'/'+DD[i][2];" in src
     assert "esc(MTY[m.type]||m.type)+(meta.line?' · '+esc(meta.line):'')" in src
     assert "(tri.read?'':'<i class=\"unread-dot\" title=\"未读\"></i>')" in src

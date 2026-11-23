@@ -7,7 +7,7 @@ var MEMPTY_T=$('mat-empty-title').textContent,MEMPTY_X=$('mat-empty-text').textC
 function matRow(m){
 var s=m.score,t=s==null?-1:s,lv=t>=80?'hi':t>=60?'mid':'lo',b=m.score_breakdown||{},h='',g='',i,tri=m.triage||{},o=m.origin||{},p=m.payload||{},meta=p.meta||{},bk=meta.book,st=tri.starred?'取消收藏':'收藏',tg=tri.tags||[];
 if(b.depth!=null)for(i=0;i<4;i++){h+='<div class="pbar"><span class="pbar-name">'+DD[i][0]+'</span><span class="pbar-track"><span class="pbar-fill" style="width:'+(b[DD[i][1]]||0)/DD[i][2]*100+'%"></span></span><span class="pbar-n">'+(b[DD[i][1]]||0)+'/'+DD[i][2]+'</span></div>';g+=(g?'·':'')+DD[i][0]+(b[DD[i][1]]||0)+'/'+DD[i][2];}
-return '<details class="mat-row'+(state.mdens==='full'?' open':'')+'" data-mid="'+esc(m.id)+'">'+
+return '<details class="mat-row"'+(state.mdens==='full'?' open':'')+' data-mid="'+esc(m.id)+'">'+
 '<summary class="mat-row-sum" title="展开或收起评分与详情">'+
 '<button class="btn btn-ghost btn-icon dstar'+(tri.starred?' on':'')+'" data-mstar="'+esc(m.id)+'" title="'+st+'" aria-label="'+st+'">'+I('star')+'</button>'+
 (m.type==='image'?'<img class="mat-thumb" loading="lazy" data-mlight="'+esc(m.id)+'" src="'+esc('/api/materials/file?id='+encodeURIComponent(m.id)+'&variant=thumb')+'" alt="" tabindex="0" role="button" aria-label="查看大图" onerror="this.style.visibility=\'hidden\';this.nextElementSibling.style.display=\'inline-flex\'">':'')+

@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.5.2] - 2026-11-23
+
+发布前全功能实测批（46 CLI / 128 端点 / 12 插件 / 11 视图，真实浏览器 + 真实 API 全扫）。
+
+### Fixed
+- **素材库「沉浸」布局不展开**（实测 0/200 行）：`<details>` 的 `open` 被误写成多余 class 名
+  （`class="mat-row open"`）而非 attribute，三种布局切换在视觉上全部失效。修为真 attribute。
+- **书籍搜索此前是空壳**：灰灯与体验模式已就绪，但按 Enter 只弹「R4 批开放」提示不发请求。
+  接上 `POST /api/book/search` → job 轮询 → 结果卡渲染 → 点结果进详情（12 章目录）。
+- **bookengine 缺管理入口**：新增 `musespiral bookengine status|demo|check` 三命令 +
+  三态灰灯（未建设/体验模式/可搜）+ 解释型引导卡 + 体验模式一键开 + FAQ 章节。
+- **书源 URL 导入慢**：`preview`→`apply` 重复拉取 20MB（30.5s→13.0s，URL 原文一次性缓存）。
+- **导入默认选中丢失**：分组代表取末条，末条是「已最新」时整组漏选（0→30 条）。
+- **误导读时提示**：原文案「大包约 1-2s」实为 10-25s，致用户误判卡死关窗口；改真实计时器。
+
+### Added
+- `/api/healthz` 五键健康探针 · `musespiral doctor` 五项环境预检
+- 文案一致性门（7 条机器门：CLI/状态词/插件计数/GIF/版本）
+- `scripts/release.sh` 发版一条龙（清 pycache→文案门→构建→冒烟→隔离 venv twine→tag）
+- `docs/DATA_LAYOUT.md` 数据面语义表（19 项家目录+6 类文章形态）
+- CI 发版流水线（release.yml：tag→测试→构建→pycache 断言→gh release）
+
+### Changed
+- `agent_service` 1,046 行 → `services/agent/` 四簇包 + 20 行 facade（最大文件降至 422 行）
+- CI 首次全绿（此前从未通过：uvx 未预装 / 裸 pytest 缺 sys.path / 依赖面缺 numpy 等 20 处环境耦合）
+
+---
+
 musespiral 全部期次变更记录。格式参照 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，按期次组织（F 编号对应主设计文档 `docs/项目方案/musespiral-公众号图文自动化设计.md` §九~§十八）；日期为该期落地日期。
 
 ## [0.5.1] - 2026-11-23
