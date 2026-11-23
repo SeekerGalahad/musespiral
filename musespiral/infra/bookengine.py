@@ -58,8 +58,22 @@ class BookEngineUnavailable(RuntimeError):
 
 
 def mock_enabled() -> bool:
-    """MUSESPIRAL_ENGINE_MOCK 是否开启（每次现读——测试 monkeypatch 即时生效）。"""
-    return os.environ.get(_MOCK_ENV, "").strip().lower() in ("1", "true", "yes", "on")
+    """体验模式是否开启：环境变量优先，其次用户配置文件（CLI demo on 写）。
+
+    环境变量（每次现读——测试 monkeypatch 即时生效）供测试与临时联调；
+    用户配置文件 `~/.musespiral/bookengine_demo` 供 Studio（launchd 进程不
+    继承 shell env）持久使用（2026-11-23 用户反馈批：mock 只藏代码注释里
+    等于没有）。两处任一为开即开。
+    """
+    if os.environ.get(_MOCK_ENV, "").strip().lower() in ("1", "true", "yes", "on"):
+        return True
+    try:
+        from .. import config
+
+        demo = (config.home_dir() / "bookengine_demo").read_text(encoding="utf-8")
+        return demo.strip() == "on"
+    except (OSError, ImportError):
+        return False
 
 
 def _request_json(path: str, *, timeout: float, method: str = "GET", body: dict[str, Any] | None = None) -> dict[str, Any]:

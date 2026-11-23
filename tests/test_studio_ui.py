@@ -179,6 +179,7 @@ CONTRACT_PATHS = {
     # /api/agent/runs，job 轮询走 `/api/jobs/${id}` 模板串（不入单引号集合）。
     # POST /api/book/search 本批未接（搜索态占位，结果渲染 R4 批）——不入前端契约。
     "/api/booksource/engine",
+    "/api/action/bookengine_demo",
     # R4 导入弹窗批（2026-11-18，书源实弹修复与导入弹窗设计 §三）：解析预览
     # POST /api/booksource/import（零落库）+ 落库 POST /api/booksource/import_apply
     # （selections 按 URL + importKeep 三开关）——订阅态「导入书源」入口两步链。
@@ -3783,14 +3784,18 @@ def test_books_search_subs_placeholder_and_engine_lamp() -> None:
     # M1 分域读取后，否向断言的检查域回到全产物并集（=单文件时代的
     # 等价语料）：退役文案/旧类名从任一产物回流都必须被抓到。
     all_src = _all()
-    # 引擎灯：GET /api/booksource/engine→绿点可搜/灰点未就绪；absent 搜索框 disabled
+    # 引擎灯三态（2026-11-23 用户反馈批）：未建设/体验模式/可搜——旧版只有一句
+    # 「未就绪」用户无法区分「坏了」还是「没建」，现按状态给不同 headline+指引。
     assert "getJSON('/api/booksource/engine')" in src
-    assert "(ok?'ok':'unknown')" in src
-    assert "bookengine '+(ok?'可搜':'未就绪')" in src
+    assert "var dotCls=ok?'ok':'unknown';" in src
+    assert "label=ok?(mock?'体验模式':'可搜'):'未建设'" in src
     assert "$('bk-search-box').disabled=!ok;" in src
-    # 详情/搜索双引导文案（absent=引擎未就绪；ok=R4 批开放）
-    assert "'bookengine 引擎未就绪'" in src
-    assert "'搜索结果渲染 · R4 批'" in src
+    # 三态引导文案各自在位（absent 说「未建设非故障」；mock 说假数据；ok 说搜索）
+    assert "'引擎未建设，但书源管理全部可用'" in src
+    assert "'体验模式：用假数据跑通全流程'" in src
+    assert "'搜索书名 / 作者 / 关键词'" in src
+    # 体验模式一键按钮（未建设时出现）
+    assert 'id="bk-guide-demo"' in src
     # 订阅态：导入弹窗入口钮（两步导入已落地）；订阅表本身仍 R4 批
     assert 'id="im-open"' in src and "导入书源" in src
     assert "订阅表 R4 批落地" in src

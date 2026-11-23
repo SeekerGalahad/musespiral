@@ -2192,14 +2192,30 @@ function bkDigestInit(){try{BK.digest=localStorage.getItem('musespiral-book-dige
 var b=$('bk-digest');if(b){b.checked=BK.digest;$('bk-digest-off').hidden=BK.digest;}}
 function bkSub(m){$('bk-search').hidden=m!=='search';$('bk-detail').hidden=m!=='detail';$('bk-subs').hidden=m!=='subs';}
 function bkMode(m,kw){bkSub(m);if(m==='search'){bkLamp();if(kw)$('bk-search-box').value=kw;}}
+// 引擎三态灰灯（2026-11-23 用户反馈批）：未建设/体验模式/可搜——「未建设不是
+// 故障」，须把「为什么 + 现在能干什么 + 想试怎么办」讲清楚（旧版只有一句「未就绪」，
+// 用户无法判断是坏了还是没建）
 async function bkLamp(){
 var d=null;
 try{d=await getJSON('/api/booksource/engine');}catch(err){}
-var ok=!!(d&&d.status==='ok');
-$('bk-lamp').innerHTML='<span class="health-dot '+(ok?'ok':'unknown')+'" title="'+(ok?'bookengine 可搜':'bookengine 未运行，搜索暂不可用')+'"></span>bookengine '+(ok?'可搜':'未就绪');
+var st=(d&&d.status)||'absent',ver=(d&&d.version)||'';
+var mock=(st==='ok'&&(ver==='mock'||d.mock)),ok=(st==='ok');
+var dotCls=ok?'ok':'unknown';
+var label=ok?(mock?'体验模式':'可搜'):'未建设';
+$('bk-lamp').innerHTML='<span class="health-dot '+dotCls+'" title="'+(ok?(mock?'mock 假数据可走全流程':'bookengine 在线可搜'):'引擎未建设（R1-R2 分期未开工），非故障')+'"></span>bookengine '+label;
 $('bk-search-box').disabled=!ok;
-$('bk-guide-t').textContent=ok?'搜索结果渲染 · R4 批':'bookengine 引擎未就绪';
-$('bk-guide-x').textContent=ok?'四桶搜索与多源换源 R4 批开放；详情可从素材行《书名》深链进入。':'搜索与取文暂不可用，订阅与书源管理不受影响（R1-R2 建设中）。';
+if(ok&&mock){
+$('bk-guide-t').textContent='体验模式：用假数据跑通全流程';
+$('bk-guide-x').textContent='搜索→选书→选章→入素材库全链可体验，内容为确定性假件。关体验模式：musespiral bookengine demo off';
+}else if(ok){
+$('bk-guide-t').textContent='搜索书名 / 作者 / 关键词';
+$('bk-guide-x').textContent='四桶搜索与多源换源；详情可从素材行《书名》深链进入。';
+}else{
+$('bk-guide-t').textContent='引擎未建设，但书源管理全部可用';
+$('bk-guide-x').textContent='缺的只是「搜索书籍→选章入素材库」（需 JVM 引擎抓取，R1-R2 分期）。书源导入/订阅/库管理不受影响；想先体验完整流程可开体验模式。';
+}
+// 体验按钮只在未建设时出现（已可搜/体验模式中不重复引导）
+var demoBtn=$('bk-guide-demo');if(demoBtn)demoBtn.hidden=!!ok;
 }
 async function bkOpen(bu,su,name){
 bkSub('detail');
@@ -2529,6 +2545,15 @@ $('bk-subs-back').addEventListener('click',function(){location.hash='#books';});
 // FEAT-5 空态引导：搜索态占位引导卡的可行动按钮（现在就能做的事，而非等待 R4 批）
 $('bk-guide-subs').addEventListener('click',function(){location.hash='#books?tab=subs';});
 $('bk-guide-import').addEventListener('click',imOpen);
+// 体验模式一键开（2026-11-23）：引擎未建设期也能跑通「搜索→选书→选章→入素材库」
+// ——后端写用户配置文件后提示重启（launchd 进程不继承 shell env）
+$('bk-guide-demo').addEventListener('click',async function(){
+var btn=this;btn.disabled=true;
+try{
+await postJSON('/api/action/bookengine_demo',{confirm:true,mode:'on'});
+toast('体验模式已开——请重启 Studio 生效：~/.musespiral/local/ctl.sh restart',OK);
+}catch(err){toast('开启失败：'+err.message,ER);}
+finally{btn.disabled=false;}});
 $('bk-search-box').addEventListener('keydown',function(e){
 if(e.isComposing||e.keyCode===229||e.key!=='Enter')return;
 if(!this.value.trim())return;

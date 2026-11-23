@@ -175,8 +175,24 @@ def _book_toc_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> dict[
 
 __all__ = [
     "_action_book_search",
+    "_action_bookengine_demo",
     "_action_from_chapters",
     "_book_info_payload",
     "_book_original_payload",
     "_book_toc_payload",
 ]
+
+def _action_bookengine_demo(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
+    """POST /api/action/bookengine_demo：体验模式开关（2026-11-23 用户反馈批）。
+
+    mode=on/off/status（缺省 on）。写用户配置文件后**需重启 Studio 生效**
+    ——launchd 进程不继承 shell env，故走配置而非环境变量（响应里明说）。
+    """
+    from ..services import bookengine_admin
+
+    mode = str(data.get("mode") or "on").strip().lower()
+    if mode not in ("on", "off", "status"):
+        raise _HttpError(400, "mode 必须是 on/off/status")
+    message = bookengine_admin.set_demo(mode)
+    return {"ok": True, "mode": mode, "message": message,
+            "need_restart": mode != "status"}

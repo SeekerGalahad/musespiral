@@ -461,6 +461,8 @@ CONTRACT_POST_EXACT = {
     # §3.10 新增（R3 书源接驳+R3.5 提炼 2026-11-18：两动作——聚合搜索 job
     # book_search / 选章入素材库 job book_fetch；GET+3/POST+2 同批入锁）
     "/api/book/search", "/api/materials/from-chapters",
+    # 2026-11-23 用户反馈批：体验模式开关（引擎未建设期的 mock 体验入口）
+    "/api/action/bookengine_demo",
     # 集成接线轮（2026-11-18）：长任务协作式取消（R3.5 正典 §2.2 取消语义
     # 落点——已完成章保留入库/未完成章放弃；全域 job 可用，book_fetch 设
     # 检查点=取文逐章/提炼逐 pass）。POST 53→54。

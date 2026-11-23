@@ -568,6 +568,8 @@ def engine_status(*, client: bookengine.BookEngineClient | None = None) -> dict[
             "base_url": bookengine.BASE_URL,
             "version": payload.get("version") or "",
             "sources_loaded": payload.get("sources_loaded") or 0,
+            # 体验模式标记（2026-11-23）：前端据此把「可搜」区分成「体验（假数据）」
+            "mock": bool(payload.get("mock")) or str(payload.get("version") or "") == "mock",
         }
     return {
         "ok": True,

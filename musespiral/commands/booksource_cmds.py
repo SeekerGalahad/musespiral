@@ -269,3 +269,55 @@ def subs_list() -> None:
             f" {state} {sub['name']}  {sub['url']}"
             f"  （间隔 {sub['update_interval_h']}h{'，静默' if sub['silent_update'] else '，需确认'}）"
         )
+
+# ── bookengine 管理（2026-11-23 用户反馈批：引擎缺席期缺管理入口）────────
+
+
+@click.group()
+def bookengine() -> None:
+    """书籍引擎（bookengine）管理：状态/启停/日志。
+
+    引擎=JVM 微服务（:8792，R1-R2 分期建设）。缺席时书源导入/订阅/管理
+    全部可用，只有「搜索书籍→选章入素材库」不可用。
+    """
+
+
+@bookengine.command("status")
+def engine_status_cmd() -> None:
+    """引擎三态：未建设 / 建设中 / 可搜（含下一步指引）。"""
+    from ..services import bookengine_admin
+
+    st = bookengine_admin.status()
+    click.echo(st["headline"])
+    for line in st["detail"]:
+        click.echo("  " + line)
+    if st["next_steps"]:
+        click.echo("下一步：")
+        for line in st["next_steps"]:
+            click.echo("  · " + line)
+
+
+@bookengine.command("demo")
+@click.argument("mode", type=click.Choice(["on", "off", "status"], case_sensitive=False))
+def engine_demo(mode: str) -> None:
+    """mock 体验模式开/关（引擎 mock 环境开关）。
+
+    on=书籍搜索用确定性假数据跑全流程（搜索→选书→选章→入素材库），
+    引擎 R1-R2 未建设期也能体验；off=恢复真实引擎探测。改后需重启
+    Studio 生效（launchd: ctl.sh restart）。
+    """
+    from ..services import bookengine_admin
+
+    click.echo(bookengine_admin.set_demo(mode))
+
+
+@bookengine.command("check")
+def engine_check() -> None:
+    """全链自检：health/search/info/toc 四端点逐项探测。"""
+    from ..services import bookengine_admin
+
+    ok, lines = bookengine_admin.check_endpoints()
+    for line in lines:
+        click.echo(line)
+    if not ok:
+        sys.exit(2)

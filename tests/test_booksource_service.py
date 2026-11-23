@@ -446,10 +446,20 @@ def test_engine_status_ok_passes_through(monkeypatch) -> None:
         bookengine, "_get", lambda _p, *, timeout: {"ok": True, "version": "0.1", "sources_loaded": 3}
     )
     status = svc.engine_status()
+    # mock 键（2026-11-23）：真引擎 version≠mock → False（前端据此区分体验/真实可搜）
     assert status == {
         "ok": True, "status": "ok", "base_url": "http://127.0.0.1:8792",
-        "version": "0.1", "sources_loaded": 3,
+        "version": "0.1", "sources_loaded": 3, "mock": False,
     }
+
+def test_engine_status_mock_flag_true_in_demo_mode(monkeypatch) -> None:
+    """体验模式（version=mock）→ status.ok 且 mock=True（灰灯显示「体验模式」）。"""
+    monkeypatch.setattr(
+        bookengine, "_get",
+        lambda _p, *, timeout: {"ok": True, "version": "mock", "sources_loaded": 1, "mock": True},
+    )
+    status = svc.engine_status()
+    assert status["status"] == "ok" and status["mock"] is True
 
 
 def test_engine_client_available_and_loopback_pinned(monkeypatch) -> None:

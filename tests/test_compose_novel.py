@@ -677,7 +677,8 @@ def test_contract_lock_membership() -> None:
     # /api/action/title_ab）；FEAT-P1B 批（2026-11-23）：GET 48→49
     # （/api/writing_stats 写作节奏读面）；W1-B1 批（2026-11-23）：GET 49→50
     # （/api/healthz 轻量探针五键——/api/health 九键面板不动）
-    assert len(CONTRACT_POST_EXACT) == 77
+    # 2026-11-23 用户反馈批：POST 77→78（/api/action/bookengine_demo 体验模式开关）
+    assert len(CONTRACT_POST_EXACT) == 78
     assert len(CONTRACT_GET_EXACT) == 50
 
 

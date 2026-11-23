@@ -25,7 +25,7 @@ from typing import Any, Callable
 from urllib.parse import urlparse
 
 from ..agent_actions import _action_agent_adopt, _action_agent_run
-from ..book_actions import _action_book_search
+from ..book_actions import _action_book_search, _action_bookengine_demo
 from ..booksource_actions import (  # R0 书源功能（契约 §3.9）：五动作
     _action_import,
     _action_import_apply,
@@ -365,4 +365,5 @@ ROUTES: dict[str, Callable[[_StudioContext, dict[str, Any]], dict[str, Any]]] = 
     "/api/booksource/subs/add": _action_subs_add,  # R0：订阅新增/更新（同 url upsert）
     "/api/booksource/subs/del": _action_subs_del,  # R0：订阅删除
     "/api/book/search": _action_book_search,  # R3：聚合搜索 → job book_search（引擎代理）
+    "/api/action/bookengine_demo": _action_bookengine_demo,  # 2026-11-23：体验模式开关
 }
