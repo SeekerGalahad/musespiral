@@ -1548,10 +1548,56 @@ def _agent_write_surface_violations(source: str) -> list[str]:
 
 
 def test_rule_d5_agent_service_write_surface_only_in_adopt() -> None:
-    """规则 D5：run 永不直写 materials/正稿——写面 API 只在 adopt_* 体内。"""
-    src = (MUSESPIRAL_ROOT / "services" / "agent_service.py").read_text(encoding="utf-8")
+    """规则 D5：run 永不直写 materials/正稿——写面 API 只在 adopt_* 体内。
+
+    W2-B4 as-built（2026-11-23）：agent_service 拆为 services/agent/ 包后，
+    写面真身落在 agent/adopt.py（唯一外部写面簇）——门改扫该文件（扫门面
+    会平凡通过=门失守；扫全包过宽但无害，取最贴职责的单文件）。
+    """
+    src = (MUSESPIRAL_ROOT / "services" / "agent" / "adopt.py").read_text(encoding="utf-8")
     violations = _agent_write_surface_violations(src)
-    assert not violations, "agent_service 写面越界:\n" + "\n".join(violations)
+    assert not violations, "agent 写面越界:\n" + "\n".join(violations)
+    # 门面（agent_service.py）不得重新出现写面代码（防未来往回塞）
+    facade = (MUSESPIRAL_ROOT / "services" / "agent_service.py").read_text(encoding="utf-8")
+    assert not _agent_write_surface_violations(facade), "agent_service 门面出现写面代码"
+
+
+def test_agent_service_facade_dir_contract() -> None:
+    """facade 对拍（W2-B4）：agent_service 门面公开名集合=拆分前 96 名（防 re-export 漂移）。
+
+    96 名基线取自拆分前模块 dir() 实拍（含模块级 import 名与下划线私有名
+    ——测试直用 `_execute`/`_make_run_id` 等私有名，门面必须全量转发）。
+    """
+    import musespiral.services.agent_service as facade
+
+    expected = {
+        "AIError", "AgentServiceError", "Any", "BUILTIN_PLANS", "Callable", "ChatFn",
+        "JobStore", "MATERIAL_EXCERPT_MAX", "PLAN_SYNTHESIS", "PLAN_TAG_BATCH",
+        "PRUNE_KEEP", "Path", "RUNS_DIR", "RUN_FILE", "STATUS_BUDGET_STOPPED",
+        "STATUS_DONE", "STATUS_FAILED", "STATUS_INTERRUPTED", "STATUS_RUNNING",
+        "STEPS_DIR", "STEP_RUNNING", "SYNTHESIS_MAX_MATERIALS", "SYNTHESIS_MIN_MATERIALS",
+        "SYNTHESIS_OP", "SYNTHESIS_SOURCE_ID", "SYNTHESIS_URI_SCHEME", "Sequence",
+        "TASKS", "_LICENSE_SEVERITY", "_RUN_ID_RE", "_adopt_licenses",
+        "_apply_source_template", "_atomic_write", "_compose_slug", "_ensure_ai_ready",
+        "_excerpts", "_execute", "_finish_and_persist", "_gateway_chat_fn",
+        "_interrupted_run_ids", "_iso_from_mtime", "_job_result", "_license_note_of",
+        "_license_snapshot", "_load_materials", "_make_run_id", "_now", "_now_iso",
+        "_read_json", "_require_done_synthesis", "_resolve_plan", "_run_materials",
+        "_run_meta", "_snapshot_notes", "_summary", "_synthesis_text",
+        "_valid_run_id", "_write_json", "adopt", "adopt_compose", "adopt_material",
+        "agent_budgets", "ai_configured", "annotations", "apply_prompt_overrides",
+        "blocks_from_markdown", "build_run", "build_synthesis", "build_tag_batch",
+        "chat_policed", "config", "create_run", "datetime", "finish_attached_run",
+        "hashlib", "job_fn", "json", "list_runs", "load_override", "material_body",
+        "materials_service", "model", "open_attached_run", "parse_ai_confidence",
+        "prune", "re", "read_run", "run_dir", "run_plan", "runs_root",
+        "sources_service", "step_templates", "strictest_license", "submit_to_runner",
+        "uuid", "validate_plan",
+    }
+    got = {n for n in dir(facade) if not n.startswith("__")}
+    assert got == expected, (
+        f"门面符号集漂移——缺失: {sorted(expected - got)}; 多出: {sorted(got - expected)}"
+    )
 
 
 def test_rule_d5_gate_catches_violations() -> None:
