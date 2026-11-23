@@ -9,7 +9,7 @@
 
 **视频 / 音频 / 字幕 / 文档 / 网页 / 书籍 → 转写切片 → 结构化成稿 → 多平台发布 → 反哺回素材库**
 
-![demo](docs/demo.gif)
+![demo](https://raw.githubusercontent.com/SeekerGalahad/musespiral/main/docs/demo.gif)
 
 > 25 秒看完：素材库 → 创作工坊的逐块裁决 → 文章里的时间戳锚 → 洞察里的写作节奏。
 
@@ -191,7 +191,7 @@ musespiral studio --root tests/fixtures/studio_demo
 - **可静态校验**——保存流水线时检查相邻节点类型接不接得上
 - **可跨语言**——`exec` runtime 支持任意可执行程序
 
-### 内置 9 个插件
+### 内置 12 个插件
 
 | 插件 | 类型 | 职责 |
 |---|---|---|
@@ -204,6 +204,9 @@ musespiral studio --root tests/fixtures/studio_demo
 | `frame-grab` | process | 抽关键帧 / 裁剪片段（避开转场，窗口感知锚） |
 | `article-writer` | process | 组织成带时间戳锚的图文稿（AI + 模板双路径） |
 | `material-sink` | sink | 落库为素材（preview 态 + 血统链） |
+| `duration-switch` | control | 按时长路由（>300s 走完整切片链，短视频直出成稿） |
+| `refine-segments` | process | 循环体工人：逐段精炼口语转写为书面语（loop 语义实战） |
+| `word-count` | sink | 字数/词数/行数统计（`exec` runtime 实战：bash + stdin/stdout JSON） |
 
 **写自己的插件**：放一个目录到 `~/.musespiral/plugins/<id>/`，含 `manifest.json` + `plugin.py`。`manifest 即 UI`——插件详情页自动从清单渲染，不用写一行 HTML。
 
@@ -253,13 +256,14 @@ musespiral 不与它们竞争单项能力，而是**把「素材 → 成稿 → 
 
 ## 状态
 
-**Alpha**（v0.5 开发中）。核心链路已跑通：
+**Beta**（v0.5.0）。核心链路已跑通：
 
 - **3212 个测试通过**（1 个 e2e 需真机凭证，默认跳过）
-- 9 个插件、11 个前端视图
+- 12 个插件、11 个前端视图
 - 真实素材验证：513 秒中文讲座 → 221 段转写 → 8 关键帧 → 带时间戳锚的图文稿 → 素材库
+- 发布链路真机验证：Markdown → 审核 → 图片上传 → 公众号**草稿创建成功**
 
-**未完成**：真实发布链路（需公众号凭证）、扫描版 PDF 的 OCR、`exec` runtime（非 Python 插件）。
+**未完成**：扫描版 PDF 的 OCR、公众号正式发表（freepublish 需认证主体，草稿之后目前人工后台完成）。
 
 ---
 

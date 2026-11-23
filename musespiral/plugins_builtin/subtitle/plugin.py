@@ -222,12 +222,15 @@ def run(inputs: dict, config: dict, ctx: Any) -> dict:
     # validate_pipeline_contract 会判「必需输入端口未被供给」而拒整条链
     # （2026-11-20 实测：subtitle→key-segment→frame-grab 链因此断裂）。
     # 字幕与媒体可以不同源（如字幕来自别处），故 media_path 是可选输入：
-    # 给了就透传，没给就不出现在输出里（此时下游只能到 article-writer 为止，
-    # 无法抽帧——这是能力边界，不是缺陷）。
+    # 给了就透传，没给则**恒产出 None**（2026-11-23 扫尾裁决——「声明即产出」
+    # 是 manifest outputs 的设计原则（正典 §4.2：outputs 不使用 required），
+    # 引擎按全键校验，键缺席=OutputContractError 判失败；产出 None 让下游
+    # 自己可读降级（frame-grab 守卫对 None/空串报「缺少输入 media_path」）。
     out: dict[str, Any] = {
         "transcript": segments,
         "duration_s": round(duration, 3),
         "source_kind": "subtitle" + suffix,
+        "media_path": None,
     }
     media_raw = inputs.get("media_path")
     if media_raw is not None and str(media_raw).strip():
@@ -237,6 +240,6 @@ def run(inputs: dict, config: dict, ctx: Any) -> dict:
         out["media_path"] = str(media)
         ctx.log(f"subtitle: 透传 media_path → {media.name}（下游可抽帧）")
     else:
-        ctx.log("subtitle: 未提供 media_path——下游只能到成稿，无法抽帧")
+        ctx.log("subtitle: 未提供 media_path——输出 None，下游只能到成稿，无法抽帧")
 
     return out

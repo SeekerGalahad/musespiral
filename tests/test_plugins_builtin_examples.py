@@ -109,11 +109,12 @@ def _write_srt(path: Path, cues: list[tuple[float, float, str]]) -> Path:
 
 
 def _write_srt_with_media(
-    tmp_path: Path, cues: list[tuple[float, float, str]], name: str = "clip.srt"
+    tmp_path: Path, cues: list[tuple[float, float, int | str]], name: str = "clip.srt"
 ) -> tuple[Path, Path]:
-    """字幕 + 配套哑媒体文件（subtitle 声明 media_path 输出且只在给了输入时
-    才产出——引擎 OutputContractError 按 manifest 全键校验，故引擎级链必须
-    提供媒体路径；哑文件只需存在，subtitle 只查 is_file）。"""
+    """字幕 + 配套哑媒体文件（本批引擎级链要走到抽帧断言，故给真实媒体路径；
+    2026-11-23 扫尾后 subtitle 无媒体输入也恒产出 media_path=None 不再判失败，
+    但 None 时 frame-grab 守卫会拒——需要抽帧产物的用例仍须哑媒体；哑文件
+    只需存在，subtitle 只查 is_file）。"""
     srt = _write_srt(tmp_path / name, cues)
     media = tmp_path / (name.rsplit(".", 1)[0] + ".mp4")
     media.write_bytes(b"\x00\x00")

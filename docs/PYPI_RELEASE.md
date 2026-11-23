@@ -54,10 +54,10 @@ gh release create v0.5.0 dist/*.whl dist/*.tar.gz \
   --title "v0.5.0" --notes-file CHANGELOG.md
 ```
 
-## 已知渲染差异
+## 已知渲染差异（2026-11-23 扫尾，均已解决）
 
-- README 的演示图写的是仓库相对路径 `docs/demo.gif`：**GitHub 正常显示，PyPI 项目页会显示为断链**（sdist 不含 `docs/`）。如需 PyPI 页也显示，把该行改成 `https://raw.githubusercontent.com/SeekerGalahad/musespiral/main/docs/demo.gif` 再发布。
-- `Development Status :: 4 - Beta` 与 README「Alpha」文案口径不同，发正式版前统一（要么改 README，要么改分类器）。
+- ~~README 的演示图写的是仓库相对路径 `docs/demo.gif`：PyPI 项目页会显示为断链~~ → **已改绝对 URL** `https://raw.githubusercontent.com/SeekerGalahad/musespiral/main/docs/demo.gif`，GitHub 与 PyPI 双端正常。
+- ~~`Development Status :: 4 - Beta` 与 README「Alpha」文案口径不同~~ → **已统一为 Beta**（README 状态段改 Beta：3212 测试 + 发布链真机草稿验证 + 插件 DSL 实战三路验证，Beta 符合实际成熟度）。
 
 ## 版本号
 

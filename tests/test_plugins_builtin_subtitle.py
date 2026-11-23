@@ -267,10 +267,18 @@ def test_media_path_passthrough_when_given(srt_file: Path, tmp_path: Path) -> No
     assert r["media_path"] == str(media)
 
 
-def test_no_media_path_when_absent(srt_file: Path) -> None:
-    """没给 media_path 就不出现在输出——纯字幕链只能到成稿，无法抽帧。"""
+def test_media_path_none_when_absent(srt_file: Path) -> None:
+    """没给 media_path 输入 → 输出**恒含该键、值为 None**（2026-11-23 扫尾裁决）。
+
+    「声明即产出」是 manifest outputs 的设计原则：引擎按全键校验，键缺席=
+    OutputContractError 判失败。旧断言「不在输出里」把缺陷锁成语义（PLUGIN-DEMO
+    批发现：无 media_path 输入的字幕链在引擎级必判失败）。下游 frame-grab 对
+    None 有可读守卫（「缺少输入 media_path」）——能力边界由消费侧降级表达。
+    """
     r = sub.run({"subtitle_path": str(srt_file)}, {}, _Ctx())
-    assert "media_path" not in r
+    assert r["media_path"] is None
+    # 全键契约断言：输出键集与 manifest.outputs 声明完全一致（防未来再漂移）
+    assert set(r) == {"transcript", "duration_s", "source_kind", "media_path"}
 
 
 def test_nonexistent_media_path_rejected(srt_file: Path, tmp_path: Path) -> None:
@@ -294,3 +302,26 @@ def test_chain_with_frame_grab_contract_valid(tmp_path: Path) -> None:
         for i in ["subtitle", "key-segment", "frame-grab", "article-writer", "material-sink"]
     ]
     assert validate_pipeline_contract(nodes) == []
+
+
+def test_engine_subtitle_without_media_no_contract_fail(tmp_path: Path, srt_file: Path) -> None:
+    """引擎级回归（2026-11-23 扫尾）：无 media_path 输入的字幕单节点链不再被
+    OutputContractError 判失败——subtitle 恒产出 media_path=None（键在值空）。
+
+    旧行为（键缺席）的失败路径：engine._exec 的 `declared - set(outputs)` 判
+    「缺输出键 ['media_path']」→ 节点 failed——PLUGIN-DEMO 批实测发现。
+    """
+    from musespiral.services import pipeline as psp
+
+    srt = tmp_path / "pure.srt"
+    srt.write_text(
+        "1\n00:00:00,000 --> 00:00:03,000\n纯字幕链，没有配套媒体\n", encoding="utf-8"
+    )
+    result = psp.run_pipeline(
+        [{"id": "sub", "plugin": "subtitle", "inputs": {"subtitle_path": str(srt)}}],
+        run_root=tmp_path / "runs",
+        run_id="sub-nomedia-0001",
+    )
+    assert result["status"] == "done", str(result)
+    sub_step = next(s for s in result["steps"] if s["step"] == "sub")
+    assert sub_step["status"] == "ok"
