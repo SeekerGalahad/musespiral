@@ -39,7 +39,6 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
 
       # 门：release.yml 自身有 High 级发现 → 本 job 红 → 下游 release 不发
-      - name: 门——release.yml 有 High 即红（Medium 及以下不阻塞）
       - name: 装 uv（runner 不预装 uvx——2026-11-23 实测判例）
         uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
       - name: zizmor 门（High 即红）
