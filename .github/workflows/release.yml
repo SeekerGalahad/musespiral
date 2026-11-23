@@ -36,7 +36,7 @@ jobs:
         with:
           persist-credentials: false   # 静态扫描不需要 git 凭证（artipacked 门）
 
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
 
       # 门：release.yml 自身有 High 级发现 → 本 job 红 → 下游 release 不发
       - name: 装 uv（runner 不预装 uvx——2026-11-23 实测判例）
@@ -62,7 +62,7 @@ jobs:
         with:
           persist-credentials: false   # 发布经 GH_TOKEN env，不依赖 checkout 凭证
 
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
