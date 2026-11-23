@@ -666,10 +666,14 @@ def test_volume_five_anchors_with_batch_numbers() -> None:
     view_files = sorted((STUDIO / "assets" / "views").glob("*.js"))
     biggest = max(p.stat().st_size for p in view_files)
     # 总交付面（ARCH-1 口径重校）：壳 + 手写 assets（剥 editor/ vendor）
+    # 2026-11-24 W3-3a：与 test_build_ui 同口径——构建输入源（assets/src/）不入
+    # 交付面（用户不下载它；产物才是）。两处口径必须一致，否则同一次改动一门绿一门红。
     handwritten = UI_HTML.stat().st_size + sum(
         p.stat().st_size
         for p in (STUDIO / "assets").rglob("*")
-        if p.is_file() and "editor/" not in p.relative_to(STUDIO).as_posix()
+        if p.is_file()
+        and "editor/" not in p.relative_to(STUDIO).as_posix()
+        and "src/" not in p.relative_to(STUDIO).as_posix()
     )
     first_screen = shell + core + biggest
     assert shell <= SHELL_MAX, f"壳 {shell}B > {SHELL_MAX}B"

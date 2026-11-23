@@ -599,14 +599,29 @@ def _assets_files() -> list[Path]:
     return sorted(p for p in (STUDIO / "assets").rglob("*") if p.is_file())
 
 
+# 构建输入源目录（2026-11-24 W3-3a：ESM 骨架批立 assets/src/）
+# 口径纪律：交付面度量「用户下载的字节」——src/ 是**构建输入**（与 ui.js/ui.css
+# 同性质：产物由 build_ui.py 生成后落 assets/ 各处），自身不随包分发到浏览器，
+# 故不入总量锚。清单式排除（不按后缀泛排，防误排未来产物）。
+SOURCE_DIRS = ("assets/src",)
+
+
 def _handwritten_files() -> list[Path]:
-    """手写产物（F1 起的体量门口径）：assets/ 全树剥离 assets/editor/ vendor 子树。
+    """手写产物（F1 起的体量门口径）：assets/ 全树剥离 vendor 子树与构建源目录。
 
     editor.js/editor.css 是手写源（顶层文件，不入 vendor 子树，照计）；
     vendor 的体量治理走 VENDOR_PINNED 清单钉死（见模块头 F1 注释档）。
+    assets/src/（W3 ESM 化输入源）同理不入交付面——见 SOURCE_DIRS。
     """
-    return [p for p in _assets_files()
-            if not p.relative_to(STUDIO).as_posix().startswith(VENDOR_DIR + "/")]
+    out = []
+    for p in _assets_files():
+        rel = p.relative_to(STUDIO).as_posix()
+        if rel.startswith(VENDOR_DIR + "/"):
+            continue
+        if any(rel.startswith(d + "/") for d in SOURCE_DIRS):
+            continue
+        out.append(p)
+    return out
 
 
 def _assets_total_bytes() -> int:
