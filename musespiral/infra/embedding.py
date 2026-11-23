@@ -88,6 +88,33 @@ def _request(method: str, path: str, body: bytes | None, timeout: int) -> bytes:
 # ---- 可用性探测 ----------------------------------------------------------------
 
 
+def embed_diagnose(timeout: int = 5) -> dict:
+    """语义检索就绪诊断（2026-11-24 W5-F3）：不只给布尔，给「为什么 + 怎么办」。
+
+    返回 {ready, ollama_up, model_present, model, host, next_steps[]}——
+    next_steps 是给用户/前端灰灯的**可行动指引**（语义检索从未真实启用过的
+    实测发现：semantic_ready=false 无任何提示，用户无从知道差什么）。
+    """
+    host = _host()
+    model = _model()
+    try:
+        raw = _request("GET", "/api/tags", None, timeout)
+        data = json.loads(raw.decode("utf-8", "replace"))
+        names = {str(m.get("name", "")) for m in data.get("models", []) if isinstance(m, dict)}
+        present = any(n == model or n.split(":", 1)[0] == model for n in names)
+        steps = []
+        if not present:
+            steps.append(f"拉取模型：ollama pull {model}")
+        return {"ready": present, "ollama_up": True, "model_present": present,
+                "model": model, "host": host, "next_steps": steps}
+    except Exception:
+        return {"ready": False, "ollama_up": False, "model_present": False,
+                "model": model, "host": host,
+                "next_steps": ["启动 Ollama：ollama serve（或打开 Ollama.app）",
+                               f"拉取模型：ollama pull {model}",
+                               "重建索引：Studio 素材页「重建语义索引」或 POST /api/materials/reindex {confirm:true}"]}
+
+
 def embed_available(timeout: int = 5) -> bool:
     """探测 Ollama + 目标模型是否就位（/api/tags 模型名单比对）——从不抛错。
 

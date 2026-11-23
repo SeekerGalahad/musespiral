@@ -455,10 +455,18 @@ def _material_search_payload(ctx: _StudioContext, query: dict[str, list[str]]) -
         }
     except ValueError as exc:
         raise _HttpError(400, str(exc)) from None
+    # 语义就绪诊断（2026-11-24 W5-F3）：不只给布尔，给「为什么未就绪+怎么启用」
+    # ——实测发现 semantic_ready=false 无任何指引，用户无从知道差 Ollama 还是差模型。
+    diag = None
+    if not search_service.semantic_ready():
+        from ..infra.embedding import embed_diagnose
+
+        diag = embed_diagnose(timeout=3)
     return {
         "ok": True,
         "mode": mode,
         "semantic_ready": search_service.semantic_ready(),
+        **({"semantic_hint": diag} if diag else {}),
         "items": items,
         "total": len(items),
     }

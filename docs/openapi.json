@@ -1,0 +1,3037 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "musespiral Studio local API",
+  "version": "0.5.2",
+  "description": "本地回环 API（127.0.0.1:8766）。全部 POST 动作需 confirm:true。本规格由 scripts/gen_openapi.py 从路由自省清单生成。"
+ },
+ "servers": [
+  {
+   "url": "http://127.0.0.1:8766"
+  }
+ ],
+ "paths": {
+  "/api/action/adapt": {
+   "post": {
+    "summary": "POST /api/action/adapt（动作接口，必须带 confirm:true）；参数别名：article→path",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm",
+         "path",
+         "platform"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         },
+         "path": {
+          "type": "string"
+         },
+         "platform": {
+          "type": "string"
+         },
+         "article": {
+          "type": "string",
+          "description": "别名，等价 path"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/adopt_generated": {
+   "post": {
+    "summary": "POST /api/action/adopt_generated（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/annotate_rewrite": {
+   "post": {
+    "summary": "POST /api/action/annotate_rewrite（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/batch_adapt": {
+   "post": {
+    "summary": "POST /api/action/batch_adapt（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/bookengine_demo": {
+   "post": {
+    "summary": "POST /api/action/bookengine_demo（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/cover": {
+   "post": {
+    "summary": "POST /api/action/cover（动作接口，必须带 confirm:true）；参数别名：article→path",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm",
+         "path"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         },
+         "path": {
+          "type": "string"
+         },
+         "article": {
+          "type": "string",
+          "description": "别名，等价 path"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/discover_draft": {
+   "post": {
+    "summary": "POST /api/action/discover_draft（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/fetch": {
+   "post": {
+    "summary": "POST /api/action/fetch（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/generate_image": {
+   "post": {
+    "summary": "POST /api/action/generate_image（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/ingest": {
+   "post": {
+    "summary": "POST /api/action/ingest（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/media_verify": {
+   "post": {
+    "summary": "POST /api/action/media_verify（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/pack": {
+   "post": {
+    "summary": "POST /api/action/pack（动作接口，必须带 confirm:true）；参数别名：article→path",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm",
+         "path",
+         "platform"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         },
+         "path": {
+          "type": "string"
+         },
+         "platform": {
+          "type": "string"
+         },
+         "article": {
+          "type": "string",
+          "description": "别名，等价 path"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/pipeline": {
+   "post": {
+    "summary": "POST /api/action/pipeline（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/publish": {
+   "post": {
+    "summary": "POST /api/action/publish（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/quality_loop": {
+   "post": {
+    "summary": "POST /api/action/quality_loop（动作接口，必须带 confirm:true）；参数别名：article→path",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm",
+         "path"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         },
+         "path": {
+          "type": "string"
+         },
+         "article": {
+          "type": "string",
+          "description": "别名，等价 path"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/refine": {
+   "post": {
+    "summary": "POST /api/action/refine（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm",
+         "id",
+         "action"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         },
+         "id": {
+          "type": "string"
+         },
+         "action": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/status": {
+   "post": {
+    "summary": "POST /api/action/status（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/sync_stats": {
+   "post": {
+    "summary": "POST /api/action/sync_stats（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/tags_suggest": {
+   "post": {
+    "summary": "POST /api/action/tags_suggest（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/title_ab": {
+   "post": {
+    "summary": "POST /api/action/title_ab（动作接口，必须带 confirm:true）；参数别名：article→path",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm",
+         "path",
+         "mode"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         },
+         "path": {
+          "type": "string"
+         },
+         "mode": {
+          "type": "string"
+         },
+         "article": {
+          "type": "string",
+          "description": "别名，等价 path"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/tts_generate": {
+   "post": {
+    "summary": "POST /api/action/tts_generate（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/agent/adopt": {
+   "post": {
+    "summary": "POST /api/agent/adopt（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/agent/run": {
+   "post": {
+    "summary": "POST /api/agent/run（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/agent/runs": {
+   "get": {
+    "summary": "GET /api/agent/runs",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/ai/budget": {
+   "get": {
+    "summary": "GET /api/ai/budget",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/ai/usage": {
+   "get": {
+    "summary": "GET /api/ai/usage",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/annotations": {
+   "get": {
+    "summary": "GET /api/annotations",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "path",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/annotations/add": {
+   "post": {
+    "summary": "POST /api/annotations/add（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/annotations/delete": {
+   "post": {
+    "summary": "POST /api/annotations/delete（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/article": {
+   "get": {
+    "summary": "GET /api/article",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "path",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/article/body": {
+   "get": {
+    "summary": "GET /api/article/body",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "path",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/article/diff": {
+   "get": {
+    "summary": "GET /api/article/diff",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "path",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/article/html": {
+   "get": {
+    "summary": "GET /api/article/html",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "path",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/article/pack": {
+   "get": {
+    "summary": "GET /api/article/pack",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "path",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/article/restore": {
+   "post": {
+    "summary": "POST /api/article/restore（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/article/review": {
+   "get": {
+    "summary": "GET /api/article/review",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "path",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "note",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/article/save": {
+   "post": {
+    "summary": "POST /api/article/save（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/articles": {
+   "get": {
+    "summary": "GET /api/articles",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/book/info": {
+   "get": {
+    "summary": "GET /api/book/info",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "sourceUrl",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "bookUrl",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/book/original": {
+   "get": {
+    "summary": "GET /api/book/original",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "path",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/book/search": {
+   "post": {
+    "summary": "POST /api/book/search（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm",
+         "key"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         },
+         "key": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/book/toc": {
+   "get": {
+    "summary": "GET /api/book/toc",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "sourceUrl",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "bookUrl",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/booksource": {
+   "get": {
+    "summary": "GET /api/booksource",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/booksource/engine": {
+   "get": {
+    "summary": "GET /api/booksource/engine",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/booksource/import": {
+   "post": {
+    "summary": "POST /api/booksource/import（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm",
+         "text_or_url"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         },
+         "text_or_url": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/booksource/import_apply": {
+   "post": {
+    "summary": "POST /api/booksource/import_apply（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm",
+         "text_or_url"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         },
+         "text_or_url": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/booksource/one": {
+   "get": {
+    "summary": "GET /api/booksource/one",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "url",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/booksource/refresh": {
+   "post": {
+    "summary": "POST /api/booksource/refresh（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/booksource/subs": {
+   "get": {
+    "summary": "GET /api/booksource/subs",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/booksource/subs/add": {
+   "post": {
+    "summary": "POST /api/booksource/subs/add（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/booksource/subs/del": {
+   "post": {
+    "summary": "POST /api/booksource/subs/del（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/compose": {
+   "get": {
+    "summary": "GET /api/compose",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/compose/add": {
+   "post": {
+    "summary": "POST /api/compose/add（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm",
+         "slug"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         },
+         "slug": {
+          "type": "string"
+         },
+         "path|material_id|article_slug(恰一)": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/compose/adopt": {
+   "post": {
+    "summary": "POST /api/compose/adopt（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm",
+         "slug"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         },
+         "slug": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/compose/decide": {
+   "post": {
+    "summary": "POST /api/compose/decide（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm",
+         "slug",
+         "round",
+         "block",
+         "action"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         },
+         "slug": {
+          "type": "string"
+         },
+         "round": {
+          "type": "string"
+         },
+         "block": {
+          "type": "string"
+         },
+         "action": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/compose/dual": {
+   "post": {
+    "summary": "POST /api/compose/dual（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/compose/generate": {
+   "post": {
+    "summary": "POST /api/compose/generate（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm",
+         "slug"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         },
+         "slug": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/compose/new": {
+   "post": {
+    "summary": "POST /api/compose/new（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm",
+         "slug"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         },
+         "slug": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/compose/novel-summary": {
+   "post": {
+    "summary": "POST /api/compose/novel-summary（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/compose/outline": {
+   "post": {
+    "summary": "POST /api/compose/outline（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/compose/remove_source": {
+   "post": {
+    "summary": "POST /api/compose/remove_source（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/compose/rolling-summary": {
+   "post": {
+    "summary": "POST /api/compose/rolling-summary（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/compose/session": {
+   "get": {
+    "summary": "GET /api/compose/session",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "slug",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/compose/smart-start": {
+   "post": {
+    "summary": "POST /api/compose/smart-start（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/discover": {
+   "get": {
+    "summary": "GET /api/discover",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/discover/star": {
+   "get": {
+    "summary": "GET /api/discover/star",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   },
+   "post": {
+    "summary": "POST /api/discover/star（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/editor/ai-action": {
+   "post": {
+    "summary": "POST /api/editor/ai-action（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/editor/ghost-write": {
+   "post": {
+    "summary": "POST /api/editor/ghost-write（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/health": {
+   "get": {
+    "summary": "GET /api/health",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/healthz": {
+   "get": {
+    "summary": "GET /api/healthz",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/ingest/clip": {
+   "post": {
+    "summary": "POST /api/ingest/clip（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/ingest/crawl": {
+   "post": {
+    "summary": "POST /api/ingest/crawl（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/ingest/refresh": {
+   "post": {
+    "summary": "POST /api/ingest/refresh（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/ingest/status": {
+   "get": {
+    "summary": "GET /api/ingest/status",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/jobs": {
+   "get": {
+    "summary": "GET /api/jobs",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/jobs/cancel": {
+   "post": {
+    "summary": "POST /api/jobs/cancel（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/materials": {
+   "get": {
+    "summary": "GET /api/materials",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/materials/collections": {
+   "get": {
+    "summary": "GET /api/materials/collections",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   },
+   "post": {
+    "summary": "POST /api/materials/collections（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm",
+         "action"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         },
+         "action": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/materials/delete": {
+   "post": {
+    "summary": "POST /api/materials/delete（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/materials/detail": {
+   "get": {
+    "summary": "GET /api/materials/detail",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/materials/file": {
+   "get": {
+    "summary": "GET /api/materials/file",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/materials/from-article": {
+   "post": {
+    "summary": "POST /api/materials/from-article（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/materials/from-chapters": {
+   "post": {
+    "summary": "POST /api/materials/from-chapters（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/materials/iterations": {
+   "get": {
+    "summary": "GET /api/materials/iterations",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/materials/iterations/diff": {
+   "get": {
+    "summary": "GET /api/materials/iterations/diff",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/materials/register": {
+   "post": {
+    "summary": "POST /api/materials/register（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/materials/reindex": {
+   "post": {
+    "summary": "POST /api/materials/reindex（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/materials/search": {
+   "get": {
+    "summary": "GET /api/materials/search",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "q",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/materials/spark": {
+   "post": {
+    "summary": "POST /api/materials/spark（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/materials/tags": {
+   "get": {
+    "summary": "GET /api/materials/tags",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/materials/triage": {
+   "post": {
+    "summary": "POST /api/materials/triage（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm",
+         "id"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         },
+         "id": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/materials/upload": {
+   "post": {
+    "summary": "POST /api/materials/upload（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/materials/verify": {
+   "post": {
+    "summary": "POST /api/materials/verify（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/media/preview": {
+   "get": {
+    "summary": "GET /api/media/preview",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "path",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/meta": {
+   "get": {
+    "summary": "GET /api/meta",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/pipelines": {
+   "get": {
+    "summary": "GET /api/pipelines",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   },
+   "post": {
+    "summary": "POST /api/pipelines（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm",
+         "id"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         },
+         "id": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/pipelines/run": {
+   "post": {
+    "summary": "POST /api/pipelines/run（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/pipelines/runs/segments": {
+   "post": {
+    "summary": "POST /api/pipelines/runs/segments（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/plan": {
+   "get": {
+    "summary": "GET /api/plan",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/platforms": {
+   "get": {
+    "summary": "GET /api/platforms",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/plugins": {
+   "get": {
+    "summary": "GET /api/plugins",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/plugins/refresh": {
+   "post": {
+    "summary": "POST /api/plugins/refresh（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/settings": {
+   "get": {
+    "summary": "GET /api/settings",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/settings/ai": {
+   "post": {
+    "summary": "POST /api/settings/ai（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/settings/kb": {
+   "post": {
+    "summary": "POST /api/settings/kb（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/sources": {
+   "get": {
+    "summary": "GET /api/sources",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   },
+   "post": {
+    "summary": "POST /api/sources（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/sources/enabled": {
+   "post": {
+    "summary": "POST /api/sources/enabled（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm",
+         "id",
+         "enabled"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         },
+         "id": {
+          "type": "string"
+         },
+         "enabled": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/sources/internal/refresh": {
+   "post": {
+    "summary": "POST /api/sources/internal/refresh（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/sources/verify": {
+   "post": {
+    "summary": "POST /api/sources/verify（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm",
+         "id"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         },
+         "id": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/stats": {
+   "get": {
+    "summary": "GET /api/stats",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/topic_radar": {
+   "get": {
+    "summary": "GET /api/topic_radar",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/tts/file": {
+   "get": {
+    "summary": "GET /api/tts/file",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "path",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/visual/design": {
+   "get": {
+    "summary": "GET /api/visual/design",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    },
+    "parameters": [
+     {
+      "name": "path",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/visual/export": {
+   "post": {
+    "summary": "POST /api/visual/export（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/visual/preset": {
+   "post": {
+    "summary": "POST /api/visual/preset（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/visual/presets": {
+   "get": {
+    "summary": "GET /api/visual/presets",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/visual/render": {
+   "post": {
+    "summary": "POST /api/visual/render（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/visual/save": {
+   "post": {
+    "summary": "POST /api/visual/save（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/visual/templates": {
+   "get": {
+    "summary": "GET /api/visual/templates",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/api/writing_stats": {
+   "get": {
+    "summary": "GET /api/writing_stats",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  },
+  "/asset": {
+   "get": {
+    "summary": "GET /asset",
+    "responses": {
+     "200": {
+      "description": "OK（JSON 或字节流）"
+     }
+    }
+   }
+  }
+ }
+}
