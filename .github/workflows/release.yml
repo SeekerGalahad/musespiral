@@ -32,7 +32,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false   # 静态扫描不需要 git 凭证（artipacked 门）
 
@@ -58,7 +58,7 @@ jobs:
     permissions:
       contents: write   # gh release create 附产物所需；PyPI 上传不在此（J9）
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false   # 发布经 GH_TOKEN env，不依赖 checkout 凭证
 
