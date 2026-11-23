@@ -19,6 +19,16 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+# 封面落盘命名（2026-11-24 W2 断环批：自 services/cover_service 上移——纯逻辑，
+# 且 visual_service 与 cover_service 互依（visual 需本函数、cover 需 visual 的
+# from-design 编排）。命名规则属领域常量，落 core 层两侧皆可单向依赖，环即断。
+DEFAULT_COVER_NAME = "cover.png"
+
+
+def cover_filename(platform: str | None) -> str:
+    """平台 → 封面落盘文件名（文章目录内相对名，即写回 frontmatter 的值）。"""
+    return DEFAULT_COVER_NAME if platform in (None, "mp") else f"cover.{platform}.png"
+
 from ...platforms.profiles import PLIMITS
 from ..content.parser import parse_article
 from .cards import raster as cards_raster

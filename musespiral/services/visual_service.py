@@ -46,7 +46,10 @@ from ..core.visual.canvas import (
 from ..core.visual.canvas.model import SPECS
 from ..infra.storage.filesystem import atomic_write_bytes, backup_article
 from ..jobs.store import now_iso as _now_iso
-from . import cover_service
+# 封面命名已上移 core（2026-11-24 W2 断环批）——模块级单向依赖 core，
+# 不再 import services.cover_service；写回动作仍经 cover_service（函数体内导入，
+# 保持「cover→visual 编排委托」的既有单向调用方向）。
+from ..core.visual.cover import cover_filename
 
 # 设计稿目录后缀（§八-6 已批：与 .compose/ 对仗）
 DESIGN_SUFFIX = ".design"
@@ -515,7 +518,7 @@ def export_file_name(article_path: str | Path, kind: str, *, platform: str | Non
     既有无需复制）、<stem>.social-<n>.png、<stem>.infographic.png。"""
     article = Path(article_path)
     if kind == "cover":
-        return cover_service.cover_filename(platform)
+        return cover_filename(platform)
     if kind == "social":
         return f"{article.stem}.social-{int(n or 1)}.png"
     return f"{article.stem}.infographic.png"
@@ -572,6 +575,8 @@ def export_design(
 
     if kind == "cover" and platform in (None, "mp"):
         # 写回纪律内联：先入版本池再写 frontmatter（cover_service 单一实现）
+        from . import cover_service
+
         cover_service._write_back_cover(article, name)  # noqa: SLF001 - 复用既有纪律
     return {"png": str(out_dir / name), "size": [doc.width, doc.height], "route": actual}
 
@@ -636,9 +641,11 @@ def generate_cover_from_design(
     doc = meta.build(design["params"], theme_colors(theme), spec)
     layout_document(doc)
     relayout_vertical(doc)  # D-1 垂直重排
-    out = article.parent / cover_service.cover_filename(platform)
+    out = article.parent / cover_filename(platform)
     _raster_or_pillow(doc, out, route=route)
     if write_back and platform in (None, "mp"):
+        from . import cover_service
+
         cover_service._write_back_cover(article, out.name)  # noqa: SLF001
     return out
 

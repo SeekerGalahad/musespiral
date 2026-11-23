@@ -31,12 +31,10 @@ from ..platforms.profiles import PLIMITS
 
 # 平台 → 落盘文件名：默认（mp 规格或未给 --platform）为 cover.png，其余派生
 # cover.<platform>.png（pack 物料探测优先级 cover.<platform>.png > cover.png）
-DEFAULT_COVER_NAME = "cover.png"
-
-
-def cover_filename(platform: str | None) -> str:
-    """平台 → 封面落盘文件名（文章目录内相对名，即写回 frontmatter 的值）。"""
-    return DEFAULT_COVER_NAME if platform in (None, "mp") else f"cover.{platform}.png"
+# 命名规则真身已上移 core/visual/cover.py（2026-11-24 W2 断环批）——本模块
+# 保留同名 re-export 使既有调用方零改动（`from ...cover_service import
+# cover_filename` 仍可用；下个版本可迁向 core 直取）。
+from ..core.visual.cover import DEFAULT_COVER_NAME, cover_filename  # noqa: F401
 
 
 def generate_cover(
