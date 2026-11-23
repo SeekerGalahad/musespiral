@@ -40,6 +40,15 @@ def test_cli_positioning_no_legacy_words() -> None:
         assert w not in doc, f"CLI 定位文案残留旧叙事词「{w}」——发布前漏改"
 
 
+def test_package_docstring_no_legacy_words() -> None:
+    """包 docstring 同样不残留旧叙事（W1-B3 发现的盲区：门原本只查 cli.__doc__）。"""
+    import musespiral
+
+    doc = (musespiral.__doc__ or "")
+    for w in ("WeChat Official Account publisher", "公众号发布工具"):
+        assert w not in doc, f"包 docstring 残留旧叙事词「{w}」"
+
+
 def test_readme_status_matches_classifier() -> None:
     """README 状态词（**Beta**/Alpha）与 pyproject classifier 同档（判例 2 同类）。"""
     text = _read(README)

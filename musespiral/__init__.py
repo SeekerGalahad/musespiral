@@ -1,7 +1,7 @@
-"""musespiral — Markdown-driven WeChat Official Account publisher.
+"""musespiral — open content pipeline: media in, publishable drafts out.
 
-Core principle: generation (render to local HTML) is fully decoupled from
-publishing (upload to WeChat). Human review sits between them.
+Core principle: every AI judgement stays a suggestion you can adopt,
+regenerate or discard; publishing stays a local, human-approved step.
 """
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"

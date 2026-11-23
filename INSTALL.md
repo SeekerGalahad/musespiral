@@ -1,7 +1,7 @@
 # musespiral 详细安装指南
 
 > 这份是 README「快速开始」的详细版。README 只给了三行命令；这里逐个平台、每个可选依赖、每类凭证都讲清楚，目标是**复制粘贴就能跑通**。
-> 面向版本：v0.5.0（`musespiral/__init__.py:7`，`pyproject.toml:3`）。
+> 面向版本：v0.5.1（`musespiral/__init__.py:7`，`pyproject.toml:3`）。
 
 ---
 
@@ -50,7 +50,7 @@ source .venv/bin/activate
 python -m pip install -e ".[test]"
 
 # 4) 自检
-python -c "import musespiral; print(musespiral.__version__)"   # 0.5.0
+python -c "import musespiral; print(musespiral.__version__)"   # 0.5.1
 musespiral --help
 pytest -q
 ```

@@ -708,7 +708,7 @@ def test_shell_topbar_and_statusbar() -> None:
     # 顶栏/底栏尺寸 token 与类
     assert "--topbar-h:48px" in src and "--statusbar-h:32px" in src
     assert ".topbar{" in src and ".statusbar{" in src
-    assert "musespiral v0.5.0" in src  # 底栏版本号（随 __version__ 收口同步）
+    assert "musespiral v0.5.1" in src  # 底栏版本号（随 __version__ 收口同步）
     assert "root: " in src  # 底栏工作目录前缀
 
 

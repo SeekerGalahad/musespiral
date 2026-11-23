@@ -2,6 +2,23 @@
 
 musespiral 全部期次变更记录。格式参照 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，按期次组织（F 编号对应主设计文档 `docs/项目方案/musespiral-公众号图文自动化设计.md` §九~§十八）；日期为该期落地日期。
 
+## [0.5.1] - 2026-11-23
+
+> 运维发布改良 W1 波（正典=`docs/项目方案/musespiral-运维发布改良设计-2026-11-23.md` §二）的收口小版：健康/诊断面 + 运维建制 + CI 发版流水线，零行为变更（既有端点与契约锁全部原样）。收口时全量测试 **3231 passed / 1 skipped**（2026-11-23 实测，文案一致性门 7 条同绿）。
+
+### Added
+
+- **CI 发版流水线 `.github/workflows/release.yml`**（2026-11-23，W1-B3；tag `v*` push 触发：安装（与 ci.yml 同法 `pip -e .[test]`）→ 全量测试（同 ci.yml 命令）→ 构建前清 `__pycache__`（判例 J4 第一道）→ `python -m build` → **wheel pycache 断言**（`unzip -l | grep -c __pycache__` 必须为 0——0.5.0 缺陷 CI 化）→ `gh release create` 附 wheel+sdist（`permissions: contents:write` 最小授权）；**不上传 PyPI**——判例 J9（token 不进 CI secret），上传保持本地 `scripts/release.sh --upload`，两者分工以 workflow 头注释固化；独立 **zizmor job**（`--no-online-audits --persona auditor --min-severity high` 门：release.yml 有 High 即红；全目录扫描只记录——既有 ci.yml 的 2 High 留待既有 CI 改良批，不阻塞本线；actions 按 commit SHA 钉死）
+- **`GET /api/healthz` 五键健康端点**（2026-11-23，W1-B1 as-built；设计原文「GET /api/health 五键」有事实性错误——九键面板 F20 已存在且前端 4 处消费，故实施裁决=新增 `/api/healthz` **轻面**：`{ok, version, uptime_s, jobs_pending, materials_total}` 恰五键机读（探针/`ctl.sh health` 专用，version 取安装态 `importlib.metadata`，未安装回退 `__version__`），刻意不入前端字面量集——旧九键 `/api/health` 一字不动，前端零字节；契约锁 GET +1，health 测试锁五键形状（J2：只断言 200 不算过）；全量 3231 绿（+11））
+- **`musespiral doctor` 五项预检命令**（2026-11-23，W1-B1；credentials 凭证可读 / ai.json 配置形态与默认档案可达性（**不真实出网**——预检≠探活，探活是既有 `ai check` 的事，J9 边界）/ ffmpeg 在 PATH / kb_root.txt 指向存在目录 / 磁盘剩余水位；终端绿黄红三色表 + 退出码（全绿 0 / 有黄 1 / 有红 2）+ `--json` 供脚本消费；三路径测试：缺凭证→黄+exit1、全绿→exit0、ffmpeg 缺→黄不红；本地 `ctl.sh` 增 `doctor` 转发）
+- **`deploy/log-rotate.sh`**（2026-11-23，W1-B2 as-built；设计原文 newsyslog 方案**证伪**——launchd 服务无 pidfile，重命名式轮转后进程继续写旧 inode；改 copytruncate 原地截断保 inode，`~/.musespiral/logs/studio.log` 2MB 真实文件链式轮转验证过）
+- **`docs/DATA_LAYOUT.md` 数据面语义表**（2026-11-23，W1-B2；60 行覆盖 `~/.musespiral` 19 项家目录+6 类文章形态：哪个能删/缓存/存证/凭证，恢复路径）
+- **备份自动化 launchd `com.wagic.musespiral-backup`**（2026-11-23，W1-B2；周日 06:30 跑 runtime `musespiral backup`，产物 tar.gz 落 `~/musespiral-backups/`，手跑 kickstart 验证产物 24.8MB 落位）
+
+### Fixed
+
+- **CLI 定位文案对齐流水线叙事**（0.5.0 PyPI 包 `--help` 首行残留「公众号发布工具」旧叙事——修复在 0.5.0 发布后入库，本版首次随包发布；同批立的文案一致性门 7 条（`tests/test_narrative_consistency.py`）作机器防线：CLI 定位/README 状态词↔classifier/README 插件计数/演示图绝对 URL/版本↔CHANGELOG 对齐）
+
 ## [0.5.0] - 2026-11-21
 
 > 0.4.0（2026-11-13）之后的全部期次，按 Keep a Changelog 三类重组；日期为各批落地日。收口时全量测试 **2952 passed / 1 skipped**（2026-11-21 实测）。本版两大主线：**素材侧从零到全**（插件系统 9 内置插件——视频/音频/字幕/文档/本地媒体全进得来）与**独立开源**（许可证合规+改名 musespiral+AI 三态裁决）。
@@ -14,7 +31,7 @@ musespiral 全部期次变更记录。格式参照 [Keep a Changelog](https://ke
 - **PL-9 local-scan 本地媒体搜索**（2026-11-20；roots 白名单+隐私目录硬排除（Library/Containers、Caches、Application Support、node_modules、.git——**绝对分量匹配**，root=~/Library 也无法绕过）+ 限额防卡死 + ffprobe 并发探测（≤4、单文件 3s）+ 结果按大小降序 + 符号链接不跟随 + 权限拒绝静默计数；真机测出并修两处真缺陷：①限额算错对象导致漏扫（原对每个 dirent 计数，repository/ 下数千无关文件几秒吃满 50000 配额 → count=0）→ 只算「目录+命中媒体文件」②MAX_ENTRIES 对巨型仓偏紧（40836 已近顶仍 truncated）→ 提到 200000 后 repository/ 全扫 count=29、truncated=false、150.3MB、6.8 秒；真机验证 depth=6 → 5 文件/36.2MB、depth=10 → 29 文件/150.3MB；2837 passed / 1 skipped（+19））
 - **DOC-1 doc-extract 插件——补文档源最大空洞**（2026-11-20；此前素材上传仅 4 种图片、书籍仅 .txt，PDF/DOCX/EPUB 进不来——doc-extract 一插件四路提取器（pdf/docx/epub/text，PDF/DOCX/EPUB/Markdown/TXT 五格式）文档源首次可入；选型裁决（GitHub API 实测）：docling ★70,813 MIT 格式最全但依赖 2-3GB → 轻量组合 pdfplumber+python-docx+ebooklib ≈7MB 覆盖 90% 真实文档，扫描版 PDF 留 v2；**扫描版可读拒绝**——全文可提取字符/页均值 <50 判「疑似扫描版需 OCR」绝不静默返回空文；四路提取器全部可选依赖（缺则 MISSING_DEP 可读指引）；三格式真实验证：PDF bitcoin.pdf 179KB→9 页/21,235 字符、DOCX 381KB→6,362 字符、EPUB 44MB→154 章/2,012,013 字符；素材上传 accept 就地扩展、输出喂 refine_service 联通（2818 passed / 1 skipped，+24））
 - **批2 小说前端 UI + 源级 AI 配置**（2026-11-20；N-1 小说模式前端——E-5 从半成品转完整：compose 右栏 `#cm-novel` 挂载点（壳仅 +26B），kind=novel 两折叠区（📖 前情提要 AI 刷新/编辑/保存+章节覆盖；👥 人物卡挂已有/新建五字段/摘卡），kind=article 时面板**销毁**（innerHTML 置空，零小说 DOM 残留），kind 切换 chips **常驻两种会话**；N-3 源级 AI 配置——registry 增 `AI_CONFIG_KEYS` 四键+clean_ai_config（读侧宽容）+validate_ai_config（写侧窄门），只作用于该源素材的 digest/synthesis/tag，compose generate 不受影响（复核实测：源级 prompt_override 进 refine 请求体、不进 compose 请求体）；复核 1 HIGH+1 MEDIUM 已修：HIGH 创作工坊跨会话裁决串台（cmWork 缓存键只含轮号不含 slug，切会话后「保留」落进**另一个会话**的 decisions.json → 增 slug 字段并校验）、MEDIUM 小说模式 UI 单向门不可达 → chips 常驻；2794 passed / 1 skipped）
-- **subtitle 插件——字幕文件直出 segments，跳过 ASR**（2026-11-20；.srt/.vtt 同构 transcribe：输出 segments=[{start,end,text,avg_logprob,no_speech_prob}]，与 transcribe 是同一位置的**可互换生产者**（有字幕走 subtitle、没字幕走 transcribe），下游 key-segment/frame-grab/article-writer 零改动即可消费；解析人工校对字幕比跑 ASR 快约 100 倍且无同音字误识；质量信号语义：人工字幕写 avg_logprob=1.0/no_speech_prob=0.0——「ASR 层面天然满分」，下游低置信告警不误报）
+- **subtitle 插件——字幕文件直出 segments，跳过 ASR**（2026-11-20；.srt/.vtt 同构 transcribe：输出 segments=[{start,end,text,avg_logprob,no_speech_prob}]，与 transcribe 是同一位置的**可互换生产者**（有字幕走 subtitle、没字幕走 transcribe），下游 key-segment/frame-grab/article-writer 零改动即可消费；解析人工校对字幕比跑 ASR 快约 100 倍且无同音字误识；质量信号语义：人工字幕写 avg_logprob=1.0/no_speech_prob=0.0——「ASR 层面天然满分」，下游低置信告警不误报；勘误注记（2026-11-23）：输出**恒含 `media_path` 键**（无媒体输入时值=None，下游 frame-grab 可读降级；有则透传供抽帧）——此行为 0.5.0 实含，非后续版本新增）
 - **插件系统 PL-1~PL-6——契约/引擎/前端视图/首插件族/成稿素材库**（2026-11-20，设计正典=《mdpub-插件系统架构设计-2026-11-19.md》；PL-7 exec runtime / PL-8 插件市场为后续排期与远景，未随本版落地；内置插件集随本批+后续各插件批达 **9 个**）：
   - **PL-1 契约与加载器**：`core/plugins/types.py` 10 契约类型+`types_compatible`（ext/ 命名空间隔离）+ `core/plugins/manifest.py` pydantic 校验（六必需键+六可选键+权限表）+ `infra/plugins_loader.py` 目录扫描（单插件坏 manifest 隔离）+依赖探测 + `services/plugins_service.py` list/get/check（101 测试：契约 10×10 矩阵+坏 manifest 隔离+权限表对齐）。
   - **PL-2 执行引擎**：`core/plugins/context.py` PluginContext（log/progress/tmpdir/cancelled/artifacts_dir）+ `services/pipeline_service_plugins.py` Workspace（引用/值分流，INLINE_MAX_BYTES=1MiB）+ 四阶段执行（校验/执行/收集/清理）+ 失败即停保留 workspace 现场；job kind `plugin_pipeline`（KINDS 18→**19**）；独立复核抓 1 HIGH 已修——collect_output 大产物 read_bytes+write_bytes 整段进内存（GB 级产物成功态收集被全量加载，多产物叠加峰值=各文件之和），改 shutil.copyfile 流式复制（2631 passed / 1 skipped，+105）。
