@@ -63,3 +63,5 @@
 .pg-build-actions{margin-top:var(--space-lg);justify-content:flex-end}
 .pg-build-actions .input{flex:1;min-width:200px;max-width:320px}
 @media (max-width:900px){.pg-detail{grid-template-columns:1fr}.pg-build-actions{flex-direction:column;align-items:stretch}.pg-build-actions .input{max-width:none}}
+.pg-src{font-size:10px;color:var(--indigo);margin-left:6px}
+.pg-src.user{color:var(--jade)}

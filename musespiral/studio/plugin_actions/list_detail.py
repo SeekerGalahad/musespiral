@@ -64,8 +64,21 @@ def _load_pipeline(pid: str) -> dict[str, Any]:
 
 
 def _plugins_payload() -> dict[str, Any]:
-    """GET /api/plugins：清单（含 manifest）+ skipped（坏目录不炸整面）。"""
-    return plugins_service.list_plugins()
+    """GET /api/plugins：清单（含 manifest）+ skipped（坏目录不炸整面）。
+
+    W14b（2026-11-24）：加法扩展每条的 source/enabled（本地市场管理面），
+    旧消费方只读 manifest 字段——零破坏。
+    """
+    out = plugins_service.list_plugins()
+    from ...services import plugin_lifecycle
+
+    state = {i["id"]: i for i in plugin_lifecycle.list_installed()}
+    for item in out.get("plugins", []):
+        mid = str((item.get("manifest") or {}).get("id") or "")
+        info = state.get(mid) or {}
+        item["source"] = info.get("source", "builtin")
+        item["enabled"] = bool(info.get("enabled", True))
+    return out
 
 
 def _plugin_check_payload(ctx: _StudioContext, plugin_id: str) -> dict[str, Any]:

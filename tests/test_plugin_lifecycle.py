@@ -241,3 +241,11 @@ def test_cli_export(home, tmp_path) -> None:
     out = tmp_path / "out.mspkg"
     r = CliRunner().invoke(cli, ["plugin", "export", "demo-plugin", "--out", str(out)])
     assert r.exit_code == 0 and out.is_file()
+
+
+def test_plugin_card_shows_source_badge() -> None:
+    """W14c：插件卡显示来源徽章（前端市场面的最小可用形态）。"""
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parent.parent / "musespiral" / "studio" / "ui.js").read_text(encoding="utf-8")
+    assert "pg-src" in js and "it.source==='user'" in js, "插件卡缺来源徽章"

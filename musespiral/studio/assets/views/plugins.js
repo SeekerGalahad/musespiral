@@ -98,7 +98,8 @@ function pgCard(it){
 var m=it.manifest,ks=pgKINDS(),ic=pgKindIcon(m.kind);
 return '<article class="pg-card" data-pgopen="'+esc(m.id)+'" tabindex="0" role="button">'+
 '<div class="pg-top"><span class="pg-glyph">'+I(ic)+'</span>'+
-'<span class="pg-topmain"><span class="pg-name">'+esc(pgName(m))+'</span><span class="pg-vendor">'+esc(m.id)+' · v'+esc(m.version)+'</span></span>'+
+'<span class="pg-topmain"><span class="pg-name">'+esc(pgName(m))+'</span><span class="pg-vendor">'+esc(m.id)+' · v'+esc(m.version)+'</span>'+
+(it.source==='user'?'<span class="pg-src user">用户装</span>':'<span class="pg-src">内置</span>')+'</span>'+
 '<span class="badge '+(m.uses_ai?'running':'pass')+'" title="'+(m.uses_ai?'声明 uses_ai：AI 由平台受管注入':'契约门全过')+'">'+(m.uses_ai?'AI':'就绪')+'</span></div>'+
 '<p class="pg-desc" title="'+esc(pgDesc(m))+'">'+esc(pgDescBrief(m))+'</p>'+
 '<div class="pg-foot"><span class="badge queued">'+esc(ks[m.kind]||m.kind)+'</span><span class="pg-io">'+esc(pgIoSummary(m))+'</span></div></article>';

@@ -136,6 +136,9 @@ def test_css_split_rule_multiset_equivalent_to_head() -> None:
                    b".btn-ghost{min-height:24px}",
                    (b"(max-width:900px)", b".batch-pick::after{width:40px;height:40px}"),
                    (b"(max-width:900px)", b".btn,.btn-ghost{min-height:36px}"),
+    # W14c 插件市场来源徽章
+                   b".pg-src{font-size:10px;color:var(--indigo);margin-left:6px}",
+                   b".pg-src.user{color:var(--jade)}",
     # FEAT-2 智能组稿（2026-11-22）在 ui.views/compose.css 新增的 .sc-* 向导
     # 规则族（步骤条/素材列表/大纲编辑，19 条）——基线锚早于本批，合法新增登记。
                    b".sc-list{border:1px solid var(--line-1);border-radius:var(--radius-btn);max-height:300px;overflow:auto}",
