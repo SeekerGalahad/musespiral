@@ -42,10 +42,37 @@ def plugin_list() -> None:
 
 @plugin.command("install")
 @click.argument("pkg")
-def plugin_install(pkg: str) -> None:
-    """安装插件包（.mspkg = zip：manifest.json + 代码）。"""
+@click.option("--inspect", "inspect_only", is_flag=True, help="只展示透明清单不安装（MCP SEP-1024 预装知情）")
+@click.option("--yes", "-y", is_flag=True, help="跳过确认直接安装（已看过透明清单时用）")
+def plugin_install(pkg: str, inspect_only: bool, yes: bool) -> None:
+    """安装插件包（先展示透明清单再确认——MCP SEP-1024 要求）。"""
     from ..services import plugin_lifecycle
 
+    # W15-A1：先展示透明清单（安装内容完整未截断——权威实践）
+    try:
+        info = plugin_lifecycle.inspect_package(pkg)
+    except plugin_lifecycle.PluginLifecycleError as err:
+        click.echo(f"❌ {err}", err=True)
+        sys.exit(1)
+    click.echo(f"插件：{info['id']} v{info['version']}  [{info['kind']}]")
+    click.echo(f"入口：{info['entry']}")
+    click.echo(f"权限：{', '.join(info['permissions']) or '（无声明）'}"
+               + ("  [uses_ai]" if info["uses_ai"] else ""))
+    click.echo(f"文件（{len(info['files'])} 个）：")
+    for f in info["files"]:
+        click.echo(f"  {f['size']:>7d}  {f['path']}")
+    if info["warnings"]:
+        click.echo("⚠ 警告：")
+        for w in info["warnings"]:
+            click.echo(f"  · {w}")
+        click.echo("  （权限声明不是沙箱——插件与宿主同等权限）")
+    if inspect_only:
+        return
+    if not yes:
+        click.echo()
+        if not click.confirm("确认安装以上内容？", default=False):
+            click.echo("已取消（未安装任何文件）")
+            return
     try:
         r = plugin_lifecycle.install_from_package(pkg)
     except plugin_lifecycle.PluginLifecycleError as err:
@@ -110,3 +137,15 @@ def plugin_export(plugin_id: str, out_path: str | None) -> None:
         click.echo(f"❌ {err}", err=True)
         sys.exit(1)
     click.echo(f"✅ 已导出: {r['path']}")
+
+
+@plugin.command("block")
+@click.argument("plugin_id")
+@click.option("--remove", is_flag=True, help="从拒绝名单移除")
+def plugin_block(plugin_id: str, remove: bool) -> None:
+    """加入/移出拒绝名单（.blocked.json）。"""
+    from ..services import plugin_lifecycle
+
+    r = plugin_lifecycle.block(plugin_id, unblock=remove)
+    verb = "已从拒绝名单移除" if remove else "已加入拒绝名单"
+    click.echo(f"✅ {verb}: {plugin_id}（当前 {r['total']} 个）")
