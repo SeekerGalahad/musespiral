@@ -27,7 +27,10 @@ from musespiral.services import (
     submit_and_track,
 )
 from musespiral.services import fetch_service as _fetch_service
-from musespiral.services import publish_service as _publish_service
+# W2-2 包化批（2026-11-24）：monkeypatch 必须打在**真身模块**上——facade 是
+# re-export 薄层，patch facade 的属性不会被源模块函数体内引用看到（materials
+# facade 靠 __setattr__ 转发解决，本域无注入缝故测试直取真身）。
+from musespiral.services.publish import publish_service as _publish_service
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -163,7 +166,7 @@ def test_generate_batch_partial_failure_keeps_outputs(
     article_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """中途失败 → BatchAdaptError 携带已产出/已跳过清单（重发只补缺口）。"""
-    from musespiral.services import adapt_service
+    from musespiral.services.publish import adapt_service  # W2-2：真身
 
     real_generate = adapt_service.adapt.generate  # 先存真实实现，防 mock 自递归
 

@@ -25,7 +25,7 @@ from musespiral.core.site import (
     render_rss,
 )
 from musespiral.core.content.parser import parse_article
-from musespiral.services import site_service
+from musespiral.services.publish import site_service  # W2-2：真身（monkeypatch 需打在源模块）
 
 
 # ── fixtures ────────────────────────────────────────────────

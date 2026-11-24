@@ -298,7 +298,9 @@ def test_edge_tts_single_egress() -> None:
             stripped = line.strip()
             if stripped.startswith("import edge_tts") or stripped.startswith("from edge_tts"):
                 hits.append(path.relative_to(pkg).as_posix())
-    assert hits == ["services/tts_service.py"], f"edge_tts 导入点不唯一: {hits}"
+    assert hits == ["services/publish/tts_service.py"], (
+        f"edge_tts 导入点不唯一: {hits}（W2-2 包化后真身在 services/publish/，facade 不得再 import）"
+    )
     # 域层纯计算面：core/tts 零 edge_tts / 零网络库
     for path in (pkg / "core" / "tts").rglob("*.py"):
         text = path.read_text(encoding="utf-8")
@@ -316,7 +318,7 @@ def test_mp3_magic_table_is_single_sourced() -> None:
     assert MP3_MAGIC is not None
     # 两处都不再各自定义魔数元组（此前各一份，属判例式漂移源）
     pkg = Path(__file__).resolve().parent.parent / "musespiral"
-    for rel in ("services/tts_service.py", "studio/tts_actions.py"):
+    for rel in ("services/publish/tts_service.py", "studio/tts_actions.py"):
         text = (pkg / rel).read_text(encoding="utf-8")
         assert 'b"\\xff\\xfb"' not in text, f"{rel} 又自建了魔数表（应 import core.tts）"
 

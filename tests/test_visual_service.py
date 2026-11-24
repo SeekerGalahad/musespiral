@@ -74,7 +74,7 @@ def test_f71t1_full_chain_cover(article: Path, no_browser: None, monkeypatch: py
     # 真版本池那处（cover_service 模块内已绑定的名字——v.* 的猴补丁对它无效）。
     # 2026-11-24 W2 断环批：visual_service 不再模块级 import cover_service（改为
     # 函数体内导入），故此处直取服务模块（猴补丁打在 cover_service 上同样生效）。
-    from musespiral.services import cover_service as _cover_svc
+    from musespiral.services.publish import cover_service as _cover_svc  # W2-2 真身
 
     orig_backup = _cover_svc.backup_article
     bak_content_at_backup: list[str] = []
@@ -88,7 +88,7 @@ def test_f71t1_full_chain_cover(article: Path, no_browser: None, monkeypatch: py
     # frontmatter 重写的**真实落盘时刻**（cover_service 用 mkstemp+os.replace
     # 原子重写）——观察 os.replace，比 spy 整个 _write_back_cover 更细：
     # 后者只记到「进入写回」，记不到「备份已完成、重写将发生」这一中间态。
-    import musespiral.services.cover_service as cover_service_mod
+    import musespiral.services.publish.cover_service as cover_service_mod  # W2-2 真身（os 在此）
 
     orig_replace = cover_service_mod.os.replace
 
