@@ -191,6 +191,19 @@ musespiral studio --root tests/fixtures/studio_demo
 - **可静态校验**——保存流水线时检查相邻节点类型接不接得上
 - **可跨语言**——`exec` runtime 支持任意可执行程序
 
+### 批量操作
+
+多篇一次处理（不发公众号——终发永远人工）：
+
+```bash
+# Studio：发布中心多选 → 工具条「批量检查」/「批量打包」
+# API：POST /api/action/batch_check  {paths:[...], platform?}
+#      POST /api/action/batch_pack   {paths:[...], platform}
+```
+
+批量检查逐篇返回 fail/warn/pass 与首条失败原因，**单篇出错不中断整批**；
+批量打包逐篇生成物料目录。上限 200 篇/次。
+
 ### 内置 12 个插件
 
 | 插件 | 类型 | 职责 |

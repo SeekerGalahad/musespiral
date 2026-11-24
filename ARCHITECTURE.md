@@ -33,7 +33,10 @@
 musespiral/
 ├── commands/      # CLI 入口，31 个 *_cmds.py 按域拆分
 ├── studio/        # stdlib HTTP server + 零依赖前端（server.py / actions / plugin_actions / assets）
-├── services/      # 编排层，33 个 *_service.py + pipeline/ 等子包
+├── services/      # 编排层，平铺服务 + 5 个子包
+│                  #   子包：materials/(7 簇) pipeline/(7 簇) agent/(4 簇)
+│                  #         compose/ publish/(7 服务，W2-2 2026-11-24)
+│                  #   旧路径保留薄 facade（消费方零改动，facade 对拍门锁全集）
 ├── core/          # 纯逻辑，14 个子包 + article.py 等纯逻辑模块
 ├── infra/         # 外部交互（ai/ 网关、fetcher、embedding、wechat、storage）
 ├── platforms/     # 发布平台适配
