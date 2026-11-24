@@ -247,7 +247,19 @@ def test_css_split_rule_multiset_equivalent_to_head() -> None:
                    b".wr-goal-row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:var(--space-sm);font-size:var(--fs-caption)}",
                    b".wr-goal-lab{color:var(--ink-2);white-space:nowrap}",
                    b".wr-goal-n{color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}",
-                   b".wr-empty{padding:var(--space-md) 0}"}
+                   b".wr-empty{padding:var(--space-md) 0}",
+                   # W17 订阅管理前端（2026-11-24）在 books.css 新增的 9 条规则
+                   # （工具栏 + 6 列订阅行 + URL/状态灯样式）——基线锚早于本批，
+                   # 合法新增登记。
+                   b".bk-subs-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}",
+                   b".bk-subs-toolbar .input{min-width:220px}",
+                   b".bs-row{display:grid;grid-template-columns:1fr 70px 60px 70px 60px 1fr;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line-1);font-size:var(--fs-caption);align-items:center}",
+                   b".bs-row:hover{background:var(--paper-2)}",
+                   b".bs-url{font-family:var(--font-mono);font-size:var(--fs-micro);word-break:break-all}",
+                   b".bs-st{font-size:10px}",
+                   b".bs-st.ok{color:var(--jade)}",
+                   b".bs-st.failed{color:var(--crimson)}",
+                   b".bs-st.pending{color:var(--ink-3)}"}
     assert set(missing) <= known_missing, f"有非预期规则丢失: {list(set(missing) - known_missing)[:3]}"
     assert set(extra) <= known_extra, f"有非预期规则新增: {list(set(extra) - known_extra)[:3]}"
 

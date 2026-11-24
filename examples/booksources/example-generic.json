@@ -1,0 +1,25 @@
+{
+  "bookSourceUrl": "https://example.com",
+  "bookSourceName": "示例书站（通用模板）",
+  "bookSourceGroup": "Playwright",
+  "bookSourceType": 0,
+  "enabled": true,
+  "searchUrl": "https://example.com/search?q={{key}}",
+  "browserRule": {
+    "search": {
+      "list": ".search-result li",
+      "fields": {
+        "name": "h3 a",
+        "author": ".author",
+        "bookUrl": {"sel": "h3 a", "attr": "href"},
+        "coverUrl": {"sel": "img", "attr": "src"}
+      }
+    },
+    "info": {"fields": {"name": "h1", "author": ".author", "intro": ".desc"}},
+    "toc": {
+      "list": ".chapter-list a",
+      "fields": {"title": ".", "url": {"sel": ".", "attr": "href"}}
+    },
+    "content": {"sel": "#content", "title": {"sel": "h1", "attr": "text"}}
+  }
+}

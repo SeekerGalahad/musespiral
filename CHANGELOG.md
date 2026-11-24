@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.3] - 2026-11-24
+
+遗留问题 W16-W19 四工作流落地（体积口径/订阅前端/真引擎/DOM 测试层）。
+
+### Added
+- **订阅管理前端**（W17）：书籍视图订阅子态全 CRUD——列表（URL/间隔/静默/状态灯）+ 新增/更新 + 删除确认 + 单源/全部刷新，消费 5 个 booksource 端点。
+- **Playwright 书源引擎**（W18）：`browserRule` 子对象（纯 CSS 选择器，不动 legado 键名）驱动本地 Chromium 抓取，四方法（搜索/详情/目录/正文）与 bookengine 同契约；引擎检测顺序 mock→JVM→Playwright→缺席，状态灯如实三态；`examples/booksources/` 三个示例源。
+- **DOM Snapshot 测试层**（W19）：11 视图 + 书籍三子态真实浏览器断言（13 用例），首批退役 19 个字符串锚。
+
+### Changed
+- **体积口径双轨**（W16）：首屏 gzip ≤50KB / 单视图 gzip ≤15KB 成硬门；磁盘总量降为观测告警（原门量的是仓库体积非用户体验，web.dev 行业标准挂传输面）。
+- bookengine 自检 `check_endpoints` 修正 `cli.book_toc`→`cli.toc`（原方法名笔误致自检异常）。
+
 ## [0.5.2] - 2026-11-23
 
 发布前全功能实测批（46 CLI / 128 端点 / 12 插件 / 11 视图，真实浏览器 + 真实 API 全扫）。

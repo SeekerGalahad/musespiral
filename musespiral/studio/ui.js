@@ -2182,6 +2182,68 @@ else if(e.key==='ArrowRight')lbGo(1);
 bindMatMedia();
 // @endview
 // @view:books
+
+// ── 订阅管理（W17，2026-11-24）：消费 5 个 booksource 端点 ─────────
+async function bsLoad(){
+var el=$('bs-list');if(!el)return;
+el.innerHTML='<div class="skel"><div class="skel-line w90"></div></div>';
+try{var d=await getJSON('/api/booksource/subs');
+var subs=d.subs||[];
+if(!subs.length){el.innerHTML='<div class="empty"><div class="empty-text">暂无订阅。在上方填入书源包 URL 后点「新增/更新」。</div></div>';return;}
+var h='';
+subs.forEach(function(s){
+var st=s.fetch_state==='ok'?'<span class="bs-st ok">正常</span>':
+  s.fetch_state==='failed'?'<span class="bs-st failed" title="'+esc(s.error||'')+'">失败</span>':
+  '<span class="bs-st pending">待确认</span>';
+var last=s.last_fetch?new Date(s.last_fetch*1000).toLocaleString():'从未';
+h+='<div class="bs-row"><span class="bs-url" title="'+esc(s.url)+'">'+esc(s.url)+'</span>'
++'<span>'+esc(String(s.update_interval_h||24))+'h</span>'
++'<span>'+(s.silent_update?'静默':'确认')+'</span>'
++st
++'<span title="上次刷新：'+esc(last)+'">'+esc(last.slice(5,16))+'</span>'
++'<span><button class="btn btn-ghost" data-bsrefresh="'+esc(s.url)+'" aria-label="刷新此订阅">刷新</button> '
++'<button class="btn btn-ghost" data-bsdel="'+esc(s.url)+'" aria-label="删除订阅">删除</button></span></div>';
+});
+el.innerHTML=h;
+}catch(err){el.innerHTML='<div class="empty"><div class="empty-text">加载失败：'+esc(err.message)+'</div></div>';}}
+async function bsAdd(){
+var url=$('bs-url').value.trim();if(!url)return toast('填入订阅 URL',WN);
+var iv=parseInt($('bs-interval').value)||24;
+var silent=$('bs-silent').checked;
+try{
+await postJSON('/api/booksource/subs/add',{confirm:true,url:url,update_interval_h:iv,silent_update:silent});
+toast('订阅已保存：'+url.slice(0,50),OK);
+$('bs-url').value='';bsLoad();
+}catch(err){toast('保存失败：'+err.message,ER);}}
+async function bsRefresh(url){
+try{
+await postJSON('/api/booksource/refresh',{confirm:true,url:url});
+toast('刷新已触发'+(url?'：'+url.slice(0,40):'（全部）'),OK);
+setTimeout(bsLoad,1500);
+}catch(err){toast('刷新失败：'+err.message,ER);}}
+function bindBookSubs(){
+['bs-add','bs-refresh-all'].forEach(function(id){
+var b=$(id);if(!b)return;
+b.addEventListener('click',function(){
+if(id==='bs-add')bsAdd();
+else if(id==='bs-refresh-all')bsRefresh('');
+});});
+$('bs-list').addEventListener('click',function(e){
+var r=e.target.closest('[data-bsrefresh]');if(r){bsRefresh(r.getAttribute('data-bsrefresh'));return;}
+var d=e.target.closest('[data-bsdel]');if(!d)return;
+var u=d.getAttribute('data-bsdel');
+askConfirm({title:'删除订阅',body:u.slice(0,80),confirmText:'删除'}).then(function(ok){
+if(!ok)return;
+postJSON('/api/booksource/subs/del',{confirm:true,url:u})
+.then(function(){toast('已删除',OK);bsLoad();})
+.catch(function(err){toast('删除失败：'+err.message,ER);});
+});});
+// 进入订阅态时加载
+var origBkSub=bkSub;
+bkSub=function(m){origBkSub(m);if(m==='subs')bsLoad();};
+}
+
+
 // ── R4 #books 书籍视图 + R3.5 提炼四触点（2026-11-18）───────────────
 // 详情态=GET /api/book/info|toc（引擎代理，absent→灰灯卡）；入库=POST
 // /api/materials/from-chapters（confirm 闸在端点，提交零落盘）→job
@@ -2538,6 +2600,7 @@ else if(route.params.get('book')&&route.params.get('source'))bkOpen(route.params
 else bkMode('search',route.params.get('search'));
 }};
 function bindBooks(){
+bindBookSubs();
 // ── R4 #books + R3.5 提炼触点绑定 ──
 bkDigestInit();
 $('bk-subs-btn').addEventListener('click',function(){location.hash='#books?tab=subs';});

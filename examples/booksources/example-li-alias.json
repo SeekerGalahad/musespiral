@@ -1,0 +1,24 @@
+{
+  "bookSourceUrl": "https://li-example.com",
+  "bookSourceName": "示例：字段别名（连载站）",
+  "bookSourceGroup": "Playwright",
+  "bookSourceType": 0,
+  "enabled": true,
+  "searchUrl": "https://li-example.com/s?word={{key}}",
+  "browserRule": {
+    "search": {
+      "list": ".book-item",
+      "fields": {
+        "name": ".title",
+        "author": ".writer",
+        "kind": ".category",
+        "lastChapter": ".latest",
+        "wordCount": ".words",
+        "bookUrl": {"sel": "a.cover", "attr": "href"}
+      }
+    },
+    "info": {"fields": {"name": ".book-title", "intro": ".summary"}},
+    "toc": {"list": "ol.chapters a", "fields": {"title": ".", "url": {"sel": ".", "attr": "href"}}},
+    "content": {"sel": ".article-text", "title": {"sel": ".chapter-title", "attr": "text"}}
+  }
+}

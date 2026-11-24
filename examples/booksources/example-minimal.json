@@ -1,0 +1,11 @@
+{
+  "bookSourceUrl": "https://minimal-example.com",
+  "bookSourceName": "示例：最小规则（仅搜索）",
+  "bookSourceGroup": "Playwright",
+  "bookSourceType": 0,
+  "enabled": true,
+  "searchUrl": "https://minimal-example.com/find?q={{key}}",
+  "browserRule": {
+    "search": {"list": ".item", "fields": {"name": ".n", "bookUrl": {"sel": "a", "attr": "href"}}}
+  }
+}

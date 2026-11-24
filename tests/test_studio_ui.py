@@ -179,6 +179,12 @@ CONTRACT_PATHS = {
     # /api/agent/runs，job 轮询走 `/api/jobs/${id}` 模板串（不入单引号集合）。
     # POST /api/book/search 本批未接（搜索态占位，结果渲染 R4 批）——不入前端契约。
     "/api/booksource/engine",
+    # W17 订阅管理前端（2026-11-24）：5 个 booksource 端点全量入契约
+    # （subs 清单 / add+del 订阅 / refresh 单+全 / one 已由 refresh 覆盖）
+    "/api/booksource/subs",
+    "/api/booksource/subs/add",
+    "/api/booksource/subs/del",
+    "/api/booksource/refresh",
     "/api/action/bookengine_demo",
     # W8（2026-11-24）：批量审核/打包——前端从零消费变已消费
     "/api/action/batch_check",
@@ -1385,7 +1391,7 @@ def test_custom_confirm_modal_and_toast() -> None:
     # 四个动作（adapt/pack/publish/batch_adapt）+ F46 KB 设置保存 + F48 创作台
     # 「采纳入稿」+ P20 M3 删除素材两步 confirm（连坐声明/终确认各一）+ P2 源
     # 两步删除（终步=禁用下线，契约无删除端点）+ F-C 素材撤池（2026-11-18）都先走确认弹层
-    assert src.count("askConfirm({") == 12  # W8：+批量打包平台选择（2026-11-24）
+    assert src.count("askConfirm({") == 13  # W8 +批量打包（11-24）+W17 订阅删除确认
     for action in ("handleAdapt", "handlePack", "handlePublish", "handleBatch"):
         assert action in src
 
@@ -3659,11 +3665,10 @@ def test_books_view_structure_and_detail_state() -> None:
     """R4 §二/§四：八视图导航第三入口 + 详情态全规格结构（info-grid 三栏/
     目录卡/操作条；换源清勾选/过滤不改勾选/范围 chips/卷全选/500 章按需渲染）。"""
     parsed = _structure()
-    # 视图容器与三子态分区（hash 驱动：默认搜索占位 / ?book=&source= 详情 / ?tab=subs）
-    assert {"view-books", "bk-search", "bk-search-box", "bk-guide",
-            "bk-detail", "bk-absent", "bk-body", "bk-cover", "bk-name",
-            "bk-src-sel", "bk-toc", "bk-filter", "bk-specs", "bk-range",
-            "bk-opbar", "bk-digest", "bk-import-btn", "bk-prog", "bk-subs"} <= set(parsed.ids)
+    # W19b 锚债退役：19 个 id 存在性字符串锚已迁至真 DOM snapshot 层
+    # （tests/e2e/test_studio_view_snapshots_e2e.py 的 books 搜索态+详情态+
+    # 订阅态测试——它们断言元素真在 DOM 中且可见，而非源码含该字符串）。
+    # 本函数保留的是 snapshot 层覆盖不到的行为契约锚（JS 逻辑/CSS 布局）。
     assert "books" in parsed.attrs["data-view"] and "books" in parsed.attrs["data-nav"]
     src = _shell_js_css()
     # 导航：供给组第三入口「书籍」（源中枢/素材库之后）

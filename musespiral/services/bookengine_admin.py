@@ -21,6 +21,7 @@ from typing import Any
 
 from .. import config
 from ..infra import bookengine
+from ..infra import engine_select
 
 # mock 开关的用户级持久化位置（CLI demo on/off 写这里，Studio 启动时读进 env）
 DEMO_FILE = "bookengine_demo"
@@ -65,8 +66,8 @@ def set_demo(mode: str) -> str:
 
 def status(*, client: bookengine.BookEngineClient | None = None) -> dict[str, Any]:
     """引擎三态（headline + detail + next_steps）。"""
-    cli = client if client is not None else bookengine.BookEngineClient()
-    payload = cli.health()
+    # W18b：统一走引擎选择门面（JVM→Playwright→缺席）；注入 client 保留测试契约。
+    payload = client.health() if client is not None else engine_select.health()
     if payload.get("ok") is True:
         version = str(payload.get("version") or "")
         if version == "mock" or payload.get("mock"):
@@ -83,6 +84,20 @@ def status(*, client: bookengine.BookEngineClient | None = None) -> dict[str, An
                 ],
             }
         loaded = payload.get("sources_loaded") or 0
+        if payload.get("kind") == "playwright":
+            return {
+                "state": "ok",
+                "headline": "🟢 Playwright 书源引擎：可搜（本地浏览器抓取）",
+                "detail": [
+                    "无需 JVM：书源 browserRule（CSS 选择器）驱动真实网页抓取。",
+                    f"带 browserRule 的启用书源：{loaded} 个",
+                    "抓取走本机 Chromium（headless），零外部服务。",
+                ],
+                "next_steps": [
+                    "去「书籍」视图搜索书名 → 选章入素材库",
+                    "书源规则写法：core/booksource/model.py 的 browserRule 子对象",
+                ],
+            }
         return {
             "state": "ok",
             "headline": f"🟢 bookengine：可搜（{loaded} 源已加载）",
@@ -99,7 +114,7 @@ def status(*, client: bookengine.BookEngineClient | None = None) -> dict[str, An
         ],
         "next_steps": [
             "想先体验完整流程：musespiral bookengine demo on && ctl.sh restart",
-            "想用真实书籍：等 R1-R2 引擎建设，或自行按设计文档起 legado 引擎",
+            "想用真实书籍：给书源加 browserRule（CSS 规则）即自动启用 Playwright 引擎，\n            或等 JVM 引擎建设（R1-R2）",
             "书源管理照常：booksource import / subs / list 全可用",
         ],
     }
@@ -124,7 +139,7 @@ def check_endpoints(*, client: bookengine.BookEngineClient | None = None) -> tup
     for name, call in (
         ("/search", lambda: cli.search("测试", sources="all")),
         ("/book/info", lambda: cli.book_info("https://m.example.com", "https://m.example.com/b")),
-        ("/book/toc", lambda: cli.book_toc("https://m.example.com", "https://m.example.com/b")),
+        ("/book/toc", lambda: cli.toc("https://m.example.com", "https://m.example.com/b")),
     ):
         try:
             r = call()

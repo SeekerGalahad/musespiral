@@ -50,6 +50,7 @@ from ..core.materials import model
 from ..infra.ai import TASKS, ai_configured
 from ..infra.ai.gateway import chat_policed
 from ..infra.bookengine import BookEngineClient, BookEngineUnavailable
+from ..infra.engine_select import get_engine_client
 from ..infra.storage.filesystem import atomic_write_bytes as _atomic_write
 from ..jobs.runner import JobFailure
 from ..jobs.store import now_iso as _now_iso
@@ -520,7 +521,7 @@ def run_fetch(
     """
     items = _check_chapters_input(chapters, digest=digest)
     book_meta = _check_book_meta(book)
-    cli = client if client is not None else BookEngineClient()
+    cli = client if client is not None else get_engine_client()
     book_hash = _book_hash(source_url, book_url)
     total = len(items)
 
@@ -762,7 +763,7 @@ def submit_to_runner(
         raise BookFetchError("缺少必填字段 bookUrl（书籍详情页地址）")
     items = _check_chapters_input(chapters, digest=digest)
     _check_book_meta(book)
-    cli = client if client is not None else BookEngineClient()
+    cli = client if client is not None else get_engine_client()
     if not cli.available():
         raise BookEngineUnavailable(
             "bookengine 未就绪——取文暂不可用（引擎服务 R1-R2 建设中或未运行）"
@@ -801,7 +802,7 @@ def run_search(
     client: BookEngineClient | None = None,
 ) -> dict[str, Any]:
     """聚合搜索一次（引擎代理）→ 计数 result（items 截断 SEARCH_ITEMS_CAP）。"""
-    cli = client if client is not None else BookEngineClient()
+    cli = client if client is not None else get_engine_client()
     payload = cli.search(key, sources=sources, page=page)
     items = payload.get("items")
     rows = [it for it in items if isinstance(it, dict)] if isinstance(items, list) else []
@@ -830,7 +831,7 @@ def submit_search(
     """
     if not isinstance(key, str) or not key.strip():
         raise BookFetchError("缺少必填字段 key（搜索关键词）")
-    cli = client if client is not None else BookEngineClient()
+    cli = client if client is not None else get_engine_client()
     if not cli.available():
         raise BookEngineUnavailable(
             "bookengine 未就绪——搜索暂不可用（引擎服务 R1-R2 建设中或未运行）"

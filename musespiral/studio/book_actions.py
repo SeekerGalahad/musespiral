@@ -148,10 +148,10 @@ def _book_info_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> dict
     book_url = _query_str(query, "bookUrl")
     if source_url is None or book_url is None:
         raise _HttpError(400, "缺少必填参数 sourceUrl 与 bookUrl")
-    from ..infra.bookengine import BookEngineClient
+    from ..infra.engine_select import get_engine_client
 
     try:
-        payload = BookEngineClient().book_info(source_url, book_url)
+        payload = get_engine_client().book_info(source_url, book_url)
     except BookEngineUnavailable as exc:
         return _engine_absent_payload(exc)
     return {"ok": True, "status": "ok", "info": payload.get("info") or {}}
@@ -163,10 +163,10 @@ def _book_toc_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> dict[
     book_url = _query_str(query, "bookUrl")
     if source_url is None or book_url is None:
         raise _HttpError(400, "缺少必填参数 sourceUrl 与 bookUrl")
-    from ..infra.bookengine import BookEngineClient
+    from ..infra.engine_select import get_engine_client
 
     try:
-        payload = BookEngineClient().toc(source_url, book_url)
+        payload = get_engine_client().toc(source_url, book_url)
     except BookEngineUnavailable as exc:
         return _engine_absent_payload(exc)
     chapters = [c for c in (payload.get("chapters") or []) if isinstance(c, dict)]

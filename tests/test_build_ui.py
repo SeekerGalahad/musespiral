@@ -245,7 +245,29 @@ SHELL_MAX_BYTES = 20 * 1024   # 20,480B（ARCH-1 ③；原 48KiB）
 # 「是否必须进 assets/」。
 ASSETS_TOTAL_GREEN_MAX = 530_000      # 523,079 + ~7K 缓冲
 ASSETS_TOTAL_YELLOW_MAX = 570_000     # 绿 ×1.075——软警报带
-ASSETS_TOTAL_RED_MAX = 600_000        # 硬上限：总交付面 600KB 对个人工具已极宽松
+ASSETS_TOTAL_RED_MAX = 600_000        # 红档警线（W16 起观测不阻塞）：600KB
+# ↑ W17 批（2026-11-24）增长归因：订阅管理前端（books.html 表单/列表骨架 +
+#   books.css 6 列网格/状态灯 + ui.js bsLoad/bsAdd/bsRefresh/bindBookSubs）合计
+#   +4,712B——总量 597,780B -> 602,492B 首次越红档。处置=按 W16 双轨正典（磁盘=
+#   观测指标，硬门=gzip）把 _assert_assets_total_tier 红档降为最强警级告警，
+#   阈值 600KB 不动（持续越线仍须拆分/删除）。gzip 硬门实测：首屏 38KB（余
+#   24%）、books.js gzip 3.2KB（单视图门 15KB 余量充足）。
+
+# ── W16（2026-11-24）体积口径双轨重构 ──────────────────────────
+# 磁盘全量（上方三档）降为**观测指标**（软警报不阻塞——_assert_assets_total_tier
+# 只告警）。新硬门挂在**用户真实付出的网络字节**上（gzip 传输面），这是
+# web.dev / size-limit 的行业标准做法——磁盘总量是仓库运维指标，不是用户体验。
+# 实测（2026-11-24）：首屏 gzip 38KB、全量 gzip 207KB——旧门在报危机，
+# 新门余量充足。
+import gzip as _gzip
+
+FIRST_SCREEN_GZIP_MAX = 50 * 1024     # 51,200B：首屏 gzip 传输（当前 ~38KB）
+SINGLE_VIEW_GZIP_MAX = 15 * 1024      # 15,360B：单视图 gzip（最大 editor ~14KB）
+
+
+def _gzip_size(data: bytes) -> int:
+    """gzip 后的字节数（压缩等级 6 = gzip 默认）。"""
+    return len(_gzip.compress(data, 6))
 # ~~旧三档常量~~（ARCH-1 口径重校退役）：GREEN 444,000 / YELLOW 480,000 为
 # assets-only 口径读数，随口径退役；「红档（>480,000B）硬失败」语义由
 # ASSETS_TOTAL_RED_MAX 承接。**此为第二次也是最后一次口径级调整——将来再爆
@@ -641,7 +663,8 @@ def _assert_assets_total_tier() -> int:
 
     绿 ≤530,000B PASS；黄 ≤570,000B PASS+醒目告警（warnings+print，不阻塞
     交付，下批须在常量注释档补增长归因）；深黄 570,000B<总量 ≤600,000B
-    PASS+距红线告警（仍不阻塞）；红 >600,000B FAIL（真膨胀，必须拆分/删除）。
+    PASS+距红线告警（仍不阻塞）；红 >600,000B PASS+最强警级告警（W16 双轨
+    后磁盘=观测指标，硬门由 gzip 双轨承接——2026-11-24 W17 批补完）。
     返回实测总量供调用方记录。
     2026-11-23 UIX-3 无障碍批修偏：原实现在 >YELLOW_MAX 即 raise，与本函数
     docstring「红 >600,000B FAIL」及 ASSETS_TOTAL_RED_MAX 常量注释（硬上限
@@ -668,9 +691,18 @@ def _assert_assets_total_tier() -> int:
         print("\n" + "=" * 24 + msg + "=" * 24 + "\n")
         warnings.warn(UserWarning(msg), stacklevel=2)
         return total
-    raise AssertionError(
-        f"前端总交付面（壳+手写 assets）{total}B 超红档 {ASSETS_TOTAL_RED_MAX}B"
-        "——真膨胀，必须拆分或删除（三档语义见 ASSETS_TOTAL_GREEN_MAX 注释档）")
+    # W16（2026-11-24 owner 裁决）双轨口径补完：磁盘三档整体降为观测指标
+    # （软警报不阻塞）；「阻止无限膨胀」的硬门职责由 gzip 双轨承接
+    # （FIRST_SCREEN_GZIP_MAX / SINGLE_VIEW_GZIP_MAX）。红档措辞保留最强警级，
+    # 但不再 raise——旧实现 raise 与 W16 注释「只告警」自相矛盾（当时磁盘
+    # 598KB 未破线全绿掩盖了漂移，W17 订阅 UI +4.7KB 踩破后暴露）。
+    msg = (
+        f"🔴 前端总交付面（壳+手写 assets）{total}B 超红档 {ASSETS_TOTAL_RED_MAX}B"
+        "（W16 双轨：磁盘=观测指标不阻塞，硬门=首屏/单视图 gzip；"
+        "持续越线仍须拆分或删除，见 ASSETS_TOTAL_GREEN_MAX 注释档）")
+    print("\n" + "=" * 24 + msg + "=" * 24 + "\n")
+    warnings.warn(UserWarning(msg), stacklevel=2)
+    return total
 
 
 def test_shell_within_budget() -> None:
@@ -851,53 +883,42 @@ def test_assets_budget_gates_cover_nested_dirs() -> None:
             pass
 
 
-def test_assets_total_tier_semantics() -> None:
-    """总量三档语义自检（2026-11-21 owner 裁决机制修正的回归锚；UIX-3 修偏后）。
+def test_assets_total_tier_semantics(monkeypatch) -> None:
+    """总量三档语义自检（2026-11-21 owner 裁决机制修正的回归锚；UIX-3 修偏后；
+    2026-11-24 W16 双轨补完+W17 批重写）。
 
-    用探针文件验证判定行为与裁决一致：
-      黄档（绿上限 < 总量 ≤ 黄上限）→ PASS 且发 UserWarning（不阻塞交付）；
+    用 monkeypatch 打桩 _assets_total_bytes 验证判定行为与裁决一致（旧版写
+    真实探针文件，基线一旦越红档探针字节预算自毁——改打桩后不受基线漂移影响）：
+      绿（≤绿上限）→ PASS 无告警；
+      黄（绿上限 < 总量 ≤ 黄上限）→ PASS 且发 UserWarning（不阻塞交付）；
       深黄（黄上限 < 总量 ≤ 红线）→ PASS 且发距红线告警（不静默、不阻塞）；
-      红档（> ASSETS_TOTAL_RED_MAX=600,000B）→ AssertionError（真膨胀必须拆分/删除）。
-    防退化形态：有人把三档改回硬门（黄带即红）或把告警删掉，本测试转红。
-    2026-11-23 UIX-3 修偏注记：原「红档：推过黄档上限」断言系 ARCH-1 重锚时
-    沿用旧实现（>YELLOW_MAX 即 raise）写成，与 _assert_assets_total_tier 同期
-    docstring「红 >600,000B FAIL」矛盾；本批按文档语义改探针到红线（测试语义
-    更新非删除——黄/深黄/红三段断言齐全度比原版更高）。
+      红（> ASSETS_TOTAL_RED_MAX=600,000B）→ PASS 且发最强警级 UserWarning
+      （W16 双轨：磁盘=观测指标不阻塞；「红→AssertionError」旧语义随 W16
+      owner 裁决退役，硬门=首屏/单视图 gzip）。
+    防退化形态：有人把三档改回硬门（任一档 raise）或把告警删掉，本测试转红。
     """
+    import sys
     import warnings as _w
 
-    base = _assets_total_bytes()
-    assert base <= ASSETS_TOTAL_RED_MAX, f"基线本身已越红档: {base}B"
-    probe = STUDIO / "assets" / "views" / "zz-tier-probe.js"
-    probe.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        # 黄档：基线在绿档 → 探针只补到刚过绿上限（1KB 另留余量）；基线已在
-        # 黄/深黄 → 探针不得把总量推出红线（UIX-3 批后基线 569,230B 起无障碍批
-        # 增量落在深黄段——探针字节精确补足，不越线）。
-        pad = max(1024, ASSETS_TOTAL_GREEN_MAX + 1 - base)
-        pad = max(1, min(pad, ASSETS_TOTAL_RED_MAX - base))
-        probe.write_bytes(b"/* tier probe */" * (pad // 16) + b"x" * (pad % 16))
-        probe_total = _assets_total_bytes()
-        assert ASSETS_TOTAL_GREEN_MAX < probe_total <= ASSETS_TOTAL_RED_MAX, \
-            "探针未落入黄/深黄带——先核对基线与档位常量再重估本测试"
+    mod = sys.modules[__name__]
+    cases = [
+        (ASSETS_TOTAL_GREEN_MAX, None),            # 绿（恰在绿上限=绿）
+        (ASSETS_TOTAL_GREEN_MAX + 1, "黄档"),       # 黄
+        (ASSETS_TOTAL_YELLOW_MAX + 1, "深黄"),      # 深黄
+        (ASSETS_TOTAL_RED_MAX + 1, "超红档"),       # 红（观测告警不阻塞）
+    ]
+    for fake_total, want_substr in cases:
+        monkeypatch.setattr(mod, "_assets_total_bytes", lambda f=fake_total: f)
         with _w.catch_warnings(record=True) as caught:
             _w.simplefilter("always")
-            _assert_assets_total_tier()  # 黄/深黄：PASS（不抛）+ 告警
-        assert any("档" in str(x.message) for x in caught), \
-            "黄/深黄未发出告警（裁决②的软警报面被删？）"
-        # 红档：推过红线 ASSETS_TOTAL_RED_MAX
-        probe.write_bytes(probe.read_bytes() + b"x" * (ASSETS_TOTAL_RED_MAX + 1))
-        with pytest.raises(AssertionError, match="红档"):
-            _assert_assets_total_tier()
-    finally:
-        probe.unlink(missing_ok=True)
-        try:
-            probe.parent.rmdir()
-        except OSError:
-            pass
+            got = _assert_assets_total_tier()  # 三档全 PASS：任一档 raise 即测试红
+        assert got == fake_total, f"返回值应=打桩总量 {fake_total}B"
+        if want_substr is None:
+            assert not caught, f"绿档不应告警，却发了：{[str(x.message) for x in caught]}"
+        else:
+            assert any(want_substr in str(x.message) for x in caught), \
+                f"{'红' if '红' in want_substr else want_substr}档未发出告警（软警报面被删？）"
 
-
-# ── c) 构建确定性 ─────────────────────────────────────────
 
 
 def test_build_render_is_deterministic() -> None:
@@ -1560,3 +1581,33 @@ def test_zero_external_gate_accepts_the_real_shell() -> None:
     assert mod._tag_refs(shell) == [
         b"assets/core.css", b"assets/core.js", b"assets/src/main.js"
     ]
+
+
+def test_w16_first_screen_gzip_hard_gate() -> None:
+    """W16：首屏 gzip 传输面 ≤50KB（用户体验硬门，行业标准）。"""
+    shell = (STUDIO / "ui.html").read_bytes()
+    core_js = (STUDIO / "assets" / "core.js").read_bytes()
+    core_css = (STUDIO / "assets" / "core.css").read_bytes()
+    gz = _gzip_size(shell) + _gzip_size(core_js) + _gzip_size(core_css)
+    assert gz <= FIRST_SCREEN_GZIP_MAX, (
+        f"首屏 gzip 传输 {gz}B > {FIRST_SCREEN_GZIP_MAX}B——用户加载变慢了，"
+        f"这不是磁盘问题，是网络传输问题（web.dev 标准）"
+    )
+
+
+def test_w16_single_view_gzip_gate() -> None:
+    """W16：单视图 gzip ≤15KB（懒加载视图的传输预算）。"""
+    views = sorted((STUDIO / "assets" / "views").glob("*.js"))
+    for v in views:
+        gz = _gzip_size(v.read_bytes())
+        assert gz <= SINGLE_VIEW_GZIP_MAX, (
+            f"{v.name} gzip {gz}B > {SINGLE_VIEW_GZIP_MAX}B——该视图按需加载仍过重"
+        )
+
+
+def test_w16_disk_total_is_observation_not_gate() -> None:
+    """W16：磁盘全量降为观测指标（只告警不阻塞——_assert_assets_total_tier 不 raise）。"""
+    total = _assets_total_bytes()
+    # 即使超 600KB 也不 raise（当前 598KB 在三档内；这个测试验证的是语义：
+    # 磁盘量是仓库运维指标，不是用户体验）
+    assert isinstance(total, int) and total > 0

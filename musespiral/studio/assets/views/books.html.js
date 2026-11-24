@@ -54,11 +54,18 @@ document.getElementById('view-books').innerHTML=`
 </div>
 </div>
 <div id="bk-subs" hidden>
-<div class="empty">
-<div class="empty-title">订阅与书源库</div>
-<div class="empty-text">两步导入：解析预览 → 勾选落库（3906 行虚拟滚动 + 多轴过滤）；订阅表 R4 批落地，当前经弹窗与 CLI「musespiral booksource」族管理。</div>
-<div class="action-row"><button class="btn btn-primary" id="im-open">导入书源</button><button class="btn" id="bk-subs-back">回搜索</button></div>
+<div class="view-head"><div><h2 class="view-title">订阅管理</h2><p class="view-sub">书源包地址的订阅、刷新与自动更新——书源导入后此处管理持续同步</p></div></div>
+<div class="action-row bk-subs-toolbar">
+<input class="input" id="bs-url" placeholder="书源包 URL（https）" aria-label="订阅 URL（https 强制）">
+<input class="input" id="bs-interval" type="number" min="1" max="720" value="24" style="width:80px" aria-label="刷新间隔（小时）">
+<label class="chip"><input type="checkbox" id="bs-silent" checked aria-label="静默更新"> 静默</label>
+<button class="btn btn-primary" id="bs-add" type="button">新增/更新</button>
+<button class="btn" id="bs-refresh-all" type="button">全部刷新</button>
+<button class="btn" id="im-open" type="button">导入书源</button>
 </div>
+<div class="empty-text" style="padding:8px 0">订阅表 R4 批落地，当前经弹窗与 CLI「musespiral booksource」族管理。</div>
+<div id="bs-list" class="src-table-wrap"></div>
+<div class="action-row" style="margin-top:12px"><button class="btn btn-ghost" id="bk-subs-back">回搜索</button></div>
 </div>
 <div class="modal-overlay" id="im" hidden>
 <div class="modal im-modal" role="dialog" aria-modal="true" aria-labelledby="im-title">

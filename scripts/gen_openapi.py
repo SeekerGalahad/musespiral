@@ -13,6 +13,14 @@ from __future__ import annotations
 
 import json
 import pathlib
+
+def _project_version() -> str:
+    """版本单一事实源=pyproject.toml（避免硬编码漂移，0.5.3 起）。"""
+    import re
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    return re.search(r'^version\s*=\s*"([^"]+)"', (root / "pyproject.toml").read_text(), re.M).group(1)
+
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
@@ -125,7 +133,7 @@ def build() -> dict:
         "openapi": "3.1.0",
         "info": {
             "title": "musespiral Studio local API",
-            "version": "0.5.2",
+            "version": _project_version(),
             "description": "本地回环 API（127.0.0.1:8766）。全部 POST 动作需 confirm:true。"
                            "本规格由 scripts/gen_openapi.py 从路由自省清单生成。",
         },
