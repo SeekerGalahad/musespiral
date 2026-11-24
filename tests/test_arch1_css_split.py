@@ -117,6 +117,20 @@ def test_css_split_rule_multiset_equivalent_to_head() -> None:
                    b".bk-res-author{color:var(--ink-2);font-size:var(--fs-small)}",
                    b".bk-res-kind,.bk-res-ch{color:var(--ink-2);font-size:var(--fs-micro)}",
                    b".bk-res-src{margin-left:auto;color:var(--ink-3);font-size:var(--fs-micro)}",
+    # 批量操作（W8，2026-11-24）
+                   b".batch-bar{display:flex;align-items:center;gap:8px;padding:8px 10px;margin:8px 0;background:var(--paper-2);border:1px solid var(--line-1);border-radius:var(--radius-card)}",
+                   b".batch-n{font-size:var(--fs-small);color:var(--ink-2)}",
+                   b".batch-n b{color:var(--ink-1)}",
+                   b".batch-result{margin:8px 0;border:1px solid var(--line-1);border-radius:var(--radius-card);overflow:auto;max-height:340px}",
+                   b".batch-row{display:grid;grid-template-columns:1fr 60px 60px 60px 2fr;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line-1);font-size:var(--fs-small);align-items:center}",
+                   b".batch-row:last-child{border-bottom:none}",
+                   b".batch-row.head{background:var(--paper-2);font-weight:600;color:var(--ink-2)}",
+                   b".batch-row .bf{color:var(--crimson)}",
+                   b".batch-row .bw{color:var(--amber)}",
+                   b".batch-row .bp{color:var(--jade)}",
+                   b".batch-row .be{color:var(--ink-3)}",
+                   b".batch-pick{position:absolute;top:6px;left:6px;z-index:2}",
+                   b".article-card{position:relative}",
     # FEAT-2 智能组稿（2026-11-22）在 ui.views/compose.css 新增的 .sc-* 向导
     # 规则族（步骤条/素材列表/大纲编辑，19 条）——基线锚早于本批，合法新增登记。
                    b".sc-list{border:1px solid var(--line-1);border-radius:var(--radius-btn);max-height:300px;overflow:auto}",

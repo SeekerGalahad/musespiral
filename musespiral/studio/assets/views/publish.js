@@ -182,6 +182,7 @@ rows.innerHTML=items.map(pubRow).join('');
 rows.hidden=true;grid.hidden=false;
 grid.innerHTML=items.map(articleCard).join('');
 mountCovers();
+batchInit();
 }
 var empty=$('queue-empty');
 empty.hidden=items.length>0;
@@ -204,6 +205,13 @@ await Promise.all([loadArticles(),loadPlatforms()]);
 renderPublish();
 },repaint:renderPublish};
 function bindPublish(){
+['batch-check','batch-pack','batch-clear'].forEach(function(id){
+var b=$(id);if(!b)return;
+b.addEventListener('click',function(){
+if(id==='batch-check')batchRun('check');
+else if(id==='batch-pack')batchRun('pack');
+else{state.batch=new Set();batchSync();$('batch-result').hidden=true;}
+});});
 $('queue-filters').addEventListener('click',function(event){
 var chip=event.target.closest('[data-filter]');
 if(!chip) return;
@@ -290,3 +298,53 @@ if(e.key==='Enter'&&qsel>=0){e.preventDefault();openQSel();return;}
 });
 }
 bindPublish();
+function batchSync(){var n=state.batch?state.batch.size:0;
+var bar=$('batch-bar');if(bar)bar.hidden=!n;
+var el=$('batch-n');if(el)el.textContent=String(n);
+var list=$('article-list');if(!list)return;
+[].forEach.call(list.querySelectorAll('.batch-pick'),function(cb){
+cb.checked=!!(state.batch&&state.batch.has(cb.getAttribute('data-bpath')));});}
+function batchToggle(path,on){if(!state.batch)state.batch=new Set();
+if(on)state.batch.add(path);else state.batch.delete(path);batchSync();}
+function batchInit(){
+state.batch=state.batch||new Set();
+var list=$('article-list');if(!list)return;
+[].forEach.call(list.children,function(card){
+if(card.querySelector('.batch-pick'))return;
+var a=card.matches('a')?card:card.querySelector('a');if(!a)return;
+var href=a.getAttribute('href')||'';var m=href.match(/path=([^&]+)/);
+if(!m)return;var path=decodeURIComponent(m[1]);
+var cb=document.createElement('input');cb.type='checkbox';cb.className='batch-pick';
+cb.setAttribute('data-bpath',path);cb.setAttribute('aria-label','选择 '+path);
+cb.addEventListener('click',function(e){e.stopPropagation();e.preventDefault();batchToggle(path,this.checked);});
+card.insertBefore(cb,card.firstChild);});
+batchSync();}
+function batchRender(rows,totals,kind){
+var el=$('batch-result');if(!el)return;el.hidden=false;
+var h='<div class="batch-row head"><span>文章</span><span>失败</span><span>警告</span><span>通过</span><span>'+ (kind==='check'?'首条失败':'产物/错误') +'</span></div>';
+rows.forEach(function(r){
+var nm=r.path,f=r.fail,w=r.warn,p=r.pass,note=r.first_fail||r.dir||r.error||'';
+if(kind==='pack'){f='—';w='—';p=(r.dir?'成功':'—');}
+h+='<div class="batch-row"><span title="'+esc(nm)+'">'+esc(nm)+'</span>'
++'<span class="'+(f>0||f===-1?'bf':'')+'">'+esc(String(f))+'</span>'
++'<span class="bw">'+esc(String(w))+'</span>'
++'<span class="bp">'+esc(String(p))+'</span>'
++'<span class="be" title="'+esc(String(note))+'">'+esc(String(note).slice(0,80))+'</span></div>';});
+h+='<div class="batch-row head"><span>共 '+totals.n+' 篇</span><span>失败 '+ (totals.fail||0) +'</span><span></span><span>净 '+ (totals.clean||totals.ok||0) +'</span><span>错误 '+ (totals.error||0) +'</span></div>';
+el.innerHTML=h;}
+async function batchRun(kind){
+if(!state.batch||!state.batch.size)return toast('先勾选文章',WN);
+var paths=[].slice.call(state.batch);
+try{
+var d;
+if(kind==='check'){
+d=await postJSON('/api/action/batch_check',{confirm:true,paths:paths});
+batchRender(d.rows||[],d.totals||{},'check');
+toast('批量检查完成:'+d.totals.n+' 篇,失败 '+d.totals.fail,d.totals.fail?WN:OK);
+}else{
+var pl=await askConfirm({title:'批量打包',body:'选择平台,逐篇生成物料包(不发公众号)',options:['xhs','zhihu','douyin','channels','juejin','bilibili']});
+if(pl===false||pl==null)return;
+d=await postJSON('/api/action/batch_pack',{confirm:true,paths:paths,platform:(typeof pl==='string'?pl:'xhs')});
+batchRender(d.rows||[],d.totals||{},'pack');
+toast('批量打包完成:成功 '+d.totals.ok+',失败 '+d.totals.error,d.totals.error?WN:OK);
+}}catch(err){toast('批量操作失败:'+err.message,ER);}}

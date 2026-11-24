@@ -180,6 +180,9 @@ CONTRACT_PATHS = {
     # POST /api/book/search 本批未接（搜索态占位，结果渲染 R4 批）——不入前端契约。
     "/api/booksource/engine",
     "/api/action/bookengine_demo",
+    # W8（2026-11-24）：批量审核/打包——前端从零消费变已消费
+    "/api/action/batch_check",
+    "/api/action/batch_pack",
     "/api/book/search",
     # R4 导入弹窗批（2026-11-18，书源实弹修复与导入弹窗设计 §三）：解析预览
     # POST /api/booksource/import（零落库）+ 落库 POST /api/booksource/import_apply
@@ -1382,7 +1385,7 @@ def test_custom_confirm_modal_and_toast() -> None:
     # 四个动作（adapt/pack/publish/batch_adapt）+ F46 KB 设置保存 + F48 创作台
     # 「采纳入稿」+ P20 M3 删除素材两步 confirm（连坐声明/终确认各一）+ P2 源
     # 两步删除（终步=禁用下线，契约无删除端点）+ F-C 素材撤池（2026-11-18）都先走确认弹层
-    assert src.count("askConfirm({") == 11
+    assert src.count("askConfirm({") == 12  # W8：+批量打包平台选择（2026-11-24）
     for action in ("handleAdapt", "handlePack", "handlePublish", "handleBatch"):
         assert action in src
 

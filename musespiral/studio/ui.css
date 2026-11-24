@@ -178,3 +178,16 @@ mark{background:color-mix(in srgb,var(--amber) 18%,transparent);color:inherit;bo
 .skel-row:last-child{border-bottom:none}
 /* 空态引导动作行（按钮组居中，与 .empty 的居中排版对齐） */
 .empty-actions{justify-content:center;margin-top:6px}
+.batch-bar{display:flex;align-items:center;gap:8px;padding:8px 10px;margin:8px 0;background:var(--paper-2);border:1px solid var(--line-1);border-radius:var(--radius-card)}
+.batch-n{font-size:var(--fs-small);color:var(--ink-2)}
+.batch-n b{color:var(--ink-1)}
+.batch-result{margin:8px 0;border:1px solid var(--line-1);border-radius:var(--radius-card);overflow:auto;max-height:340px}
+.batch-row{display:grid;grid-template-columns:1fr 60px 60px 60px 2fr;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line-1);font-size:var(--fs-small);align-items:center}
+.batch-row:last-child{border-bottom:none}
+.batch-row.head{background:var(--paper-2);font-weight:600;color:var(--ink-2)}
+.batch-row .bf{color:var(--crimson)}
+.batch-row .bw{color:var(--amber)}
+.batch-row .bp{color:var(--jade)}
+.batch-row .be{color:var(--ink-3)}
+.batch-pick{position:absolute;top:6px;left:6px;z-index:2}
+.article-card{position:relative}

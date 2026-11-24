@@ -41,6 +41,9 @@ BUDGET = {
     "test_tts.py": 2,
     "test_version_diff.py": 1,
     "test_writing_stats.py": 3,
+    # W8 批量接线门：这些锚是**行为契约类**（API 路径 + DOM id），不是实现文本
+    # ——校验「前端确实消费了这两个端点」，改实现不改接口时不应红。
+    "test_batch_ui.py": 5,
 }
 
 _ANCHOR = re.compile(r'assert\s+(?:f?)"([^"]{8,})"\s+in\s+(?:src|all_src|js)\b')
