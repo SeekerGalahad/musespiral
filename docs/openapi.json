@@ -139,6 +139,64 @@
     }
    }
   },
+  "/api/action/batch_check": {
+   "post": {
+    "summary": "POST /api/action/batch_check（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/action/batch_pack": {
+   "post": {
+    "summary": "POST /api/action/batch_pack（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
   "/api/action/bookengine_demo": {
    "post": {
     "summary": "POST /api/action/bookengine_demo（动作接口，必须带 confirm:true）",

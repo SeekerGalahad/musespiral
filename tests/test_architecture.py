@@ -463,6 +463,10 @@ CONTRACT_POST_EXACT = {
     "/api/book/search", "/api/materials/from-chapters",
     # 2026-11-23 用户反馈批：体验模式开关（引擎未建设期的 mock 体验入口）
     "/api/action/bookengine_demo",
+    # 2026-11-24 W6：批量审核/批量打包（D4 裁决：不做批量真发布——微信频控+
+    # 人工终发红线；批量只覆盖「一次看完全部 + 一次打完物料」）
+    "/api/action/batch_check",
+    "/api/action/batch_pack",
     # 集成接线轮（2026-11-18）：长任务协作式取消（R3.5 正典 §2.2 取消语义
     # 落点——已完成章保留入库/未完成章放弃；全域 job 可用，book_fetch 设
     # 检查点=取文逐章/提炼逐 pass）。POST 53→54。

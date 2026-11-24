@@ -342,6 +342,95 @@ def _assert_fetch_url(url: str) -> None:
 
 # ---- 域内路由片段（actions._ACTION_ROUTES 合并面之一）----
 
+def _action_batch_check(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
+    """POST /api/action/batch_check（2026-11-24 W6）：多篇一次性审核汇总。
+
+    `{paths:[...], platform?}` → 逐篇 run_checks，返回汇总表：
+    `{ok, rows:[{path, title, fail, warn, pass, first_fail}], totals:{...}}`。
+    单篇异常（坏 frontmatter/缺失）记为该行 error，不中断整批——批量动作的
+    价值是「一次看完全部」，不是遇错即停。
+    """
+    from ...core.content.parser import parse_article
+    from ...core.quality.checks import run_checks
+
+    paths = data.get("paths")
+    if not isinstance(paths, list) or not paths:
+        raise _HttpError(400, "paths 必须是非空数组（root 内相对路径）")
+    if len(paths) > 200:
+        raise _HttpError(400, f"一次最多 200 篇（当前 {len(paths)}）")
+    platform = data.get("platform")
+    if platform is not None and not isinstance(platform, str):
+        raise _HttpError(400, "platform 必须是字符串或 null")
+
+    rows: list[dict[str, Any]] = []
+    for rel in paths:
+        if not isinstance(rel, str) or not rel.strip():
+            raise _HttpError(400, "paths 内每项必须是非空字符串")
+        row: dict[str, Any] = {"path": rel.strip()}
+        try:
+            article_path = _resolve_file(ctx.root, rel.strip())
+            article = parse_article(article_path)
+            results = run_checks(article, article_path, platform=platform)
+            fail = sum(1 for lvl, _msg in results if lvl == "FAIL")
+            warn = sum(1 for lvl, _msg in results if lvl == "WARN")
+            pass_ = sum(1 for lvl, _msg in results if lvl == "PASS")
+            first_fail = next((msg for lvl, msg in results if lvl == "FAIL"), "")
+            row.update({"title": str(article.metadata.get("title", "")), "fail": fail,
+                        "warn": warn, "pass": pass_, "first_fail": first_fail})
+        except Exception as exc:  # noqa: BLE001 - 单篇异常不中断整批
+            row.update({"error": _sanitize_error(exc, ctx.root), "fail": -1, "warn": 0, "pass": 0})
+        rows.append(row)
+    return {
+        "ok": True,
+        "rows": rows,
+        "totals": {
+            "n": len(rows),
+            "fail": sum(1 for r in rows if r.get("fail", 0) > 0),
+            "clean": sum(1 for r in rows if r.get("fail") == 0 and "error" not in r),
+            "error": sum(1 for r in rows if "error" in r),
+        },
+    }
+
+
+def _action_batch_pack(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
+    """POST /api/action/batch_pack（2026-11-24 W6）：多篇一次性打物料包。
+
+    `{paths:[...], platform}` → 逐篇 build_pack_for（同步，非 job：pack 是本地
+    文件生成，无网络调用，单篇 <1s）。返回 `{ok, rows:[{path, dir|error}], totals}`。
+    红线：**不做批量真发布**（微信频控 + 人工终发红线，沿 D4 裁决）。
+    """
+    from ...services import pack_service
+
+    paths = data.get("paths")
+    if not isinstance(paths, list) or not paths:
+        raise _HttpError(400, "paths 必须是非空数组（root 内相对路径）")
+    if len(paths) > 200:
+        raise _HttpError(400, f"一次最多 200 篇（当前 {len(paths)}）")
+    platform = _require_str(data, "platform")
+
+    rows: list[dict[str, Any]] = []
+    for rel in paths:
+        if not isinstance(rel, str) or not rel.strip():
+            raise _HttpError(400, "paths 内每项必须是非空字符串")
+        row: dict[str, Any] = {"path": rel.strip()}
+        try:
+            article_path = _resolve_file(ctx.root, rel.strip())
+            pack_dir = pack_service.build_pack_for(article_path, platform)
+            row["dir"] = _rel(ctx.root, pack_dir)
+        except Exception as exc:  # noqa: BLE001
+            row["error"] = _sanitize_error(exc, ctx.root)
+        rows.append(row)
+    return {
+        "ok": True,
+        "rows": rows,
+        "totals": {
+            "n": len(rows),
+            "ok": sum(1 for r in rows if "dir" in r),
+            "error": sum(1 for r in rows if "error" in r),
+        },
+    }
+
+
 ROUTES: dict[str, Callable[[_StudioContext, dict[str, Any]], dict[str, Any]]] = {
     "/api/action/adapt": _action_adapt,
     "/api/action/pack": _action_pack,
@@ -366,4 +455,8 @@ ROUTES: dict[str, Callable[[_StudioContext, dict[str, Any]], dict[str, Any]]] = 
     "/api/booksource/subs/del": _action_subs_del,  # R0：订阅删除
     "/api/book/search": _action_book_search,  # R3：聚合搜索 → job book_search（引擎代理）
     "/api/action/bookengine_demo": _action_bookengine_demo,  # 2026-11-23：体验模式开关
+    "/api/action/batch_check": _action_batch_check,  # 2026-11-24 W6：多篇审核汇总
+    "/api/action/batch_pack": _action_batch_pack,  # 2026-11-24 W6：多篇物料包
 }
+
+
