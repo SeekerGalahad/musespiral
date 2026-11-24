@@ -162,5 +162,5 @@ mark{background:color-mix(in srgb,var(--amber) 18%,transparent);color:inherit;bo
 .batch-row .bw{color:var(--amber)}
 .batch-row .bp{color:var(--jade)}
 .batch-row .be{color:var(--ink-3)}
-.batch-pick{position:absolute;top:6px;left:6px;z-index:2}
+.batch-pick{position:absolute;top:6px;left:6px;z-index:2}.batch-pick::after{content:'';position:absolute;left:50%;top:50%;width:34px;height:34px;transform:translate(-50%,-50%);border-radius:6px}.btn-ghost{min-height:24px}@media (max-width:900px){.btn,.btn-ghost{min-height:36px}.batch-pick::after{width:40px;height:40px}}
 .article-card{position:relative}

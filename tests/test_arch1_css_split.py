@@ -131,6 +131,11 @@ def test_css_split_rule_multiset_equivalent_to_head() -> None:
                    b".batch-row .be{color:var(--ink-3)}",
                    b".batch-pick{position:absolute;top:6px;left:6px;z-index:2}",
                    b".article-card{position:relative}",
+    # W13 前端精修（2026-11-24）：热区/触控/按钮下限
+                   b".batch-pick::after{content:'';position:absolute;left:50%;top:50%;width:34px;height:34px;transform:translate(-50%,-50%);border-radius:6px}",
+                   b".btn-ghost{min-height:24px}",
+                   (b"(max-width:900px)", b".batch-pick::after{width:40px;height:40px}"),
+                   (b"(max-width:900px)", b".btn,.btn-ghost{min-height:36px}"),
     # FEAT-2 智能组稿（2026-11-22）在 ui.views/compose.css 新增的 .sc-* 向导
     # 规则族（步骤条/素材列表/大纲编辑，19 条）——基线锚早于本批，合法新增登记。
                    b".sc-list{border:1px solid var(--line-1);border-radius:var(--radius-btn);max-height:300px;overflow:auto}",
