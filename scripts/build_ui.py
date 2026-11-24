@@ -95,7 +95,12 @@ _SECTION_OPEN_RE = re.compile(rb"<section\b[^>]*>")
 
 # 壳的首屏引用（M1：均 assets/ 相对路径——零外联红线的产物形态）
 SHELL_CSS_LINK = b'<link rel="stylesheet" href="assets/core.css">\n'
-SHELL_JS_TAG = b'<script defer src="assets/core.js"></script>\n'
+# W3-3b（2026-11-24）：core.js（defer，业务全局）+ main.js（module，ESM 入口）。
+# module 默认 defer 且文档序在 core.js 之后——保证 ESM 初始化时 core 已就绪。
+SHELL_JS_TAG = (
+    b'<script defer src="assets/core.js"></script>\n'
+    b'<script type="module" src="assets/src/main.js"></script>\n'
+)
 
 # 壳内 <script src> / <link href> 引用提取（零外联自检用；源内无其他该形态标签）。
 # 2026-11-18 集成接线轮修正：原正则只认「双引号 + 小写属性名」，实测 12 样本

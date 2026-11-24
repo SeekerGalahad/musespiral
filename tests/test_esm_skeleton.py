@@ -50,9 +50,12 @@ def test_no_accidental_shell_change() -> None:
 
     接壳是 3b 之后的事——本门防「骨架批超范围」提前动了壳。
     """
-    # 模板用 <!--BUILD:JS1--> 占位（构建时合成 <script src=assets/core.js>）
+    # W3-3b（2026-11-24）：壳已接 ESM——占位仍在模板（构建期合成双 tag），
+    # 产物同时引用 core.js（defer，业务全局）与 src/main.js（module，ESM 入口）。
     tmpl = (STUDIO / "ui.tmpl.html").read_text(encoding="utf-8")
-    assert "<!--BUILD:JS1-->" in tmpl, "3a 骨架批不应改模板的构建占位"
+    assert "<!--BUILD:JS1-->" in tmpl, "模板的构建占位应保留（由构建器合成）"
     built = (STUDIO / "ui.html").read_text(encoding="utf-8")
-    assert 'src="assets/core.js"' in built, "3a 骨架批不应改产物的脚本引用"
-    assert 'type="module"' not in built, "3a 不应提前接 ESM 壳"
+    assert 'src="assets/core.js"' in built, "产物应引用 core.js（业务全局，双轨期共存）"
+    assert 'type="module"' in built and 'src/main.js' in built, "3b 应已接 ESM 入口"
+    # 双轨期纪律：ESM 入口必须是 assets/ 相对路径（零外联红线不因 ESM 放宽）
+    assert 'src="assets/src/main.js"' in built

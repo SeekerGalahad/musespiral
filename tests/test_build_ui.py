@@ -1556,4 +1556,7 @@ def test_zero_external_gate_accepts_the_real_shell() -> None:
     mod = _build_module()
     t, v, c, j = _sources(mod)
     shell = mod.render(t, v, c, j)
-    assert mod._tag_refs(shell) == [b"assets/core.css", b"assets/core.js"]
+    # W3-3b（2026-11-24）：ESM 入口 main.js 随壳加载（core.js defer + main.js module）
+    assert mod._tag_refs(shell) == [
+        b"assets/core.css", b"assets/core.js", b"assets/src/main.js"
+    ]

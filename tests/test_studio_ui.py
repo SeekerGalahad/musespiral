@@ -447,7 +447,8 @@ def test_ui_has_no_external_resource_references() -> None:
     assert refs, "壳缺少任何资源引用（M1 壳必须引用 assets/）"
     for url in refs:
         assert url.startswith("assets/"), f"壳内引用须为 assets/ 相对路径（零外联红线）: {url}"
-    assert refs == ["assets/core.css", "assets/core.js"], refs
+    # W3-3b：+ ESM 入口（module 加载，仍 assets/ 相对路径=零外联不变）
+    assert refs == ["assets/core.css", "assets/core.js", "assets/src/main.js"], refs
     # 壳内 <link> 标签数恒为 1（唯一那条 stylesheet）——M1 前 `"<link" not in src`
     # 的等价锁：无 href 的 <link rel=preload/preconnect> 不会被上面的引用清单抓到。
     assert shell.lower().count("<link") == 1, (
