@@ -83,6 +83,7 @@ from ...services import plugins_service  # noqa: F401
 from ..security import _HttpError, _StudioContext  # noqa: F401
 
 # ---- 五域（ARCH-2 ③ 职责边界）----
+from .lifecycle import ROUTES as _LIFECYCLE_ROUTES  # W14b: 插件生命周期四端点
 from .list_detail import (  # noqa: F401
     ROUTES as _LIST_DETAIL_ROUTES,
     _action_plugins_refresh,
@@ -147,6 +148,7 @@ from .segments import (  # noqa: F401
 # （键集与拆分前单文件 ROUTES 逐字相同）
 ROUTES: dict[str, Callable[[_StudioContext, dict[str, Any]], dict[str, Any]]] = {
     **_LIST_DETAIL_ROUTES,  # /api/plugins/refresh（§十二 重扫）
+      **_LIFECYCLE_ROUTES,  # W14b: 插件生命周期四端点
     **_PIPELINE_CRUD_ROUTES,  # /api/pipelines（§十二 保存，body id 形）
     **_RUN_ADJUDICATE_ROUTES,  # /api/pipelines/run（§十二 运行，body id 形）
     **_SEGMENTS_ROUTES,  # /api/pipelines/runs/segments（E-4 编辑版保存）

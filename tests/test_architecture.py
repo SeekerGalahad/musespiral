@@ -467,6 +467,9 @@ CONTRACT_POST_EXACT = {
     # 人工终发红线；批量只覆盖「一次看完全部 + 一次打完物料」）
     "/api/action/batch_check",
     "/api/action/batch_pack",
+    # W14b（2026-11-24）：插件生命周期四端点
+    "/api/plugins/install", "/api/plugins/uninstall",
+    "/api/plugins/enabled", "/api/plugins/export",
     # 集成接线轮（2026-11-18）：长任务协作式取消（R3.5 正典 §2.2 取消语义
     # 落点——已完成章保留入库/未完成章放弃；全域 job 可用，book_fetch 设
     # 检查点=取文逐章/提炼逐 pass）。POST 53→54。

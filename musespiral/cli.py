@@ -11,6 +11,7 @@ from .commands.agent_cmds import agent
 from .commands.ai_cmds import ai, rewrite
 from .commands.backup_cmds import backup
 from .commands.booksource_cmds import bookengine, booksource
+from .commands.plugin_cmds import plugin
 from .commands.cards_cmds import cards
 from .commands.compose_cmds import compose
 from .commands.config_cmds import config_cmd
@@ -93,6 +94,7 @@ cli.add_command(pipeline)  # E1：一键金路径（2026-11-17 组合批；pipel
 cli.add_command(plrun)  # 插件流水线 run 目录：list/prune（复核 P4 回收面，2026-11-20）
 cli.add_command(booksource)  # R0 书源功能（2026-11-18）：import/list/refresh/subs
 cli.add_command(bookengine)  # 引擎管理（2026-11-23）：status/demo/check
+cli.add_command(plugin)  # W14b（2026-11-24）：插件生命周期 list/install/uninstall/enable/disable/export
 cli.add_command(site)  # G-T6 静态站导出（2026-11-19）：build（CLI-only，零端点）
 cli.add_command(tts)  # G-T5 TTS 朗读（调研吸收 §六）：<stem>.mp3 落文章目录
 

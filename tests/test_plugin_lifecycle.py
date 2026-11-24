@@ -180,3 +180,64 @@ def test_failed_install_leaves_no_partial_dir(home, tmp_path) -> None:
         L.install_from_package(p)
     leftovers = list((home / "plugins").glob("*.installing")) if (home / "plugins").exists() else []
     assert not leftovers
+
+
+# ── W14b 端点与 CLI ─────────────────────────────────────────────
+
+def test_endpoints_registered() -> None:
+    """四端点进 _ACTION_ROUTES（路由注册表）。"""
+    from musespiral.studio.actions import _ACTION_ROUTES
+
+    for p in ("/api/plugins/install", "/api/plugins/uninstall",
+              "/api/plugins/enabled", "/api/plugins/export"):
+        assert p in _ACTION_ROUTES, p
+
+
+def test_cli_plugin_list(home) -> None:
+    from click.testing import CliRunner
+
+    from musespiral.cli import cli
+
+    r = CliRunner().invoke(cli, ["plugin", "list"])
+    assert r.exit_code == 0
+    assert "内置" in r.output
+
+
+def test_cli_install_uninstall_roundtrip(home, tmp_path) -> None:
+    from click.testing import CliRunner
+
+    from musespiral.cli import cli
+
+    pkg = _pkg(tmp_path / "cli.mspkg")
+    r = CliRunner().invoke(cli, ["plugin", "install", str(pkg)])
+    assert r.exit_code == 0 and "已安装" in r.output
+    r2 = CliRunner().invoke(cli, ["plugin", "list"])
+    assert "demo-plugin" in r2.output and "用户" in r2.output
+    r3 = CliRunner().invoke(cli, ["plugin", "disable", "demo-plugin"])
+    assert r3.exit_code == 0
+    r4 = CliRunner().invoke(cli, ["plugin", "list"])
+    assert "禁用" in r4.output
+    r5 = CliRunner().invoke(cli, ["plugin", "enable", "demo-plugin"])
+    assert r5.exit_code == 0
+    r6 = CliRunner().invoke(cli, ["plugin", "uninstall", "demo-plugin"])
+    assert r6.exit_code == 0 and "已卸载" in r6.output
+
+
+def test_cli_builtin_uninstall_fails_readable(home) -> None:
+    from click.testing import CliRunner
+
+    from musespiral.cli import cli
+
+    r = CliRunner().invoke(cli, ["plugin", "uninstall", "article-writer"])
+    assert r.exit_code == 1 and "内置插件" in r.output
+
+
+def test_cli_export(home, tmp_path) -> None:
+    from click.testing import CliRunner
+
+    from musespiral.cli import cli
+
+    L.install_from_package(_pkg(tmp_path / "e.mspkg"))
+    out = tmp_path / "out.mspkg"
+    r = CliRunner().invoke(cli, ["plugin", "export", "demo-plugin", "--out", str(out)])
+    assert r.exit_code == 0 and out.is_file()

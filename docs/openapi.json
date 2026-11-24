@@ -2642,9 +2642,125 @@
     }
    }
   },
+  "/api/plugins/enabled": {
+   "post": {
+    "summary": "POST /api/plugins/enabled（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/plugins/export": {
+   "post": {
+    "summary": "POST /api/plugins/export（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/plugins/install": {
+   "post": {
+    "summary": "POST /api/plugins/install（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
   "/api/plugins/refresh": {
    "post": {
     "summary": "POST /api/plugins/refresh（动作接口，必须带 confirm:true）",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "properties": {
+         "confirm": {
+          "type": "boolean",
+          "description": "人审闸门，必须 true"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK（{ok:true} 或 {ok:false} 业务层语义）"
+     }
+    }
+   }
+  },
+  "/api/plugins/uninstall": {
+   "post": {
+    "summary": "POST /api/plugins/uninstall（动作接口，必须带 confirm:true）",
     "requestBody": {
      "required": true,
      "content": {
