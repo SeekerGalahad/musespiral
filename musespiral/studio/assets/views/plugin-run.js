@@ -1,4 +1,4 @@
-var PR={mode:'',pipeId:'',def:null,runId:'',jobId:'',timer:null,t0:0,steps:[],status:'',error:'',artifacts:[],segs:null,ranges:null,edits:{},editIdx:-1,rngDel:{},rngAdd:{},pipes:[],miss:0,hasSegs:false,hasArticle:false,awStatus:'',verdicts:{},regen:0,regenOpen:''};
+var PR={mode:'',pipeId:'',def:null,runId:'',jobId:'',timer:null,t0:0,steps:[],status:'',error:'',artifacts:[],segs:null,ranges:null,edits:{},editIdx:-1,rngDel:{},rngAdd:{},pipes:[],miss:0,hasSegs:false,hasArticle:false,awStatus:'',verdicts:{},regen:0,regenOpen:'',fail:''};
 function prChainHasSegs(nodes){
 return (nodes||[]).some(function(n){
 var o=((n&&n.plugin)||{}).outputs||{};
@@ -97,8 +97,10 @@ async function prLoadPipes(){
 try{
 var d=await getJSON('/api/pipelines');
 PR.pipes=d.pipelines||d.pipes||[];
-}catch(err){PR.pipes=[];}
+PR.fail='';
+}catch(err){PR.pipes=[];PR.fail=err.message||'服务未响应';}
 }
+function prPipesRetry(){return prLoadPipes().then(prPaint);}
 async function prLoadPipe(id){
 try{
 PR.def=await getJSON(`/api/pipelines/${encodeURIComponent(id)}`);
@@ -236,7 +238,7 @@ $('pr-back-btn').hidden=pick;
 $('pr-reset-btn').hidden=pick;
 $('pr-run-btn').hidden=PR.mode!=='pipe';
 $('pr-title').textContent=PR.mode==='pick'?'流水线':((PR.def&&PR.def.name)?String(PR.def.name):'流水线画布');
-$('pr-sub').textContent=pick?('共 '+PR.pipes.length+' 条已存流水线'):(PR.mode==='run'?'运行 '+PR.runId:(PR.pipeId||''));
+$('pr-sub').textContent=pick?(PR.fail?'流水线读取失败':'共 '+PR.pipes.length+' 条已存流水线'):(PR.mode==='run'?'运行 '+PR.runId:(PR.pipeId||''));
 var b=$('pr-badge');
 b.textContent={running:'运行中',done:'完成',failed:'失败',cancelled:'已取消'}[PR.status]||'待运行';
 b.className='badge '+({running:'running',done:'done',failed:'failed'}[PR.status]||'queued');
@@ -248,7 +250,7 @@ $('pr-logs').innerHTML=prLogsHtml();
 $('pr-out').innerHTML=prOutHtml();
 }
 function prPipesHtml(){
-if(!PR.pipes.length)return '<div class="empty"><div class="empty-icon">'+I('flow')+'</div><div class="empty-title">暂无流水线</div><div class="empty-text">到「插件」清单新建一条（输入 → 处理 → 输出），保存后在这里运行。</div><button class="btn btn-primary" data-prnew>去新建</button></div>';
+if(!PR.pipes.length)return (PR.fail?loadFailHTML('流水线列表',PR.fail,'prPipesRetry'):'<div class="empty"><div class="empty-icon">'+I('flow')+'</div><div class="empty-title">暂无流水线</div><div class="empty-text">到「插件」清单新建一条（输入 → 处理 → 输出），保存后在这里运行。</div><button class="btn btn-primary" data-prnew>去新建</button></div>');
 return '<div class="pr-pipes">'+PR.pipes.map(function(p){
 var n=(p.nodes||[]).length;
 return '<button class="pr-pipe" data-propen="'+esc(p.id)+'"><span class="pr-pipe-i">'+I('flow')+'</span><span class="pr-pipe-main"><span class="pr-pipe-name">'+esc(p.name||p.id)+'</span><span class="pr-pipe-sub">'+esc(p.id)+' · '+n+' 节点</span></span><span class="pr-pipe-go">'+I('play')+'</span></button>';

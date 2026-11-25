@@ -40,6 +40,7 @@ mtag:'',
 colls:[],
 collOf:{},
 tagList:[],
+srcFail:'',setFail:'',platFail:'',statsFail:'',collFail:'',tagFail:'',jobsFail:'',
 mqTotal:0,
 sview:'grid',
 irange:30,
@@ -145,6 +146,17 @@ await refreshJobs();await refreshArticleState();
 return j;
 }
 function queued(id){toast(QUEUED,OK);return trackJob(id);}
+function loadFailHTML(what,err,retry){
+return '<div class="notice-card is-error" role="alert"><span class="n-ic">'+I('warning')+'</span><div class="n-body"><h3>⚠ 加载失败：'+esc(what)+'</h3><p>'+esc(err||'服务未响应')+'。这不是「没有数据」——服务端或网络出了问题。</p><div class="n-act"><button class="btn" type="button" data-loadretry="'+esc(retry||'')+'">'+I('refresh')+'重试</button></div></div></div>';
+}
+document.addEventListener('click',function(e){
+var b=e.target.closest('[data-loadretry]');
+if(!b)return;
+var fn=window[b.getAttribute('data-loadretry')];
+if(typeof fn!=='function')return;
+b.disabled=true;
+Promise.resolve(fn()).catch(function(){}).then(function(){b.disabled=false;});
+});
 var SYSB=[
 ['offline','error','后端离线','后端 8766 不可达：数据可能过期，恢复后自动消失'],
 ['diskLow','warning','磁盘将满','磁盘剩余不足 5GB：保存/物料包/发布写入可能失败'],
@@ -159,7 +171,7 @@ b.title=act.map(function(s){return s[3];}).join('；');
 function applyHealth(h){state.diskLow=(h.disk_free_gb||99)<5;state.credsOK=!!(h.credentials&&h.credentials.configured);renderSys();}
 function probeHealth(){getJSON('/api/health').then(applyHealth).catch(function(){});}
 async function refreshJobs(){
-try{state.jobs=(await getJSON(`/api/jobs`)).jobs||[];}catch(err){state.jobs=[];}
+try{state.jobs=(await getJSON(`/api/jobs`)).jobs||[];state.jobsFail='';}catch(err){state.jobs=[];state.jobsFail=err.message||'服务未响应';}
 var n=state.jobs.filter(function(j){return j&&(j.status==='queued'||j.status==='running');}).length;
 $('jobs-badge').textContent=n;$('jobs-badge').hidden=!n;
 if(!JM.hidden)renderJobs();
@@ -193,7 +205,7 @@ function renderJobs(){
 var live=state.jobs.filter(function(j){return j&&(j.status==='queued'||j.status==='running');});
 var shown=state.jobs.filter(function(j){return j&&!jobsDismissed[j.id];});
 var done=shown.filter(function(j){return j&&j.status==='done';}).length;
-JM.innerHTML='<div class="jobs-head">后台任务（'+live.length+' 进行中）<button class="jobs-clear" id="jobs-clear" type="button"'+(done?'':' disabled')+'>清空已完成</button></div>'+(shown.length?shown.map(jobRow).join(''):'<div class="job-sub" style="padding:10px 4px;">暂无任务</div>');}
+JM.innerHTML='<div class="jobs-head">后台任务（'+live.length+' 进行中）<button class="jobs-clear" id="jobs-clear" type="button"'+(done?'':' disabled')+'>清空已完成</button></div>'+(shown.length?shown.map(jobRow).join(''):(state.jobsFail?loadFailHTML('后台任务列表',state.jobsFail,'refreshJobs'):'<div class="job-sub" style="padding:10px 4px;">暂无任务</div>'));}
 var jobsPoll=null;
 function jobsPollStop(){if(jobsPoll){clearInterval(jobsPoll);jobsPoll=null;}}
 function viewJob(j){
@@ -271,7 +283,7 @@ function closeDlg(id){var el=$(id);if(!el||el.hidden)return;el.hidden=true;var s
 // Esc 兜底登记表：只收「纯 hidden 关闭」的弹窗（壳 clip-form + 视图 src-form/
 // src-aicfg/coll-form/cv-pm/sc-modal/cm-ch-modal）；有专属收尾态的（#im 状态机、
 // design 双层、askConfirm、cp/kbd）由各自处理器收口，不进登记——防 Esc 双关或漏状态复位。
-var DM_ESC=['clip-form','src-form','src-aicfg','coll-form','cv-pm','sc-modal','cm-ch-modal'];
+var DM_ESC=['clip-form','src-form','src-aicfg','coll-form','mat-cm-pick','cv-pm','sc-modal','cm-ch-modal'];
 function askConfirm(options){
 return new Promise(function(resolve){
 var modal=$('modal'),from=document.activeElement;
@@ -344,16 +356,20 @@ if(state.platforms.length&&!force) return;
 try{
 var data=await getJSON('/api/platforms');
 state.platforms=Array.isArray(data)?data :[];
+state.platFail='';
 }catch(err){
 state.platforms=[];
+state.platFail=err.message||'服务未响应';
 }
 }
 async function loadStats(force){
 if(state.stats&&!force) return;
 try{
 state.stats=await getJSON('/api/stats');
+state.statsFail='';
 }catch(err){
 state.stats=null;
+state.statsFail=err.message||'服务未响应';
 }
 }
 // FEAT-P1B：写作节奏读面（纯读）；真身归 core 段（A 类专项：load* 工具归 core，
@@ -404,6 +420,11 @@ var VIEWS=['sources','material','books','compose','design','publish','insight','
 // PL-3：plugin-pipeline（画布按流水线定义打开）别名到 plugin-run 视图（插件系统设计 §八/评审 §2.3 拆分）
 var HALIAS={queue:'publish',dashboard:'insight',discover:'material','plugin-pipeline':'plugin-run'};
 function showView(view){
+// P1-1 浮层统一收口（2026-11-25 R2 交互批）：视图**切换**（CURVIEW 变化）即
+// 离开当前上下文——壳级浮层与阅读面板一并关净（⌘K 面板跨视图残留遮挡页面
+// 判例：切走再切回视图不残留打开的弹层）；同视图 hash 变化（深链/参数筛选）
+// 不触发，不误伤用户开着的弹层。closeOverlays 见 VAPI 声明后定义块。
+if(CURVIEW!==view){CURVIEW=view;closeOverlays();}
 VIEWS.forEach(function(name){
 var el=$('view-'+name);
 if(el) el.hidden=name!==view;
@@ -463,6 +484,27 @@ return __viewPromises[view];}
 // repaint 只登记原 refreshArticleState 会重绘的五视图（books/compose/design/
 // plugins/plugin-run 维持原「后台任务不触发重绘」语义，未登记即 no-op）。
 var VAPI={};
+// ── P1-1 浮层统一收口（2026-11-25 R2 交互批）──────────────────────────────
+// 视图切换时关净「壳级浮层 + 阅读面板 + 视图内弹窗」，复用既有关闭函数不新写
+// 关闭逻辑：cpClose（⌘K 残留判例）/ ctxHide / jobs-menu 收起停轮询 / sparkClose /
+// closeDlg 族（壳 modal·clip-form·viewer·kbd-modal + 视图内 src-form/src-aicfg/
+// coll-form/cv-pm/sc-modal/cm-ch-modal/im/dv-sw/dv-ex + 两抽屉 src-drawer/mat-drawer
+// + material 两面板 syn-panel/gen-panel——懒视图未注入时 closeDlg 自带 null 守卫
+// 即 no-op）；阅读面板经 VAPI.reader.close（跨视图治理契约：rdClose 真身在
+// reader 视图块内，core 不直呼）。#modal（askConfirm）同收口：其 onKey 监听仍在
+// 档，下一次 Esc 按 false 落幕（悬挂 Promise 无害）——全屏遮罩残留压住新视图
+// 比悬挂更伤。im 有状态机但 imOpen 首态自清（§3.3），纯 hidden 复位安全。
+var OVERLAY_DLGS=['modal','clip-form','viewer','kbd-modal','src-form','src-aicfg','coll-form','mat-cm-pick','cv-pm','sc-modal','cm-ch-modal','im','dv-sw','dv-ex','src-drawer','mat-drawer','syn-panel','gen-panel'];
+var CURVIEW='';
+function closeOverlays(){
+cpClose();
+var rp=$('reader-pane'),vr=VAPI.reader;
+if(rp&&!rp.hidden&&vr&&vr.close)vr.close();
+if(sparkBox)sparkClose();
+ctxHide();
+if(!JM.hidden){JM.hidden=true;jobsPollStop();}
+OVERLAY_DLGS.forEach(closeDlg);
+}
 // 返回 repaint 结果（Promise 或同步返回值）——调用方可 await（refreshArticleState
 // 原语义即等待重绘完成），也可不 await（matIngest 等原同步触发点）。
 function viewRepaint(view){var a=VAPI[view];return a&&a.repaint?a.repaint():undefined;}
@@ -490,15 +532,18 @@ renderRoot();
 }
 var DD=[['深度','depth',40],['独特','uniqueness',30],['可读','readability',20],['适配','adaptability',10]];
 async function loadSettings(){
-try{state.settings=await getJSON('/api/settings');}
-catch(err){state.settings=null;}
+try{
+state.settings=await getJSON('/api/settings');
+state.setFail='';
+}catch(err){state.settings=null;state.setFail=err.message||'服务未响应';}
 }
 function matSrcs(){return (state.settings&&state.settings.sources&&state.settings.sources.list)||[];}
 // 源中枢数据面（契约 §2.1-1）：GET /api/sources 与 settings.sources 同源同形，取其权威行
 async function loadSources(){
 try{var d=await getJSON('/api/sources');
 if(state.settings)state.settings.sources=d;else state.settings={sources:d};
-}catch(err){}
+state.srcFail='';
+}catch(err){state.srcFail=err.message||'服务未响应';}
 }
 async function refreshSrcData(){await Promise.all([loadSettings(),loadSources()]);}
 // 源采集（跨视图共享，归 core 段）：消费点在 @view:sources 两处（源行刷新/全部采集）
@@ -556,17 +601,17 @@ return ci(state.msrc===s.id,'data-msrc="'+esc(s.id)+'" data-mtab="all"',esc(s.la
 // M3 手工集合（F62）：色点+名+双计数（「含 m 已删」琥珀——墓碑非静默）；
 // 空段整隐；双击重命名、右键重命名/删除集合
 var cols=state.colls||[];
-$('coll-manual-sec').hidden=!cols.length;
-$('coll-manual').innerHTML=cols.map(function(c){
+$('coll-manual-sec').hidden=!cols.length&&!state.collFail;
+$('coll-manual').innerHTML=cols.length?cols.map(function(c){
 var n=c.active_member_count,d=c.member_count-n;
 return '<button class="coll-item'+(state.mcoll===c.id?' act':'')+'" data-mcoll="'+esc(c.id)+'" title="查看集合成员（双击重命名；右键更多）"><span><i class="coll-dot" style="background:var(--'+esc(c.color)+',var(--ink-2))"></i>'+esc(c.name)+(d?' <span style="color:var(--amber)">（含 '+d+' 已删）</span>':'')+'</span><span class="coll-n">'+n+'</span></button>';
-}).join('');
+}).join(''):(state.collFail?loadFailHTML('手工集合',state.collFail,'collFailRetry'):'');
 // M3 按标签（F63）：全库频次降序全量；空段整隐；点击过滤/再点退出
 var tl=state.tagList||[];
-$('coll-tags-sec').hidden=!tl.length;
-$('coll-tags').innerHTML=tl.map(function(t2){
+$('coll-tags-sec').hidden=!tl.length&&!state.tagFail;
+$('coll-tags').innerHTML=tl.length?tl.map(function(t2){
 return ci(state.mtag===t2.name,'data-mtag="'+esc(t2.name)+'"','#'+esc(t2.name),t2.count);
-}).join('');
+}).join(''):(state.tagFail?loadFailHTML('标签',state.tagFail,'collFailRetry'):'');
 }
 // 入口 A（§三）：多选→AI 综合（零模式开关；AI 永不自动落库；三态点；amber 无重试）
 var CK=[['channels','视频号'],['douyin','抖音'],['xhs','小红书'],['kuaishou','快手']];
@@ -754,6 +799,22 @@ function cycleTheme(){
 var cur=document.documentElement.getAttribute('data-theme')||'auto';
 applyTheme(THEME_ORDER[(THEME_ORDER.indexOf(cur)+1)%THEME_ORDER.length]);
 }
+// P1-4 空库首落地（2026-11-25 R2 交互批）：无 hash 首载按库状态选落点——文章与
+// 素材都空=全新流程，落地 #sources（流程起点：接源→攒素材→写成稿）；任一非空
+// 维持 #publish（老用户零变化）。读取失败按「非空」保守处理（不因网络抖动改变
+// 默认落点）；articles 结果回填 state 缓存（loadArticles 同口径，进发布中心零
+// 重复请求——素材只探空不缓存，loadMaterials 的列表口径留给素材视图自己拉）。
+async function bootLand(){
+try{
+var d=await getJSON(articlesPath());
+state.articles=Array.isArray(d.articles)?d.articles:[];
+state.articlesLoaded=true;
+if(state.articles.length)return history.replaceState(null,'','#publish');
+var md=await getJSON(matQS(1));
+var mats=(md&&md.items)||[],total=(md&&md.total)||0;
+return history.replaceState(null,'',(mats.length||total)?'#publish':'#sources');
+}catch(err){return history.replaceState(null,'','#publish');}
+}
 function init(){
 // 切换先置 data-theme 再渲染（不闪）——主题恢复必须先于任何绘制
 var savedTheme=null;
@@ -763,8 +824,8 @@ try{if(localStorage.getItem('musespiral-rail')==='min')document.documentElement.
 renderRoot();
 loadMeta().then(renderRoot); // meta 到达后显示真实 root
 bindCore();
-if(!location.hash) history.replaceState(null,'','#publish');
-renderRoute();
+if(!location.hash)bootLand().then(renderRoute); // P1-4：首载无 hash 走空库判路（见 bootLand），路由延后一拍
+else renderRoute();
 refreshJobs(); // R4：任务角标初始装载
 probeHealth(); // 档A：静默徽章磁盘/凭证信号
 // 独立产物懒加载（quickstart E-4 §3.4 / outline G-T2 §三 / rolling G-T4 §五 / dual G-T3 §四 / tts G-T5 §六 / versions E-6 §3.7）：
@@ -936,17 +997,19 @@ try{var d=await getJSON('/api/discover?limit=60&all=1');state.discover=Array.isA
 catch(err){state.discover=[];toast('加载候选失败：'+err.message,ER);}
 }
 async function loadColls(){
-try{var d=await getJSON('/api/materials/collections');state.colls=Array.isArray(d.collections)?d.collections:[];}
-catch(err){state.colls=[];}
+try{var d=await getJSON('/api/materials/collections');state.colls=Array.isArray(d.collections)?d.collections:[];state.collFail='';}
+catch(err){state.colls=[];state.collFail=err.message||'服务未响应';}
 state.collOf={};
 state.colls.forEach(function(c){(c.member_ids||[]).forEach(function(mid){(state.collOf[mid]=state.collOf[mid]||[]).push(c.id);});});
 }
 async function loadTags(){
-try{state.tagList=(await getJSON('/api/materials/tags')).tags||[];}
-catch(err){state.tagList=[];}
+try{state.tagList=(await getJSON('/api/materials/tags')).tags||[];state.tagFail='';}
+catch(err){state.tagList=[];state.tagFail=err.message||'服务未响应';}
 var dl=$('tag-dl');
 if(dl)dl.innerHTML=state.tagList.map(function(t){return '<option value="'+esc(t.name)+'">';}).join('');
 }
+// P0-3：集合/标签读取失败的重试入口（data-loadretry 目标；重载后重绘 rail）
+function collFailRetry(){return Promise.all([loadColls(),loadTags()]).then(renderCollRail);}
 // F64 结果高亮（自 @view:material 迁 core：view JS 贴 40KiB 体积锚；跨视图消费）
 function hl(raw){
 var s=String(raw==null?'':raw);
@@ -1270,7 +1333,7 @@ command:'<path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1
 play:'<path d="M8 5.2v13.6L19 12z"/>',
 flow:'<path d="M3 9h5v6H3z"/><path d="M16 9h5v6h-5z"/><path d="M8.2 12h4.6"/><path d="m11 9.6 2.4 2.4-2.4 2.4"/>'
 };
-var TAG='<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">';
+var TAG='<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">';
 function icon(name){return ICONS[name]?TAG+ICONS[name]+'</svg>':'';}
 window.mdpubIcon=icon;
 function mountChrome(){

@@ -96,6 +96,8 @@ function renderSources(){
 var list=matSrcs();
 srcCountsDecor(list);
 $('src-stats').innerHTML=srcStatsChips(list);
+var gd=$('src-guide');
+if(gd)gd.hidden=!(state.articlesLoaded&&!(state.articles||[]).length);
 $('sources-sub' in window?'':'');
 var sub=$('src-mine-sub');
 var shown=list.filter(srcInScope);
@@ -110,6 +112,8 @@ return '<button class="chip'+(state.srcscope===p[0]?' is-active':'')+'" data-src
 var body=$('src-mine-body');
 if(state.srcLoading){
 body.innerHTML='<div class="src-grid" role="status" aria-label="正在读取源清单">'+[0,1,2].map(function(){return '<div class="src-card"><div class="skel skel-line w45"></div><div class="skel skel-line w90"></div><div class="skel skel-line w70"></div><div class="skel skel-line w45"></div></div>';}).join('')+'</div>';
+}else if(!list.length&&(state.srcFail||state.setFail)){
+body.innerHTML=loadFailHTML('源清单',state.srcFail||state.setFail,'srcFailRetry');
 }else if(!list.length){
 body.innerHTML=srcNotice('empty','download','还没有接上任何源','源是内容的进水口。从下面挑一种，告诉它去哪里取内容，点「刷新」后素材就会出现在素材库。','<button class="btn btn-primary" data-srcadd="rss">'+I('plus')+'添加源</button>');
 }else if(!shown.length){
@@ -117,10 +121,10 @@ body.innerHTML=srcNotice('','settings','这个范围内没有源','换一个范�
 }else{
 body.innerHTML='<div class="src-grid">'+shown.map(srcCard).join('')+'</div>';
 }
-$('src-empty').hidden=true;
 renderSrcCatalogue();
 updateNavBadge('nav-badge-sources',list.filter(function(s){return s.enabled!==false&&(s.health||{}).status==='down';}).length);
 }
+function srcFailRetry(){return refreshSrcData().then(function(){renderSources();renderSrcEngine();});}
 function renderSrcCatalogue(){
 var have={};matSrcs().forEach(function(s){have[s.type]=s;});
 $('src-con-grid').innerHTML=SRC_CATALOG.map(function(t){
@@ -139,6 +143,11 @@ return '<article class="con-tile"><div class="con-top"><span class="src-glyph">'
 function renderSrcEngine(){
 var el=$('src-engine-line');
 if(!el)return;
+var R=state.srcResults;
+if(R&&(R.engineOff||R.booksFail)){
+el.innerHTML='<span class="st-dot warn"></span><span>'+(R.engineOff?'上次搜索：bookengine 未启动，书籍腿不可用（素材/网页不受影响）':'上次书籍搜索失败：'+esc(R.booksFail))+'</span>'+(R.engineOff?'<button class="link" data-srcenginehelp="1" aria-expanded="false">启动方法</button><span id="src-eng-more" hidden>在终端执行 <code>~/GLMProjects/bookengine-jvm/scripts/ctl.sh start</code>，然后刷新本页。</span>':'<button class="btn btn-sm" data-srcretry="1" style="margin-left:8px">重试搜索</button>');
+return;
+}
 var eng=(state.settings||{}).booksource_engine||{};
 try{
 getJSON('/api/booksource/engine').then(function(d){
@@ -299,25 +308,32 @@ catch(err){toast('保存失败：'+err.message,ER);}
 }
 function srcIsUrl(q){return /^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(:\d+)?([/?#]\S*)?$/i.test(q);}
 function srcIsSymbolOnly(q){return /^[\s\p{P}\p{S}]+$/u.test(q);}
+var srcWaitTimer=null,srcWaitT0=0;
+function srcWaitStop(){if(srcWaitTimer){clearInterval(srcWaitTimer);srcWaitTimer=null;}}
+function srcWaitTick(){var w=$('src-wait');if(w)w.textContent='已等待 '+Math.max(0,Math.round((Date.now()-srcWaitT0)/1000))+'s';}
+function srcWaitStart(){if(!srcWaitTimer){srcWaitT0=Date.now();srcWaitTimer=setInterval(srcWaitTick,5000);}}
 function srcSearchRender(){
 var q=state.srcQ.trim(),box=$('src-results');
-if(!q){box.hidden=true;$('src-overview').hidden=false;$('src-q-clear').hidden=true;$('src-q-kbd').textContent='/';return;}
+if(!q){srcWaitStop();box.hidden=true;$('src-overview').hidden=false;$('src-q-clear').hidden=true;$('src-q-kbd').textContent='/';renderSrcEngine();return;}
 box.hidden=false;$('src-overview').hidden=true;$('src-q-clear').hidden=false;$('src-q-kbd').textContent='Esc';
 var R=state.srcResults,loading=state.srcSearching;
 var head='<div class="results-head"><h2>“'+esc(q)+'”</h2>'+(R&&!loading?'<span class="results-sum">'+[R.url?'网页 1':'',R.books?'书籍 '+R.books.length:'',R.mats?'素材 '+R.mats.length:''].filter(Boolean).join(' · ')+'</span>':'')+
 '<button class="btn btn-ghost btn-sm" data-srcclear="1">'+I('close')+'返回源总览</button></div>';
-if(loading||!R){box.innerHTML=head+'<div role="status" aria-label="正在搜索">'+[0,1,2].map(function(){return '<div class="skel skel-line w90" style="margin-bottom:12px"></div>';}).join('')+'</div>';return;}
+if(loading||!R){srcWaitStart();box.innerHTML=head+'<div role="status" aria-label="正在搜索"><p class="muted" id="src-wait" style="font-size:12px;margin:0 0 10px">已等待 0s</p>'+[0,1,2].map(function(){return '<div class="skel skel-line w90" style="margin-bottom:12px"></div>';}).join('')+'</div>';return;}
+srcWaitStop();
 if(srcIsSymbolOnly(q)){box.innerHTML=head+srcNotice('','search','这个关键词没法搜','「'+esc(q)+'」里只有符号。试试书名、作者名，或直接粘贴网址。','');return;}
 var h=head;
 if(R.url){h+='<section class="rgroup"><h3 class="rg-h">'+I('globe')+'网页 <span class="cnt">1</span><span class="rg-src">读完再决定存不存</span></h3><button class="rg-row" data-srcweb="'+esc(R.url)+'">'+
 '<span class="rg-glyph">'+I('globe')+'</span><span class="rg-body"><span class="rg-title">'+esc(R.urlHost)+'</span><span class="rg-meta">'+esc(R.urlPath)+'</span></span><span class="rg-go">打开阅读'+I('arrow-right')+'</span></button></section>';}
-h+='<section class="rgroup"><h3 class="rg-h">'+I('file')+'书籍 <span class="cnt">'+(R.books?R.books.length:0)+'</span><span class="rg-src">'+(R.engineOff?'bookengine 未启动':'bookengine · 引擎在线')+'</span></h3>';
-if(R.engineOff){h+='<p class="rg-note is-warn">'+I('warning')+'<span>书籍搜索暂不可用：bookengine 未启动。上面的素材和网页结果不受影响。</span></p>';}
+h+='<section class="rgroup"><h3 class="rg-h">'+I('file')+'书籍 <span class="cnt">'+(R.booksFail?'✕':(R.books?R.books.length:0))+'</span><span class="rg-src">'+(R.engineOff?'bookengine 未启动':'bookengine · 引擎在线')+'</span></h3>';
+if(R.booksFail){h+='<p class="rg-note is-warn">'+I('warning')+'<span>引擎读取失败：'+esc(R.booksFail)+'。这不是「没有找到」——引擎侧出了问题，重试一次或稍后再试。</span></p><div style="padding:6px 8px 4px"><button class="btn btn-sm" data-srcretry="1">'+I('refresh')+'重试搜索</button></div>';}
+else if(R.engineOff){h+='<p class="rg-note is-warn">'+I('warning')+'<span>书籍搜索暂不可用：bookengine 未启动。上面的素材和网页结果不受影响。</span></p>';}
 else if(!R.books||!R.books.length){h+='<p class="rg-note"><span class="st-dot"></span><span>书籍里没找到「'+esc(q)+'」。试试更短的书名，或只输作者名。</span></p>';}
 else{h+='<div>'+R.books.map(function(b,idx){return '<button class="rg-row" data-srcbook="'+idx+'"><span class="rg-cover" style="background:var(--indigo)">'+esc((b.name||'?').slice(0,2))+'</span><span class="rg-body"><span class="rg-title">'+esc(b.name)+'</span><span class="rg-meta">'+esc([b.author,b.originName||b.origin].filter(Boolean).join(' · '))+'</span></span><span class="rg-go">阅读'+I('arrow-right')+'</span></button>';}).join('')+'</div>';}
 h+='</section>';
-h+='<section class="rgroup"><h3 class="rg-h">'+I('docs')+'素材 <span class="cnt">'+(R.mats?R.mats.length:0)+'</span><span class="rg-src">来自素材库</span></h3>';
-if(!R.mats||!R.mats.length)h+='<p class="rg-note"><span class="st-dot"></span><span>素材里没有匹配「'+esc(q)+'」的内容。</span></p>';
+h+='<section class="rgroup"><h3 class="rg-h">'+I('docs')+'素材 <span class="cnt">'+(R.matsFail?'✕':(R.mats?R.mats.length:0))+'</span><span class="rg-src">来自素材库</span></h3>';
+if(R.matsFail)h+='<p class="rg-note is-warn">'+I('warning')+'<span>素材库读取失败：'+esc(R.matsFail)+'。这不是「没有匹配」——素材服务没响应。</span></p><div style="padding:6px 8px 4px"><button class="btn btn-sm" data-srcretry="1">'+I('refresh')+'重试搜索</button></div>';
+else if(!R.mats||!R.mats.length)h+='<p class="rg-note"><span class="st-dot"></span><span>素材里没有匹配「'+esc(q)+'」的内容。</span></p>';
 else h+='<div>'+R.mats.map(function(m,idx){return '<a class="rg-row" href="#material"><span class="rg-glyph">'+I('file')+'</span><span class="rg-body"><span class="rg-title">'+esc(m.title||'(无题)')+'</span><span class="rg-meta">'+esc(((m.origin||{}).source_id||'')+' · '+(m.fetched_at||'').slice(0,10))+'</span></span><span class="rg-go">查看</span></a>';}).join('')+'</div>';
 h+='</section>';
 box.innerHTML=h;
@@ -326,12 +342,14 @@ async function srcDoSearch(){
 var q=state.srcQ.trim();if(!q)return;
 var tok=++state.srcTok;
 state.srcSearching=true;srcSearchRender();
-var R={url:null,urlHost:'',urlPath:'',books:[],mats:[],engineOff:false};
+srcWaitT0=Date.now();
+var R={url:null,urlHost:'',urlPath:'',books:[],mats:[],engineOff:false,booksFail:'',matsFail:''};
 if(srcIsUrl(q)){
 var full=/^https?:\/\//i.test(q)?q:('https'+':'+'//'+q);
 try{var u=new (URL)(full);R.url=full;R.urlHost=u.host;R.urlPath=u.pathname+u.search;}catch(e){}
 }
-try{var md=await getJSON('/api/materials?q='+encodeURIComponent(q)+'&limit=20');R.mats=(md.list||[]).slice(0,20);}catch(e){}
+try{var md=await getJSON('/api/materials?q='+encodeURIComponent(q)+'&limit=20');R.mats=(md.list||[]).slice(0,20);}
+catch(err){R.matsFail=err.message||'服务未响应';}
 if(!R.url&&!srcIsSymbolOnly(q)){
 try{
 var eng=await getJSON('/api/booksource/engine');
@@ -339,12 +357,14 @@ if(!(eng&&eng.ok)){R.engineOff=true;}
 else{
 var sub=await postJSON('/api/book/search',{key:q,confirm:true});
 var job=await waitForJob(sub.job_id);
-R.books=(job&&job.result&&job.result.items)||[];
+if(job&&job.status==='failed')R.booksFail=(job.error||'引擎读取失败');
+else R.books=(job&&job.result&&job.result.items)||[];
 }
-}catch(e){R.engineOff=true;}
+}catch(err){R.booksFail=err.message||'引擎读取失败';}
 }
 if(tok!==state.srcTok)return;
 state.srcResults=R;state.srcSearching=false;srcSearchRender();
+renderSrcEngine();
 }
 async function srcOpenReaderWeb(url){
 try{await ensureView('reader');VAPI.reader.openWeb(url);}catch(err){toast('阅读面板装载失败：'+err.message,ER);}
@@ -357,7 +377,7 @@ try{await ensureView('reader');VAPI.reader.openBook(b);}catch(err){toast('阅读
 VAPI.sources={enter:async function(route){
 var sp=route.params.get('src');
 if(sp!=null)state.ssrc=sp;
-await Promise.all([refreshSrcData(),loadMaterials(),refreshJobs()]);
+await Promise.all([refreshSrcData(),loadMaterials(),refreshJobs(),loadArticles(true)]);
 renderSources();renderSrcEngine();
 },repaint:async function(){await loadMaterials();renderSources();}};
 function bindSources(){
@@ -367,6 +387,7 @@ state.srcInit=true;
 }
 var body=$('src-mine-body');
 body.addEventListener('click',function(e){
+var add=e.target.closest('[data-srcadd]');if(add){srcAddOpen(add.getAttribute('data-srcadd'));return;}
 var v=e.target.closest('[data-srcverify]');if(v){srcCustomVerify(v.getAttribute('data-srcverify'));return;}
 var r=e.target.closest('[data-srcrefresh]');if(r){matIngest(r.getAttribute('data-srcrefresh'));return;}
 var en=e.target.closest('[data-srcenable]');if(en){var s=srcById(en.getAttribute('data-srcenable'));srcCustomToggle(en.getAttribute('data-srcenable'),!(s&&s.enabled!==false));return;}
@@ -387,6 +408,11 @@ var web=e.target.closest('[data-srcwebread]');if(web){srcOpenReaderWeb('http'+'s
 $('src-filters').addEventListener('click',function(e){
 var c=e.target.closest('[data-srcscope]');if(!c)return;state.srcscope=c.getAttribute('data-srcscope');renderSources();
 });
+$('src-engine-line').addEventListener('click',function(e){
+var h=e.target.closest('[data-srcenginehelp]');
+if(h){var more=$('src-eng-more');if(more){more.hidden=!more.hidden;h.setAttribute('aria-expanded',String(!more.hidden));}return;}
+var rt=e.target.closest('[data-srcretry]');if(rt)srcDoSearch();
+});
 $('src-stats').addEventListener('click',function(e){
 var c=e.target.closest('[data-srcscope]');if(!c)return;state.srcscope=c.getAttribute('data-srcscope');renderSources();
 });
@@ -402,7 +428,6 @@ if(e.isComposing||e.keyCode===229)return;
 if(e.key==='Escape'&&!$('src-drawer').hidden)$('src-drawer').hidden=true;
 });
 $('src-add-btn').addEventListener('click',function(){srcAddOpen('rss');});
-$('src-empty-add').addEventListener('click',function(){srcAddOpen('rss');});
 $('src-verify-all-btn').addEventListener('click',srcCustomVerifyAll);
 $('src-ingest-all-btn').addEventListener('click',function(){matIngest('');});
 $('src-pl-fold').addEventListener('click',function(){
@@ -426,6 +451,7 @@ srcDeb=setTimeout(srcDoSearch,380);
 });
 $('src-q-clear').addEventListener('click',function(){state.srcQ='';$('src-q').value='';state.srcResults=null;srcSearchRender();$('src-q').focus();});
 $('src-results').addEventListener('click',function(e){
+var rt=e.target.closest('[data-srcretry]');if(rt){srcDoSearch();return;}
 var c=e.target.closest('[data-srcclear]');if(c){state.srcQ='';$('src-q').value='';state.srcResults=null;srcSearchRender();return;}
 var w=e.target.closest('[data-srcweb]');if(w){srcOpenReaderWeb(w.getAttribute('data-srcweb'));return;}
 var b=e.target.closest('[data-srcbook]');if(b){srcOpenReaderBook(b.getAttribute('data-srcbook'));return;}

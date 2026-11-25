@@ -26,7 +26,7 @@ licBadge(m)+
 '<button class="btn" data-mread="'+esc(m.id)+'">'+(tri.read?'已读':'未读')+'</button>'+
 '</summary>'+
 '<div class="mat-row-x">'+h+
-'<div class="action-row mat-acts">'+(m.type==='text'?'<button class="btn" data-mdraft="'+esc(o.uri)+'"'+(m.drafted?' disabled':'')+'>生成骨架</button>':'')+((meta.url||p.url)?'<a class="btn" href="'+esc(meta.url||p.url)+'" target="_blank" rel="noopener">查看原文</a>':'')+'<button class="btn" data-mcolladd="'+esc(m.id)+'">+ 集合</button><button class="btn" data-mdetail="'+esc(m.id)+'">详情</button><button class="btn" data-moff="'+esc(m.id)+'">'+(tri.enabled?'禁用':'启用')+'</button><button class="btn" data-mai="'+esc(m.id)+'">AI 摘要</button><button class="btn mat-del" data-mdel="'+esc(m.id)+'">删除</button></div>'+
+'<div class="action-row mat-acts">'+(m.type==='text'?'<button class="btn" data-mdraft="'+esc(o.uri)+'"'+(m.drafted?' disabled':'')+'>生成骨架</button>':'')+((meta.url||p.url)?'<a class="btn" href="'+esc(meta.url||p.url)+'" target="_blank" rel="noopener">查看原文</a>':'')+'<button class="btn" data-mcolladd="'+esc(m.id)+'">+ 集合</button><button class="btn" data-mcm="'+esc(m.id)+'">加入创作</button><button class="btn" data-mdetail="'+esc(m.id)+'">详情</button><button class="btn" data-moff="'+esc(m.id)+'">'+(tri.enabled?'禁用':'启用')+'</button><button class="btn" data-mai="'+esc(m.id)+'">AI 摘要</button><button class="btn mat-del" data-mdel="'+esc(m.id)+'">删除</button></div>'+
 '<div class="tag-row" data-tagrow="'+esc(m.id)+'">'+tg.map(function(t2){return '<span class="chip-tag" data-mtagf="'+esc(t2)+'" title="点击按此标签过滤">'+esc(t2)+'<i data-mtagdel="'+esc(m.id)+'|'+esc(t2)+'" title="移除标签" tabindex="0" role="button" aria-label="移除标签 '+esc(t2)+'">×</i></span>';}).join('')+'<input class="input tag-in" maxlength="24" list="tag-dl" placeholder="输入标签，回车添加" data-mtagin="'+esc(m.id)+'"></div>'+
 '<p class="action-hint">❝ '+esc(o.uri||m.id)+' · '+esc(o.source_id||'')+' · '+esc(String(m.fetched_at||'').replace('T',' '))+(g?' · '+g:'')+(s==null?'':' · 评分 '+(s==null?'—':s))+'</p></div></details>';
 }
@@ -174,7 +174,7 @@ $('mat-search').value='';$('mat-search-x').hidden=true;fillMatType();
 syncMatHash();renderCollRail();renderMaterials();loadMaterials().then(renderMaterials);
 });
 function matActsClick(e){
-var el=e.target.closest('[data-mrelated],[data-mstar],[data-mdraft],[data-mread],[data-moff],[data-mai],[data-mdel],[data-mdetail],[data-mdrow],[data-mlight],[data-mcolladd],[data-mtagdel],[data-mtagf],[data-mmore],[data-tsg],[data-tso],[data-miit],[data-morig]');
+var el=e.target.closest('[data-mrelated],[data-mstar],[data-mdraft],[data-mread],[data-moff],[data-mai],[data-mdel],[data-mdetail],[data-mdrow],[data-mlight],[data-mcolladd],[data-mcm],[data-mtagdel],[data-mtagf],[data-mmore],[data-tsg],[data-tso],[data-miit],[data-morig]');
 if(!el)return;
 e.preventDefault();
 if(el.hasAttribute('data-mrelated'))return openMatDrawer(el.getAttribute('data-mrelated'));
@@ -186,6 +186,7 @@ return tg==='ok'?tsugAdopt(state.mdrawer):tsugGo(state.mdrawer);
 }
 if(el.hasAttribute('data-tso')){var ti=el.getAttribute('data-tso');tsug.sel[ti]=!tsug.sel[ti];return paintMatDrawer();}
 if(el.hasAttribute('data-mlight'))return matPart('media').then(function(){lbOpen(el.getAttribute('data-mlight'));});
+if(el.hasAttribute('data-mcm'))return matPart('drawer').then(function(){matToCompose(el.getAttribute('data-mcm'),e);});
 if(el.hasAttribute('data-mmore'))return ctxShow(e,matMenu(el.getAttribute('data-mmore')));
 if(el.hasAttribute('data-mcolladd'))return matPart('drawer').then(function(){collMenu(e,el.getAttribute('data-mcolladd'));});
 if(el.hasAttribute('data-mtagf')){var tv=el.getAttribute('data-mtagf');state.mtag=(tv===state.mtag)?'':tv;state.mtab='all';return matRefetch();}

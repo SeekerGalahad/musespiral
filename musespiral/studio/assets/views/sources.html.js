@@ -13,6 +13,19 @@ document.getElementById('view-sources').innerHTML=`
 </div>
 <div class="chips src-stats" id="src-stats" aria-label="概览"></div>
 
+<!-- R2 三步走横幅：文章数为 0（还没写成稿）时由 renderSources 显示——复用
+     pipeline-bar/pl-chain 既有样式；节点可点跳转 #sources/#material/#compose -->
+<section class="pipeline-bar" id="src-guide" hidden aria-label="三步走上手主线">
+<ol class="pl-chain">
+<li><a class="pl-node is-here" href="#sources">① 接源<span class="pl-role">输入</span></a></li>
+<li class="pl-sep" aria-hidden="true"><span data-icon="arrow-right"></span></li>
+<li><a class="pl-node" href="#material">② 攒素材<span class="pl-role">汇集</span></a></li>
+<li class="pl-sep" aria-hidden="true"><span data-icon="arrow-right"></span></li>
+<li><a class="pl-node" href="#compose">③ 写成稿<span class="pl-role">处理</span></a></li>
+</ol>
+<p class="pl-note"><b>三步走</b>：在这里接上源 → 素材库攒素材 → 创作工坊写成稿。第一篇成稿出现前，这里会一直亮着。</p>
+</section>
+
 <section class="src-pipeline" id="src-pipeline" aria-label="在内容流水线中的位置">
 <ol class="pl-chain">
 <li><span class="pl-node is-here"><span data-icon="download"></span>源中枢<span class="pl-role">输入</span></span></li>
@@ -56,13 +69,6 @@ document.getElementById('view-sources').innerHTML=`
 </div>
 
 <section class="results" id="src-results" aria-live="polite" hidden></section>
-
-<div class="empty" id="src-empty" hidden>
-<div class="empty-icon" data-icon="settings"></div>
-<div class="empty-title">还没有内容源</div>
-<div class="empty-text">源是采集的起点：从下面挑一种，告诉它去哪里取内容，点「刷新」后素材会出现在素材库。</div>
-<button class="btn btn-primary empty-action" id="src-empty-add">添加第一个源</button>
-</div>
 
 <aside class="drawer" id="src-drawer" hidden aria-label="源详情">
 <div class="drawer-head"><b id="src-drawer-title">源</b><button class="btn btn-ghost btn-icon" id="src-drawer-close" type="button" aria-label="关闭"><span data-icon="close"></span></button></div>

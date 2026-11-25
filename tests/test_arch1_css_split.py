@@ -259,7 +259,15 @@ def test_css_split_rule_multiset_equivalent_to_head() -> None:
                    b".bs-st{font-size:10px}",
                    b".bs-st.ok{color:var(--jade)}",
                    b".bs-st.failed{color:var(--crimson)}",
-                   b".bs-st.pending{color:var(--ink-3)}"}
+                   b".bs-st.pending{color:var(--ink-3)}",
+                   # 收尾批前端工作（2026-11-25，R1/R2/R3）在 ui.css 新增的 4 条：
+                   # ① qcheck 可点击直达检查 Tab（data-checks 两态——交互+键盘
+                   # 焦点环）；② P0-3 读取失败卡窄容器收编（chips 行占满整行 +
+                   # jobs-menu/coll-rail 收窄内距）——基线锚早于本批，合法新增登记。
+                   b".qcheck[data-checks]{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}",
+                   b".qcheck[data-checks]:focus-visible{outline:2px solid var(--vermilion);outline-offset:1px}",
+                   b".chips>.notice-card{flex:1 1 100%;padding:12px 14px}",
+                   b".jobs-menu .notice-card,.coll-rail .notice-card{padding:12px 14px}"}
     # 2026-11-24 W2 源中枢重设计：表格→卡片，旧 eco-tile/src-table 规则退役、
     # 新 .src-*/.st-*/.pl-*/.con-*/.rg-*/.sf-* 规则进入 core+sources；这是
     # 一次**有意的大替换**（原型=源中枢-输入端重设计.html），故本轮按域精确

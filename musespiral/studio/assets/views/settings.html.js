@@ -10,6 +10,7 @@ document.getElementById('view-settings').innerHTML=`
 <p class="action-hint">信息源连接与采集已迁「源中枢」（#sources）；此处 KB 子源仅供发现页筛选。</p>
 </div>
 <div class="action-group"><h3 class="action-title">AI 档案与路由</h3>
+<p class="action-hint muted">未配置时先跑 CLI：musespiral ai config --profile &lt;名&gt;</p>
 <table class="set-table"><thead><tr><th>档案</th><th>base_url</th><th>模型</th><th>key</th><th></th></tr></thead><tbody id="ai-profiles-body"></tbody></table>
 <div class="action-row"><input id="ai-p-name" class="input" placeholder="名"><input id="ai-p-url" class="input" placeholder="base_url"><input id="ai-p-model" class="input" placeholder="模型"><input id="ai-p-key" class="input" placeholder="API Key（本地可空）"><button class="btn" id="ai-p-save">存</button></div>
 <div class="action-row"><label class="field">默认 <select id="ai-default-select"></select></label><button class="btn" id="ai-default-save">设默认</button><label class="field">路由 <select id="ai-route-task"></select>→<select id="ai-route-profile"></select></label><button class="btn" id="ai-route-save">设路由</button></div>

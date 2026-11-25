@@ -1,4 +1,4 @@
-var CV={tpl:'vermilion-slab',pr:[],svg:'',h:0,q:0,art:''};
+var CV={tpl:'vermilion-slab',pr:[],svg:'',h:0,q:0,art:'',presetFail:''};
 function cvP(){return{title:$('cv-title').value,hook:$('cv-hook').value,font_size:$('cv-fs').value,align:$('cv-al').value};}
 function cvGo(){
 if(!CV.svg)$('cv-prev').innerHTML='<div class="cv-skel"></div>';
@@ -13,13 +13,17 @@ function cvEdit(){clearTimeout(CV.h);CV.h=setTimeout(cvGo,300);}
 function cvChips(){
 var h=[['vermilion-slab','朱砂拓'],['indigo-slab','青黛拓']].map(function(t){return '<button class="chip'+(CV.tpl===t[0]?' is-active':'')+'" data-cvt="'+t[0]+'">'+t[1]+'</button>';}).join(''),m=(CV.pr||[]).filter(function(p){return p.kind==='cover'&&p.template;});
 if(m.length)h+='<span class="cv-grp">我的模板</span>'+m.map(function(p){return '<button class="chip" data-cvt="'+esc(p.template)+'" title="预设 '+esc(p.id)+'">'+esc(p.label||p.id)+'</button>';}).join('');
+if(CV.presetFail)h+=loadFailHTML('封面模板预设',CV.presetFail,'cvLoadPresets');
 $('cv-tpl').innerHTML=h;
+}
+function cvLoadPresets(){
+getJSON('/api/visual/presets').then(function(d){CV.pr=d.items||[];CV.presetFail='';cvChips();}).catch(function(err){CV.presetFail=err.message||'服务未响应';cvChips();});
 }
 function cvInit(path){
 CV.tpl='vermilion-slab';CV.svg='';CV.q++;CV.art=path||'';
 $('cv-title').value='';$('cv-hook').value='';$('cv-prev').innerHTML='';
 cvChips();cvGo();
-getJSON('/api/visual/presets').then(function(d){CV.pr=d.items||[];cvChips();}).catch(function(){});
+cvLoadPresets();
 }
 async function cvExport(btn){
 btn.disabled=true;
@@ -86,7 +90,7 @@ toast('已移出:'+nm+(d.sections&&d.sections.length?'（已选 '+d.sections.len
 await loadComposeDetail(state.cslug,true);renderCompose();}
 catch(err){toast('移除失败：'+err.message,ER);}
 }
-var CMTAB='disc',cmMtQ='',cmMine=null;
+var CMTAB='disc',cmMtQ='',cmMine=null,cmMineFail='';
 function cmMineRows(added){
 var L=(cmMine||[]).filter(function(m){
 if(!(m.payload||{}).text)return false;
@@ -100,7 +104,7 @@ return '<div class="cm-pool-row"><span class="badge '+(m.score>=80?'pass':'queue
 }
 function cmMinePaint(){
 var host=$('cm-mine-list');
-if(host)host.innerHTML=cmMineRows(cmAddedMap());
+if(host)host.innerHTML=(cmMineFail&&!cmMine.length)?loadFailHTML('我的素材',cmMineFail,'cmMineLoad'):cmMineRows(cmAddedMap());
 }
 function cmAddedMap(){
 var added={};
@@ -108,7 +112,7 @@ var added={};
 return added;
 }
 function cmMineLoad(){
-getJSON('/api/materials?limit=200').then(function(d){cmMine=Array.isArray(d.items)?d.items:[];renderCmPool();}).catch(function(){cmMine=[];renderCmPool();});
+getJSON('/api/materials?limit=200').then(function(d){cmMine=Array.isArray(d.items)?d.items:[];cmMineFail='';renderCmPool();}).catch(function(err){cmMine=[];cmMineFail=err.message||'服务未响应';renderCmPool();});
 }
 function renderCmPool(){
 var added=cmAddedMap(),cand;
@@ -116,7 +120,7 @@ cand=(state.discover||[]).filter(function(c){return (c.score||0)>=80;}).slice(0,
 $('cm-pool').innerHTML=
 '<div class="chips" style="margin-bottom:8px"><button class="chip'+(CMTAB==='disc'?' is-active':'')+'" data-cmt="disc">发现候选</button><button class="chip'+(CMTAB==='mine'?' is-active':'')+'" data-cmt="mine">✦ 我的素材</button></div>'+
 (CMTAB==='mine'
-?'<div class="pub-toolbar" style="margin-bottom:8px"><input id="cm-mt-q" class="input" placeholder="搜我的素材（标题/正文）…" value="'+esc(cmMtQ)+'"></div><div id="cm-mine-list">'+cmMineRows(added)+'</div>'
+?'<div class="pub-toolbar" style="margin-bottom:8px"><input id="cm-mt-q" class="input" placeholder="搜我的素材（标题/正文）…" value="'+esc(cmMtQ)+'"></div><div id="cm-mine-list">'+((cmMineFail&&!cmMine.length)?loadFailHTML('我的素材',cmMineFail,'cmMineLoad'):cmMineRows(added))+'</div>'
 :(cand.length?cand.map(function(c){
 var nm=String(c.path).split('/').pop();
 return '<div class="cm-pool-row"><span class="badge '+(c.score>=90?'pass':'warn')+'">'+c.score+'</span><span class="cm-pool-t" title="'+esc(c.path)+'">'+esc(c.title||nm)+'</span>'+(added[nm]?'<button class="btn mat-del cm-rm" data-cm-rm="'+esc(c.path)+'">移除</button>':'<button class="btn" data-cm-add="'+esc(c.path)+'">加入</button>')+'</div>';
@@ -229,8 +233,25 @@ if(!r){state.cmWork=null;$('cm-blocks').innerHTML='';$('cm-blocks-empty').hidden
 bl=cmWorkBlocks(r);
 prev=cmPrevIds(r);
 (r.decisions||[]).forEach(function(d){dm[d.block]=d;});
-$('cm-blocks').innerHTML=(state.cmWork.locN?'<p class="action-hint">本地块 '+state.cmWork.locN+' 个不随入稿——请并入正式块「保存裁决」。</p>':'')+bl.map(function(b){return cmBlockRow(b,dm[b.id],prev[b.id]);}).join('');
+var pending=bl.filter(function(b){return !b.loc&&!dm[b.id];});
+$('cm-blocks').innerHTML='<div class="cm-batch-keep"><button class="btn" data-cm-keepall'+(pending.length?'':' disabled')+'>全部保留（'+pending.length+'）</button><span class="muted"> 批量保留未裁决块</span></div>'+
+(state.cmWork.locN?'<p class="action-hint">本地块 '+state.cmWork.locN+' 个不随入稿——请并入正式块「保存裁决」。</p>':'')+bl.map(function(b){return cmBlockRow(b,dm[b.id],prev[b.id]);}).join('');
 $('cm-blocks-empty').hidden=true;
+}
+async function cmKeepAll(btn){
+if(!state.cslug)return toast('先建会话',ER);
+var r=cmRound(state.cround);if(!r)return;
+var dm={};(r.decisions||[]).forEach(function(d){dm[d.block]=d;});
+var ids=(state.cmWork&&state.cmWork.round===state.cround?state.cmWork.list:r.blocks).filter(function(b){return !b.loc&&!dm[b.id];}).map(function(b){return b.id;});
+if(!ids.length)return toast('没有未裁决的块',WN);
+btn.disabled=true;var err=0;
+for(var i=0;i<ids.length;i++){
+btn.textContent='保留中 '+(i+1)+'/'+ids.length;
+try{await postJSON('/api/compose/decide',{slug:state.cslug,round:state.cround,block:ids[i],action:'keep',confirm:true});}
+catch(e){err++;}
+}
+await loadComposeDetail(state.cslug,true);renderCompose();
+toast(err?('全部保留完成，'+err+' 块失败'):'已保留 '+ids.length+' 块',err?WN:OK);
 }
 function renderCmRounds(){
 var R=(state.csd&&state.csd.rounds)||[];
@@ -362,7 +383,9 @@ catch(err){toast('裁决失败：'+err.message,ER);}
 }
 function cmBlockEl(id){return $('cm-blocks').querySelector('[data-cm-block="'+id+'"]');}
 function cmBlocksClick(e){
-var el=e.target.closest('[data-cm-keep]'),sb;
+var el=e.target.closest('[data-cm-keepall]'),sb;
+if(el&&!el.disabled){cmKeepAll(el);return;}
+el=e.target.closest('[data-cm-keep]');
 if(el){cmDecide(el.getAttribute('data-cm-keep'),'keep');return;}
 el=e.target.closest('[data-cm-edit]');
 if(el){cmEdit(el.getAttribute('data-cm-edit'));return;}

@@ -176,4 +176,4 @@ rdClose();return;
 });
 }
 bindReader();
-VAPI.reader={openWeb:readerOpenWeb,openBook:readerOpenBook};
+VAPI.reader={openWeb:readerOpenWeb,openBook:readerOpenBook,close:rdClose};

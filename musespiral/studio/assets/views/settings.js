@@ -43,7 +43,10 @@ $('prompt-state').textContent=ov[t]?'已覆盖内置缺省（保存即整体覆�
 }
 function renderSettings(){
 var st=state.settings;
-if(!st){$('settings-sub').textContent='设置读取失败';return;}
+if(!st){$('settings-sub').textContent='设置读取失败：'+(state.setFail||'服务未响应');
+var kb=$('kb-sources-body');
+if(kb)kb.innerHTML='<tr><td colspan="5">'+loadFailHTML('设置',state.setFail,'setFailRetry')+'</td></tr>';
+return;}
 var kb=st.kb||{},ai=st.ai||{},ap=ai.profiles||{},names=Object.keys(ap.profiles||{});
 $('kb-root-input').value=kb.root||'';
 $('kb-origin').innerHTML='根：'+(kb.root?(I(kb.root_exists?'check':'warning')+' '+esc(kb.root)):'未配置')+' · 源：'+(kb.origin==='kb_sources.json'?'kb_sources.json':kb.origin==='kb_root.txt'?'kb_root.txt 回退+内置默认源表':'内置默认源表');
@@ -62,6 +65,7 @@ var pr=ai.prompts||{},ov=pr.overrides||{};
 $('prompt-task-select').innerHTML=(pr.tasks||[]).map(function(t){return '<option value="'+esc(t)+'">'+esc(t)+'</option>';}).join('');
 pickPrompt();
 }
+function setFailRetry(){return loadSettings().then(renderSettings);}
 VAPI.settings={enter:async function(){
 await loadSettings();
 renderSettings();

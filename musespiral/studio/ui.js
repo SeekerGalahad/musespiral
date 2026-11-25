@@ -41,6 +41,9 @@ mtag:'',
 colls:[],
 collOf:{},
 tagList:[],
+// P0-3（审查 §3 2026-11-25）：读取类失败旗（各 load* catch 写入、渲染层以
+// loadFailHTML 显形）——失败≠空态，用户须能区分「服务坏了」与「没有数据」
+srcFail:'',setFail:'',platFail:'',statsFail:'',collFail:'',tagFail:'',jobsFail:'',
 mqTotal:0,
 sview:'grid',
 irange:30,
@@ -153,6 +156,23 @@ await refreshJobs();await refreshArticleState();
 return j;
 }
 function queued(id){toast(QUEUED,OK);return trackJob(id);}
+// ── P0-3 读取失败诚实化（审查 §3 2026-11-25）──────────────────────────
+// loadFailHTML：统一的「⚠ 加载失败：<原因> + 重试」警示卡（复用 .notice-card
+// is-error 既有 token，零新增颜色；窄容器由 core.css 的 .chips>.notice-card
+// 上下文规则收窄）。重试经 data-loadretry 携带目标函数名、document 级委托按
+// window 全局名回呼（视图脚本注入即挂全局，点击发生时必已就绪——动态名解析，
+// 不构成 core→视图的解析期直呼，VAPI 治理契约不破）。
+function loadFailHTML(what,err,retry){
+return '<div class="notice-card is-error" role="alert"><span class="n-ic">'+I('warning')+'</span><div class="n-body"><h3>⚠ 加载失败：'+esc(what)+'</h3><p>'+esc(err||'服务未响应')+'。这不是「没有数据」——服务端或网络出了问题。</p><div class="n-act"><button class="btn" type="button" data-loadretry="'+esc(retry||'')+'">'+I('refresh')+'重试</button></div></div></div>';
+}
+document.addEventListener('click',function(e){
+var b=e.target.closest('[data-loadretry]');
+if(!b)return;
+var fn=window[b.getAttribute('data-loadretry')];
+if(typeof fn!=='function')return;
+b.disabled=true;
+Promise.resolve(fn()).catch(function(){}).then(function(){b.disabled=false;});
+});
 // 静默即正常徽章（沉淀·18/17）：三态数据表+hover 细分文案，正常态零渲染
 var SYSB=[
 ['offline','error','后端离线','后端 8766 不可达：数据可能过期，恢复后自动消失'],
@@ -168,7 +188,7 @@ b.title=act.map(function(s){return s[3];}).join('；');
 function applyHealth(h){state.diskLow=(h.disk_free_gb||99)<5;state.credsOK=!!(h.credentials&&h.credentials.configured);renderSys();}
 function probeHealth(){getJSON('/api/health').then(applyHealth).catch(function(){});}
 async function refreshJobs(){
-try{state.jobs=(await getJSON(`/api/jobs`)).jobs||[];}catch(err){state.jobs=[];}
+try{state.jobs=(await getJSON(`/api/jobs`)).jobs||[];state.jobsFail='';}catch(err){state.jobs=[];state.jobsFail=err.message||'服务未响应';}
 var n=state.jobs.filter(function(j){return j&&(j.status==='queued'||j.status==='running');}).length;
 $('jobs-badge').textContent=n;$('jobs-badge').hidden=!n;
 if(!JM.hidden)renderJobs();
@@ -203,7 +223,7 @@ function renderJobs(){
 var live=state.jobs.filter(function(j){return j&&(j.status==='queued'||j.status==='running');});
 var shown=state.jobs.filter(function(j){return j&&!jobsDismissed[j.id];});
 var done=shown.filter(function(j){return j&&j.status==='done';}).length;
-JM.innerHTML='<div class="jobs-head">后台任务（'+live.length+' 进行中）<button class="jobs-clear" id="jobs-clear" type="button"'+(done?'':' disabled')+'>清空已完成</button></div>'+(shown.length?shown.map(jobRow).join(''):'<div class="job-sub" style="padding:10px 4px;">暂无任务</div>');}
+JM.innerHTML='<div class="jobs-head">后台任务（'+live.length+' 进行中）<button class="jobs-clear" id="jobs-clear" type="button"'+(done?'':' disabled')+'>清空已完成</button></div>'+(shown.length?shown.map(jobRow).join(''):(state.jobsFail?loadFailHTML('后台任务列表',state.jobsFail,'refreshJobs'):'<div class="job-sub" style="padding:10px 4px;">暂无任务</div>'));}
 var jobsPoll=null;
 function jobsPollStop(){if(jobsPoll){clearInterval(jobsPoll);jobsPoll=null;}}
 function viewJob(j){
@@ -284,7 +304,7 @@ function closeDlg(id){var el=$(id);if(!el||el.hidden)return;el.hidden=true;var s
 // Esc 兜底登记表：只收「纯 hidden 关闭」的弹窗（壳 clip-form + 视图 src-form/
 // src-aicfg/coll-form/cv-pm/sc-modal/cm-ch-modal）；有专属收尾态的（#im 状态机、
 // design 双层、askConfirm、cp/kbd）由各自处理器收口，不进登记——防 Esc 双关或漏状态复位。
-var DM_ESC=['clip-form','src-form','src-aicfg','coll-form','cv-pm','sc-modal','cm-ch-modal'];
+var DM_ESC=['clip-form','src-form','src-aicfg','coll-form','mat-cm-pick','cv-pm','sc-modal','cm-ch-modal'];
 function askConfirm(options){
 return new Promise(function(resolve){
 var modal=$('modal'),from=document.activeElement;
@@ -357,16 +377,20 @@ if(state.platforms.length&&!force) return;
 try{
 var data=await getJSON('/api/platforms');
 state.platforms=Array.isArray(data)?data :[];
+state.platFail='';
 }catch(err){
 state.platforms=[];
+state.platFail=err.message||'服务未响应';
 }
 }
 async function loadStats(force){
 if(state.stats&&!force) return;
 try{
 state.stats=await getJSON('/api/stats');
+state.statsFail='';
 }catch(err){
 state.stats=null;
+state.statsFail=err.message||'服务未响应';
 }
 }
 // FEAT-P1B：写作节奏读面（纯读）；真身归 core 段（A 类专项：load* 工具归 core，
@@ -417,6 +441,11 @@ var VIEWS=['sources','material','books','compose','design','publish','insight','
 // PL-3：plugin-pipeline（画布按流水线定义打开）别名到 plugin-run 视图（插件系统设计 §八/评审 §2.3 拆分）
 var HALIAS={queue:'publish',dashboard:'insight',discover:'material','plugin-pipeline':'plugin-run'};
 function showView(view){
+// P1-1 浮层统一收口（2026-11-25 R2 交互批）：视图**切换**（CURVIEW 变化）即
+// 离开当前上下文——壳级浮层与阅读面板一并关净（⌘K 面板跨视图残留遮挡页面
+// 判例：切走再切回视图不残留打开的弹层）；同视图 hash 变化（深链/参数筛选）
+// 不触发，不误伤用户开着的弹层。closeOverlays 见 VAPI 声明后定义块。
+if(CURVIEW!==view){CURVIEW=view;closeOverlays();}
 VIEWS.forEach(function(name){
 var el=$('view-'+name);
 if(el) el.hidden=name!==view;
@@ -476,6 +505,27 @@ return __viewPromises[view];}
 // repaint 只登记原 refreshArticleState 会重绘的五视图（books/compose/design/
 // plugins/plugin-run 维持原「后台任务不触发重绘」语义，未登记即 no-op）。
 var VAPI={};
+// ── P1-1 浮层统一收口（2026-11-25 R2 交互批）──────────────────────────────
+// 视图切换时关净「壳级浮层 + 阅读面板 + 视图内弹窗」，复用既有关闭函数不新写
+// 关闭逻辑：cpClose（⌘K 残留判例）/ ctxHide / jobs-menu 收起停轮询 / sparkClose /
+// closeDlg 族（壳 modal·clip-form·viewer·kbd-modal + 视图内 src-form/src-aicfg/
+// coll-form/cv-pm/sc-modal/cm-ch-modal/im/dv-sw/dv-ex + 两抽屉 src-drawer/mat-drawer
+// + material 两面板 syn-panel/gen-panel——懒视图未注入时 closeDlg 自带 null 守卫
+// 即 no-op）；阅读面板经 VAPI.reader.close（跨视图治理契约：rdClose 真身在
+// reader 视图块内，core 不直呼）。#modal（askConfirm）同收口：其 onKey 监听仍在
+// 档，下一次 Esc 按 false 落幕（悬挂 Promise 无害）——全屏遮罩残留压住新视图
+// 比悬挂更伤。im 有状态机但 imOpen 首态自清（§3.3），纯 hidden 复位安全。
+var OVERLAY_DLGS=['modal','clip-form','viewer','kbd-modal','src-form','src-aicfg','coll-form','mat-cm-pick','cv-pm','sc-modal','cm-ch-modal','im','dv-sw','dv-ex','src-drawer','mat-drawer','syn-panel','gen-panel'];
+var CURVIEW='';
+function closeOverlays(){
+cpClose();
+var rp=$('reader-pane'),vr=VAPI.reader;
+if(rp&&!rp.hidden&&vr&&vr.close)vr.close();
+if(sparkBox)sparkClose();
+ctxHide();
+if(!JM.hidden){JM.hidden=true;jobsPollStop();}
+OVERLAY_DLGS.forEach(closeDlg);
+}
 // 返回 repaint 结果（Promise 或同步返回值）——调用方可 await（refreshArticleState
 // 原语义即等待重绘完成），也可不 await（matIngest 等原同步触发点）。
 function viewRepaint(view){var a=VAPI[view];return a&&a.repaint?a.repaint():undefined;}
@@ -503,15 +553,18 @@ renderRoot();
 }
 var DD=[['深度','depth',40],['独特','uniqueness',30],['可读','readability',20],['适配','adaptability',10]];
 async function loadSettings(){
-try{state.settings=await getJSON('/api/settings');}
-catch(err){state.settings=null;}
+try{
+state.settings=await getJSON('/api/settings');
+state.setFail='';
+}catch(err){state.settings=null;state.setFail=err.message||'服务未响应';}
 }
 function matSrcs(){return (state.settings&&state.settings.sources&&state.settings.sources.list)||[];}
 // 源中枢数据面（契约 §2.1-1）：GET /api/sources 与 settings.sources 同源同形，取其权威行
 async function loadSources(){
 try{var d=await getJSON('/api/sources');
 if(state.settings)state.settings.sources=d;else state.settings={sources:d};
-}catch(err){}
+state.srcFail='';
+}catch(err){state.srcFail=err.message||'服务未响应';}
 }
 async function refreshSrcData(){await Promise.all([loadSettings(),loadSources()]);}
 // 源采集（跨视图共享，归 core 段）：消费点在 @view:sources 两处（源行刷新/全部采集）
@@ -569,17 +622,17 @@ return ci(state.msrc===s.id,'data-msrc="'+esc(s.id)+'" data-mtab="all"',esc(s.la
 // M3 手工集合（F62）：色点+名+双计数（「含 m 已删」琥珀——墓碑非静默）；
 // 空段整隐；双击重命名、右键重命名/删除集合
 var cols=state.colls||[];
-$('coll-manual-sec').hidden=!cols.length;
-$('coll-manual').innerHTML=cols.map(function(c){
+$('coll-manual-sec').hidden=!cols.length&&!state.collFail;
+$('coll-manual').innerHTML=cols.length?cols.map(function(c){
 var n=c.active_member_count,d=c.member_count-n;
 return '<button class="coll-item'+(state.mcoll===c.id?' act':'')+'" data-mcoll="'+esc(c.id)+'" title="查看集合成员（双击重命名；右键更多）"><span><i class="coll-dot" style="background:var(--'+esc(c.color)+',var(--ink-2))"></i>'+esc(c.name)+(d?' <span style="color:var(--amber)">（含 '+d+' 已删）</span>':'')+'</span><span class="coll-n">'+n+'</span></button>';
-}).join('');
+}).join(''):(state.collFail?loadFailHTML('手工集合',state.collFail,'collFailRetry'):'');
 // M3 按标签（F63）：全库频次降序全量；空段整隐；点击过滤/再点退出
 var tl=state.tagList||[];
-$('coll-tags-sec').hidden=!tl.length;
-$('coll-tags').innerHTML=tl.map(function(t2){
+$('coll-tags-sec').hidden=!tl.length&&!state.tagFail;
+$('coll-tags').innerHTML=tl.length?tl.map(function(t2){
 return ci(state.mtag===t2.name,'data-mtag="'+esc(t2.name)+'"','#'+esc(t2.name),t2.count);
-}).join('');
+}).join(''):(state.tagFail?loadFailHTML('标签',state.tagFail,'collFailRetry'):'');
 }
 // 入口 A（§三）：多选→AI 综合（零模式开关；AI 永不自动落库；三态点；amber 无重试）
 var CK=[['channels','视频号'],['douyin','抖音'],['xhs','小红书'],['kuaishou','快手']];
@@ -767,6 +820,22 @@ function cycleTheme(){
 var cur=document.documentElement.getAttribute('data-theme')||'auto';
 applyTheme(THEME_ORDER[(THEME_ORDER.indexOf(cur)+1)%THEME_ORDER.length]);
 }
+// P1-4 空库首落地（2026-11-25 R2 交互批）：无 hash 首载按库状态选落点——文章与
+// 素材都空=全新流程，落地 #sources（流程起点：接源→攒素材→写成稿）；任一非空
+// 维持 #publish（老用户零变化）。读取失败按「非空」保守处理（不因网络抖动改变
+// 默认落点）；articles 结果回填 state 缓存（loadArticles 同口径，进发布中心零
+// 重复请求——素材只探空不缓存，loadMaterials 的列表口径留给素材视图自己拉）。
+async function bootLand(){
+try{
+var d=await getJSON(articlesPath());
+state.articles=Array.isArray(d.articles)?d.articles:[];
+state.articlesLoaded=true;
+if(state.articles.length)return history.replaceState(null,'','#publish');
+var md=await getJSON(matQS(1));
+var mats=(md&&md.items)||[],total=(md&&md.total)||0;
+return history.replaceState(null,'',(mats.length||total)?'#publish':'#sources');
+}catch(err){return history.replaceState(null,'','#publish');}
+}
 function init(){
 // 切换先置 data-theme 再渲染（不闪）——主题恢复必须先于任何绘制
 var savedTheme=null;
@@ -776,8 +845,8 @@ try{if(localStorage.getItem('musespiral-rail')==='min')document.documentElement.
 renderRoot();
 loadMeta().then(renderRoot); // meta 到达后显示真实 root
 bindCore();
-if(!location.hash) history.replaceState(null,'','#publish');
-renderRoute();
+if(!location.hash)bootLand().then(renderRoute); // P1-4：首载无 hash 走空库判路（见 bootLand），路由延后一拍
+else renderRoute();
 refreshJobs(); // R4：任务角标初始装载
 probeHealth(); // 档A：静默徽章磁盘/凭证信号
 // 独立产物懒加载（quickstart E-4 §3.4 / outline G-T2 §三 / rolling G-T4 §五 / dual G-T3 §四 / tts G-T5 §六 / versions E-6 §3.7）：
@@ -949,17 +1018,19 @@ try{var d=await getJSON('/api/discover?limit=60&all=1');state.discover=Array.isA
 catch(err){state.discover=[];toast('加载候选失败：'+err.message,ER);}
 }
 async function loadColls(){
-try{var d=await getJSON('/api/materials/collections');state.colls=Array.isArray(d.collections)?d.collections:[];}
-catch(err){state.colls=[];}
+try{var d=await getJSON('/api/materials/collections');state.colls=Array.isArray(d.collections)?d.collections:[];state.collFail='';}
+catch(err){state.colls=[];state.collFail=err.message||'服务未响应';}
 state.collOf={};
 state.colls.forEach(function(c){(c.member_ids||[]).forEach(function(mid){(state.collOf[mid]=state.collOf[mid]||[]).push(c.id);});});
 }
 async function loadTags(){
-try{state.tagList=(await getJSON('/api/materials/tags')).tags||[];}
-catch(err){state.tagList=[];}
+try{state.tagList=(await getJSON('/api/materials/tags')).tags||[];state.tagFail='';}
+catch(err){state.tagList=[];state.tagFail=err.message||'服务未响应';}
 var dl=$('tag-dl');
 if(dl)dl.innerHTML=state.tagList.map(function(t){return '<option value="'+esc(t.name)+'">';}).join('');
 }
+// P0-3：集合/标签读取失败的重试入口（data-loadretry 目标；重载后重绘 rail）
+function collFailRetry(){return Promise.all([loadColls(),loadTags()]).then(renderCollRail);}
 // F64 结果高亮（自 @view:material 迁 core：view JS 贴 40KiB 体积锚；跨视图消费）
 function hl(raw){
 var s=String(raw==null?'':raw);
@@ -1309,7 +1380,7 @@ command:'<path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1
 play:'<path d="M8 5.2v13.6L19 12z"/>',
 flow:'<path d="M3 9h5v6H3z"/><path d="M16 9h5v6h-5z"/><path d="M8.2 12h4.6"/><path d="m11 9.6 2.4 2.4-2.4 2.4"/>'
 };
-var TAG='<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">';
+var TAG='<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">';
 function icon(name){return ICONS[name]?TAG+ICONS[name]+'</svg>':'';}
 window.mdpubIcon=icon;
 function mountChrome(){
@@ -1423,6 +1494,11 @@ function renderSources(){
 var list=matSrcs();
 srcCountsDecor(list);
 $('src-stats').innerHTML=srcStatsChips(list);
+// R2 三步走横幅：文章数为 0（且已确认读到位——loadArticles 失败时 articlesLoaded
+// 留 false，横幅不亮，不为读取失败亮误导横幅）才显示；enter 强刷文章计数保证
+// 写出第一篇稿后回源中枢横幅即灭。
+var gd=$('src-guide');
+if(gd)gd.hidden=!(state.articlesLoaded&&!(state.articles||[]).length);
 $('sources-sub' in window?'':''); // no-op 保持老 id 兼容
 var sub=$('src-mine-sub');
 var shown=list.filter(srcInScope);
@@ -1437,6 +1513,9 @@ return '<button class="chip'+(state.srcscope===p[0]?' is-active':'')+'" data-src
 var body=$('src-mine-body');
 if(state.srcLoading){
 body.innerHTML='<div class="src-grid" role="status" aria-label="正在读取源清单">'+[0,1,2].map(function(){return '<div class="src-card"><div class="skel skel-line w45"></div><div class="skel skel-line w90"></div><div class="skel skel-line w70"></div><div class="skel skel-line w45"></div></div>';}).join('')+'</div>';
+}else if(!list.length&&(state.srcFail||state.setFail)){
+// P0-3：读取失败≠还没接源——源清单读不出来时用户须看到「服务故障」而非「空库」
+body.innerHTML=loadFailHTML('源清单',state.srcFail||state.setFail,'srcFailRetry');
 }else if(!list.length){
 body.innerHTML=srcNotice('empty','download','还没有接上任何源','源是内容的进水口。从下面挑一种，告诉它去哪里取内容，点「刷新」后素材就会出现在素材库。','<button class="btn btn-primary" data-srcadd="rss">'+I('plus')+'添加源</button>');
 }else if(!shown.length){
@@ -1444,10 +1523,11 @@ body.innerHTML=srcNotice('','settings','这个范围内没有源','换一个范�
 }else{
 body.innerHTML='<div class="src-grid">'+shown.map(srcCard).join('')+'</div>';
 }
-$('src-empty').hidden=true;
 renderSrcCatalogue();
 updateNavBadge('nav-badge-sources',list.filter(function(s){return s.enabled!==false&&(s.health||{}).status==='down';}).length);
 }
+// P0-3：源清单读取失败的重试入口（重载 settings+sources 后重绘本视图两真身）
+function srcFailRetry(){return refreshSrcData().then(function(){renderSources();renderSrcEngine();});}
 function renderSrcCatalogue(){
 var have={};matSrcs().forEach(function(s){have[s.type]=s;});
 $('src-con-grid').innerHTML=SRC_CATALOG.map(function(t){
@@ -1466,6 +1546,16 @@ return '<article class="con-tile"><div class="con-top"><span class="src-glyph">'
 function renderSrcEngine(){
 var el=$('src-engine-line');
 if(!el)return;
+// P1-3 搜索失败联动（2026-11-25 R2）：上次搜索的引擎侧失败优先显示——引擎灯
+// 只反映 bookengine 在线与否，搜索 job 失败（超时/上游书源挂）须在此显形，
+// 不让「引擎在线」绿灯掩盖「上次搜索失败」。清空搜索（state.srcResults=null）
+// 或下次搜索成功即回落常态灯。素材腿失败（matsFail）属素材服务、已在结果区
+// 显形（P0-2），不占引擎灯位。
+var R=state.srcResults;
+if(R&&(R.engineOff||R.booksFail)){
+el.innerHTML='<span class="st-dot warn"></span><span>'+(R.engineOff?'上次搜索：bookengine 未启动，书籍腿不可用（素材/网页不受影响）':'上次书籍搜索失败：'+esc(R.booksFail))+'</span>'+(R.engineOff?'<button class="link" data-srcenginehelp="1" aria-expanded="false">启动方法</button><span id="src-eng-more" hidden>在终端执行 <code>~/GLMProjects/bookengine-jvm/scripts/ctl.sh start</code>，然后刷新本页。</span>':'<button class="btn btn-sm" data-srcretry="1" style="margin-left:8px">重试搜索</button>');
+return;
+}
 var eng=(state.settings||{}).booksource_engine||{};
 try{
 getJSON('/api/booksource/engine').then(function(d){
@@ -1635,25 +1725,36 @@ catch(err){toast('保存失败：'+err.message,ER);}
 // —— 统一搜索（书籍 + 素材 + 网址）——
 function srcIsUrl(q){return /^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(:\d+)?([/?#]\S*)?$/i.test(q);}
 function srcIsSymbolOnly(q){return /^[\s\p{P}\p{S}]+$/u.test(q);}
+// P1-2 搜索等待反馈（2026-11-25 R2）：书籍搜索是异步 job（数秒级），骨架屏无声
+// 会让用户以为死了——加「已等待 Ns」计时文案，每 5s 更新；srcSearchRender 双分支
+// 收口（loading 起表 / 非 loading 停表 / 清空停表）——所有状态变化都过本渲染器，
+// 零漏停；srcDoSearch 起跑重置计时起点（防抖期不算搜索时长）。
+var srcWaitTimer=null,srcWaitT0=0;
+function srcWaitStop(){if(srcWaitTimer){clearInterval(srcWaitTimer);srcWaitTimer=null;}}
+function srcWaitTick(){var w=$('src-wait');if(w)w.textContent='已等待 '+Math.max(0,Math.round((Date.now()-srcWaitT0)/1000))+'s';}
+function srcWaitStart(){if(!srcWaitTimer){srcWaitT0=Date.now();srcWaitTimer=setInterval(srcWaitTick,5000);}}
 function srcSearchRender(){
 var q=state.srcQ.trim(),box=$('src-results');
-if(!q){box.hidden=true;$('src-overview').hidden=false;$('src-q-clear').hidden=true;$('src-q-kbd').textContent='/';return;}
+if(!q){srcWaitStop();box.hidden=true;$('src-overview').hidden=false;$('src-q-clear').hidden=true;$('src-q-kbd').textContent='/';renderSrcEngine();return;} // 清空即回落引擎常态灯（P1-3 联动的另一半）
 box.hidden=false;$('src-overview').hidden=true;$('src-q-clear').hidden=false;$('src-q-kbd').textContent='Esc';
 var R=state.srcResults,loading=state.srcSearching;
 var head='<div class="results-head"><h2>“'+esc(q)+'”</h2>'+(R&&!loading?'<span class="results-sum">'+[R.url?'网页 1':'',R.books?'书籍 '+R.books.length:'',R.mats?'素材 '+R.mats.length:''].filter(Boolean).join(' · ')+'</span>':'')+
 '<button class="btn btn-ghost btn-sm" data-srcclear="1">'+I('close')+'返回源总览</button></div>';
-if(loading||!R){box.innerHTML=head+'<div role="status" aria-label="正在搜索">'+[0,1,2].map(function(){return '<div class="skel skel-line w90" style="margin-bottom:12px"></div>';}).join('')+'</div>';return;}
+if(loading||!R){srcWaitStart();box.innerHTML=head+'<div role="status" aria-label="正在搜索"><p class="muted" id="src-wait" style="font-size:12px;margin:0 0 10px">已等待 0s</p>'+[0,1,2].map(function(){return '<div class="skel skel-line w90" style="margin-bottom:12px"></div>';}).join('')+'</div>';return;}
+srcWaitStop();
 if(srcIsSymbolOnly(q)){box.innerHTML=head+srcNotice('','search','这个关键词没法搜','「'+esc(q)+'」里只有符号。试试书名、作者名，或直接粘贴网址。','');return;}
 var h=head;
 if(R.url){h+='<section class="rgroup"><h3 class="rg-h">'+I('globe')+'网页 <span class="cnt">1</span><span class="rg-src">读完再决定存不存</span></h3><button class="rg-row" data-srcweb="'+esc(R.url)+'">'+
 '<span class="rg-glyph">'+I('globe')+'</span><span class="rg-body"><span class="rg-title">'+esc(R.urlHost)+'</span><span class="rg-meta">'+esc(R.urlPath)+'</span></span><span class="rg-go">打开阅读'+I('arrow-right')+'</span></button></section>';}
-h+='<section class="rgroup"><h3 class="rg-h">'+I('file')+'书籍 <span class="cnt">'+(R.books?R.books.length:0)+'</span><span class="rg-src">'+(R.engineOff?'bookengine 未启动':'bookengine · 引擎在线')+'</span></h3>';
-if(R.engineOff){h+='<p class="rg-note is-warn">'+I('warning')+'<span>书籍搜索暂不可用：bookengine 未启动。上面的素材和网页结果不受影响。</span></p>';}
+h+='<section class="rgroup"><h3 class="rg-h">'+I('file')+'书籍 <span class="cnt">'+(R.booksFail?'✕':(R.books?R.books.length:0))+'</span><span class="rg-src">'+(R.engineOff?'bookengine 未启动':'bookengine · 引擎在线')+'</span></h3>';
+if(R.booksFail){h+='<p class="rg-note is-warn">'+I('warning')+'<span>引擎读取失败：'+esc(R.booksFail)+'。这不是「没有找到」——引擎侧出了问题，重试一次或稍后再试。</span></p><div style="padding:6px 8px 4px"><button class="btn btn-sm" data-srcretry="1">'+I('refresh')+'重试搜索</button></div>';}
+else if(R.engineOff){h+='<p class="rg-note is-warn">'+I('warning')+'<span>书籍搜索暂不可用：bookengine 未启动。上面的素材和网页结果不受影响。</span></p>';}
 else if(!R.books||!R.books.length){h+='<p class="rg-note"><span class="st-dot"></span><span>书籍里没找到「'+esc(q)+'」。试试更短的书名，或只输作者名。</span></p>';}
 else{h+='<div>'+R.books.map(function(b,idx){return '<button class="rg-row" data-srcbook="'+idx+'"><span class="rg-cover" style="background:var(--indigo)">'+esc((b.name||'?').slice(0,2))+'</span><span class="rg-body"><span class="rg-title">'+esc(b.name)+'</span><span class="rg-meta">'+esc([b.author,b.originName||b.origin].filter(Boolean).join(' · '))+'</span></span><span class="rg-go">阅读'+I('arrow-right')+'</span></button>';}).join('')+'</div>';}
 h+='</section>';
-h+='<section class="rgroup"><h3 class="rg-h">'+I('docs')+'素材 <span class="cnt">'+(R.mats?R.mats.length:0)+'</span><span class="rg-src">来自素材库</span></h3>';
-if(!R.mats||!R.mats.length)h+='<p class="rg-note"><span class="st-dot"></span><span>素材里没有匹配「'+esc(q)+'」的内容。</span></p>';
+h+='<section class="rgroup"><h3 class="rg-h">'+I('docs')+'素材 <span class="cnt">'+(R.matsFail?'✕':(R.mats?R.mats.length:0))+'</span><span class="rg-src">来自素材库</span></h3>';
+if(R.matsFail)h+='<p class="rg-note is-warn">'+I('warning')+'<span>素材库读取失败：'+esc(R.matsFail)+'。这不是「没有匹配」——素材服务没响应。</span></p><div style="padding:6px 8px 4px"><button class="btn btn-sm" data-srcretry="1">'+I('refresh')+'重试搜索</button></div>';
+else if(!R.mats||!R.mats.length)h+='<p class="rg-note"><span class="st-dot"></span><span>素材里没有匹配「'+esc(q)+'」的内容。</span></p>';
 else h+='<div>'+R.mats.map(function(m,idx){return '<a class="rg-row" href="#material"><span class="rg-glyph">'+I('file')+'</span><span class="rg-body"><span class="rg-title">'+esc(m.title||'(无题)')+'</span><span class="rg-meta">'+esc(((m.origin||{}).source_id||'')+' · '+(m.fetched_at||'').slice(0,10))+'</span></span><span class="rg-go">查看</span></a>';}).join('')+'</div>';
 h+='</section>';
 box.innerHTML=h;
@@ -1662,13 +1763,16 @@ async function srcDoSearch(){
 var q=state.srcQ.trim();if(!q)return;
 var tok=++state.srcTok;
 state.srcSearching=true;srcSearchRender();
-var R={url:null,urlHost:'',urlPath:'',books:[],mats:[],engineOff:false};
+srcWaitT0=Date.now(); // P1-2：起跑重置计时（防抖 380ms 不计入搜索时长）
+var R={url:null,urlHost:'',urlPath:'',books:[],mats:[],engineOff:false,booksFail:'',matsFail:''};
 if(srcIsUrl(q)){
 var full=/^https?:\/\//i.test(q)?q:('https'+':'+'//'+q);
 try{var u=new (URL)(full);R.url=full;R.urlHost=u.host;R.urlPath=u.pathname+u.search;}catch(e){}
 }
-// 素材搜索（同步）
-try{var md=await getJSON('/api/materials?q='+encodeURIComponent(q)+'&limit=20');R.mats=(md.list||[]).slice(0,20);}catch(e){}
+// 素材搜索（同步）——P0-2（审查 §3 2026-11-25）：失败不再静默吞成「素材 0」，
+// matsFail 与「素材里没有匹配」在渲染层严格分开
+try{var md=await getJSON('/api/materials?q='+encodeURIComponent(q)+'&limit=20');R.mats=(md.list||[]).slice(0,20);}
+catch(err){R.matsFail=err.message||'服务未响应';}
 // 书籍搜索（异步 job）
 if(!R.url&&!srcIsSymbolOnly(q)){
 try{
@@ -1677,12 +1781,16 @@ if(!(eng&&eng.ok)){R.engineOff=true;} // mock 体验模式可用——与真引�
 else{
 var sub=await postJSON('/api/book/search',{key:q,confirm:true});
 var job=await waitForJob(sub.job_id);
-R.books=(job&&job.result&&job.result.items)||[];
+// P0-2：waitForJob 返回 failed 必须显形（对齐 books 视图 bkSearch 的失败
+// 样板）——此前直接取 job.result.items 把「引擎读取失败」伪装成「书籍 0」
+if(job&&job.status==='failed')R.booksFail=(job.error||'引擎读取失败');
+else R.books=(job&&job.result&&job.result.items)||[];
 }
-}catch(e){R.engineOff=true;}
+}catch(err){R.booksFail=err.message||'引擎读取失败';}
 }
 if(tok!==state.srcTok)return;
 state.srcResults=R;state.srcSearching=false;srcSearchRender();
+renderSrcEngine(); // P1-3：搜索成败联动引擎灯（失败态优先显示，见 renderSrcEngine 首分支）
 }
 
 // —— 阅读面板（W3 落地；此处先留占位调用，避免未定义）——
@@ -1699,7 +1807,10 @@ try{await ensureView('reader');VAPI.reader.openBook(b);}catch(err){toast('阅读
 VAPI.sources={enter:async function(route){
 var sp=route.params.get('src');
 if(sp!=null)state.ssrc=sp;
-await Promise.all([refreshSrcData(),loadMaterials(),refreshJobs()]);
+// loadArticles(true) 强刷：三步走横幅的渲染条件=当前文章数（缓存会是空库首载
+// 时的旧值——写出第一篇稿后回源中枢须见到横幅熄灭）；失败时 articlesLoaded
+// 留 false，横幅不亮（见 renderSources gd 分支）。
+await Promise.all([refreshSrcData(),loadMaterials(),refreshJobs(),loadArticles(true)]);
 renderSources();renderSrcEngine();
 },repaint:async function(){await loadMaterials();renderSources();}};
 function bindSources(){
@@ -1709,6 +1820,10 @@ state.srcInit=true;
 }
 var body=$('src-mine-body');
 body.addEventListener('click',function(e){
+// data-srcadd：JS 内联空态（srcNotice 的 empty 态）与目录瓦片的「接上」同走此委托
+// ——R2 清理判例：空态按钮原只渲染无消费（绑定在 #src-con-grid），静态 #src-empty
+// 退役后此为空态 CTA 唯一通路。
+var add=e.target.closest('[data-srcadd]');if(add){srcAddOpen(add.getAttribute('data-srcadd'));return;}
 var v=e.target.closest('[data-srcverify]');if(v){srcCustomVerify(v.getAttribute('data-srcverify'));return;}
 var r=e.target.closest('[data-srcrefresh]');if(r){matIngest(r.getAttribute('data-srcrefresh'));return;}
 var en=e.target.closest('[data-srcenable]');if(en){var s=srcById(en.getAttribute('data-srcenable'));srcCustomToggle(en.getAttribute('data-srcenable'),!(s&&s.enabled!==false));return;}
@@ -1729,6 +1844,13 @@ var web=e.target.closest('[data-srcwebread]');if(web){srcOpenReaderWeb('http'+'s
 $('src-filters').addEventListener('click',function(e){
 var c=e.target.closest('[data-srcscope]');if(!c)return;state.srcscope=c.getAttribute('data-srcscope');renderSources();
 });
+// P1-3 配套：引擎灯行内按钮委托——「启动方法」折叠既有隐藏段（原按钮渲染了但
+// 无消费，顺修接线）；失败态「重试搜索」与结果区 data-srcretry 同走 srcDoSearch。
+$('src-engine-line').addEventListener('click',function(e){
+var h=e.target.closest('[data-srcenginehelp]');
+if(h){var more=$('src-eng-more');if(more){more.hidden=!more.hidden;h.setAttribute('aria-expanded',String(!more.hidden));}return;}
+var rt=e.target.closest('[data-srcretry]');if(rt)srcDoSearch();
+});
 $('src-stats').addEventListener('click',function(e){
 var c=e.target.closest('[data-srcscope]');if(!c)return;state.srcscope=c.getAttribute('data-srcscope');renderSources();
 });
@@ -1744,7 +1866,6 @@ if(e.isComposing||e.keyCode===229)return;
 if(e.key==='Escape'&&!$('src-drawer').hidden)$('src-drawer').hidden=true;
 });
 $('src-add-btn').addEventListener('click',function(){srcAddOpen('rss');});
-$('src-empty-add').addEventListener('click',function(){srcAddOpen('rss');});
 $('src-verify-all-btn').addEventListener('click',srcCustomVerifyAll);
 $('src-ingest-all-btn').addEventListener('click',function(){matIngest('');});
 $('src-pl-fold').addEventListener('click',function(){
@@ -1770,6 +1891,7 @@ srcDeb=setTimeout(srcDoSearch,380);
 });
 $('src-q-clear').addEventListener('click',function(){state.srcQ='';$('src-q').value='';state.srcResults=null;srcSearchRender();$('src-q').focus();});
 $('src-results').addEventListener('click',function(e){
+var rt=e.target.closest('[data-srcretry]');if(rt){srcDoSearch();return;} // P0-2：引擎/素材失败的重试入口
 var c=e.target.closest('[data-srcclear]');if(c){state.srcQ='';$('src-q').value='';state.srcResults=null;srcSearchRender();return;}
 var w=e.target.closest('[data-srcweb]');if(w){srcOpenReaderWeb(w.getAttribute('data-srcweb'));return;}
 var b=e.target.closest('[data-srcbook]');if(b){srcOpenReaderBook(b.getAttribute('data-srcbook'));return;}
@@ -1975,7 +2097,7 @@ rdClose();return;
 });
 }
 bindReader();
-VAPI.reader={openWeb:readerOpenWeb,openBook:readerOpenBook};
+VAPI.reader={openWeb:readerOpenWeb,openBook:readerOpenBook,close:rdClose}; // P1-1：core 视图切换收口经此触达（跨视图治理契约）
 // @endview
 // @view:material
 function matPreview(m){
@@ -2012,7 +2134,7 @@ licBadge(m)+
 '<button class="btn" data-mread="'+esc(m.id)+'">'+(tri.read?'已读':'未读')+'</button>'+
 '</summary>'+
 '<div class="mat-row-x">'+h+
-'<div class="action-row mat-acts">'+(m.type==='text'?'<button class="btn" data-mdraft="'+esc(o.uri)+'"'+(m.drafted?' disabled':'')+'>生成骨架</button>':'')+((meta.url||p.url)?'<a class="btn" href="'+esc(meta.url||p.url)+'" target="_blank" rel="noopener">查看原文</a>':'')+'<button class="btn" data-mcolladd="'+esc(m.id)+'">+ 集合</button><button class="btn" data-mdetail="'+esc(m.id)+'">详情</button><button class="btn" data-moff="'+esc(m.id)+'">'+(tri.enabled?'禁用':'启用')+'</button><button class="btn" data-mai="'+esc(m.id)+'">AI 摘要</button><button class="btn mat-del" data-mdel="'+esc(m.id)+'">删除</button></div>'+
+'<div class="action-row mat-acts">'+(m.type==='text'?'<button class="btn" data-mdraft="'+esc(o.uri)+'"'+(m.drafted?' disabled':'')+'>生成骨架</button>':'')+((meta.url||p.url)?'<a class="btn" href="'+esc(meta.url||p.url)+'" target="_blank" rel="noopener">查看原文</a>':'')+'<button class="btn" data-mcolladd="'+esc(m.id)+'">+ 集合</button><button class="btn" data-mcm="'+esc(m.id)+'">加入创作</button><button class="btn" data-mdetail="'+esc(m.id)+'">详情</button><button class="btn" data-moff="'+esc(m.id)+'">'+(tri.enabled?'禁用':'启用')+'</button><button class="btn" data-mai="'+esc(m.id)+'">AI 摘要</button><button class="btn mat-del" data-mdel="'+esc(m.id)+'">删除</button></div>'+
 '<div class="tag-row" data-tagrow="'+esc(m.id)+'">'+tg.map(function(t2){return '<span class="chip-tag" data-mtagf="'+esc(t2)+'" title="点击按此标签过滤">'+esc(t2)+'<i data-mtagdel="'+esc(m.id)+'|'+esc(t2)+'" title="移除标签" tabindex="0" role="button" aria-label="移除标签 '+esc(t2)+'">×</i></span>';}).join('')+'<input class="input tag-in" maxlength="24" list="tag-dl" placeholder="输入标签，回车添加" data-mtagin="'+esc(m.id)+'"></div>'+
 '<p class="action-hint">❝ '+esc(o.uri||m.id)+' · '+esc(o.source_id||'')+' · '+esc(String(m.fetched_at||'').replace('T',' '))+(g?' · '+g:'')+(s==null?'':' · 评分 '+(s==null?'—':s))+'</p></div></details>';
 }
@@ -2175,7 +2297,7 @@ syncMatHash();renderCollRail();renderMaterials();loadMaterials().then(renderMate
 // 素材动作统一委托（行/抽屉/展开区同源同函数——重构设计 §5.4 规则；
 // M3 扩：mlight 灯箱/mcolladd 集合面板/mtagdel·mtagf 标签）
 function matActsClick(e){
-var el=e.target.closest('[data-mrelated],[data-mstar],[data-mdraft],[data-mread],[data-moff],[data-mai],[data-mdel],[data-mdetail],[data-mdrow],[data-mlight],[data-mcolladd],[data-mtagdel],[data-mtagf],[data-mmore],[data-tsg],[data-tso],[data-miit],[data-morig]');
+var el=e.target.closest('[data-mrelated],[data-mstar],[data-mdraft],[data-mread],[data-moff],[data-mai],[data-mdel],[data-mdetail],[data-mdrow],[data-mlight],[data-mcolladd],[data-mcm],[data-mtagdel],[data-mtagf],[data-mmore],[data-tsg],[data-tso],[data-miit],[data-morig]');
 if(!el)return;
 e.preventDefault();
 if(el.hasAttribute('data-mrelated'))return openMatDrawer(el.getAttribute('data-mrelated')); // 抽屉可见⇒drawer 已载，免门
@@ -2188,6 +2310,7 @@ return tg==='ok'?tsugAdopt(state.mdrawer):tsugGo(state.mdrawer);
 }
 if(el.hasAttribute('data-tso')){var ti=el.getAttribute('data-tso');tsug.sel[ti]=!tsug.sel[ti];return paintMatDrawer();}
 if(el.hasAttribute('data-mlight'))return matPart('media').then(function(){lbOpen(el.getAttribute('data-mlight'));});
+if(el.hasAttribute('data-mcm'))return matPart('drawer').then(function(){matToCompose(el.getAttribute('data-mcm'),e);});
 if(el.hasAttribute('data-mmore'))return ctxShow(e,matMenu(el.getAttribute('data-mmore')));
 if(el.hasAttribute('data-mcolladd'))return matPart('drawer').then(function(){collMenu(e,el.getAttribute('data-mcolladd'));});
 if(el.hasAttribute('data-mtagf')){var tv=el.getAttribute('data-mtagf');state.mtag=(tv===state.mtag)?'':tv;state.mtab='all';return matRefetch();}
@@ -2336,7 +2459,7 @@ tsugBox(m)+
 (meta.original_ref?'<div class="action-row"><button class="btn btn-ghost" data-morig="1" style="font-size:var(--fs-caption)">原始章节</button></div>':'')+
 '</div>'+
 '<div id="mi-body" hidden></div>'+
-'<div class="action-row mat-acts">'+(m.type==='text'?'<button class="btn" data-mdraft="'+esc(o.uri)+'"'+(m.drafted?' disabled':'')+'>生成骨架</button>':'')+((meta.url||p.url)?'<a class="btn" href="'+esc(meta.url||p.url)+'" target="_blank" rel="noopener">查看原文</a>':'')+'<button class="btn" data-mcolladd="'+esc(m.id)+'">+ 集合</button><button class="btn" data-mstar="'+esc(m.id)+'">'+(tri.starred?'取消收藏':'收藏')+'</button><button class="btn" data-mread="'+esc(m.id)+'">'+(tri.read?'已读':'未读')+'</button><button class="btn" data-moff="'+esc(m.id)+'">'+(tri.enabled?'禁用':'启用')+'</button><button class="btn" data-mai="'+esc(m.id)+'">AI 摘要</button><button class="btn mat-del" data-mdel="'+esc(m.id)+'">删除</button></div>'+
+'<div class="action-row mat-acts">'+(m.type==='text'?'<button class="btn" data-mdraft="'+esc(o.uri)+'"'+(m.drafted?' disabled':'')+'>生成骨架</button>':'')+((meta.url||p.url)?'<a class="btn" href="'+esc(meta.url||p.url)+'" target="_blank" rel="noopener">查看原文</a>':'')+'<button class="btn" data-mcolladd="'+esc(m.id)+'">+ 集合</button><button class="btn" data-mcm="'+esc(m.id)+'">加入创作</button><button class="btn" data-mstar="'+esc(m.id)+'">'+(tri.starred?'取消收藏':'收藏')+'</button><button class="btn" data-mread="'+esc(m.id)+'">'+(tri.read?'已读':'未读')+'</button><button class="btn" data-moff="'+esc(m.id)+'">'+(tri.enabled?'禁用':'启用')+'</button><button class="btn" data-mai="'+esc(m.id)+'">AI 摘要</button><button class="btn mat-del" data-mdel="'+esc(m.id)+'">删除</button></div>'+
 '';
 if(window.__mdpubMatIter)__mdpubMatIter.repaint(state.mdrawer);
 if(window.__mdpubMatLineage)__mdpubMatLineage.repaint(state.mdrawer); // N-4 血统 tab（chip/容器由 lineage.js 自注入）
@@ -2477,6 +2600,33 @@ ctxShow(e,(state.colls.length?state.colls.map(function(c){
 return '<button class="cp-item" data-ctg="'+esc(c.id)+'|'+esc(mid)+'">'+((state.collOf[mid]||[]).indexOf(c.id)>=0?'✓ ':'＋ ')+esc(c.name)+' · '+c.active_member_count+'</button>';
 }).join(''):'<span class="cp-item">先在左轨「+ 新建」建集合</span>'));
 }
+// R3-1 素材→创作直通（2026-11-25）：读真实会话清单（GET /api/compose 的
+// sessions[status]，composing=创作中，见 core/composition/session.py）——
+// 单会话直入池（同 cmAddMaterial 的 POST /api/compose/add material_id 路径）；
+// 多会话弹 #mat-cm-pick 下拉（复用 coll-form 弹壳族，不新造 UI）；无会话引导
+// 去 #compose 建。入池/切会话后跳工坊，块区同步该会话源池。
+async function matToCompose(mid,e){
+if(e)e.preventDefault();
+await loadCompose(true);
+var L=(state.cs||[]).filter(function(s2){return s2.status==='composing';});
+if(!L.length){location.hash='#compose';toast('新建会话后，在素材池「我的素材」里找到它',WN);return;}
+if(L.length===1)return matComposeAdd(L[0].slug,mid);
+state.mcpMid=mid;
+var sel=$('mcp-sel');sel.innerHTML=L.map(function(s2){return '<option value="'+esc(s2.slug)+'">'+esc(s2.title||s2.slug)+'</option>';}).join('');
+openDlg('mat-cm-pick','#mcp-sel');
+}
+// 入池封装（material_id 三选一形态同 cmAddMaterial）：成功后跳工坊并提示池位
+async function matComposeAdd(slug,mid){
+try{var d=await postJSON('/api/compose/add',{slug:slug,material_id:mid,confirm:true});
+state.cslug=slug;location.hash='#compose?s='+encodeURIComponent(slug);
+toast('已入创作池：'+(d.path||mid)+'（在「我的素材」tab 可见）',OK);}
+catch(err){toast('加入创作失败：'+err.message,ER);}
+}
+$('mcp-ok')&&$('mcp-ok').addEventListener('click',function(){
+var v=$('mcp-sel').value;if(!v)return;
+var mid=state.mcpMid;closeDlg('mat-cm-pick');matComposeAdd(v,mid);
+});
+$('mcp-x')&&$('mcp-x').addEventListener('click',function(){closeDlg('mat-cm-pick');});
 async function collTg(cid,mid){
 var has=(state.collOf[mid]||[]).indexOf(cid)>=0,c=null;
 state.colls.forEach(function(x){if(x.id===cid)c=x;});
@@ -3211,7 +3361,7 @@ bindBooks();
 // Phase C F71 封面工坊（视觉设计，/api/visual 族真预览；/api/action/cover 保留为 CLI 对齐面）
 // 评审补批 P1-3：面板自 #article·actions 搬入 #compose 右栏折叠区（cm-visual）；
 // 取材自 CV.art（compose=会话正稿 d.final_article），空值则纯参数渲染（article:null）
-var CV={tpl:'vermilion-slab',pr:[],svg:'',h:0,q:0,art:''};
+var CV={tpl:'vermilion-slab',pr:[],svg:'',h:0,q:0,art:'',presetFail:''};
 function cvP(){return{title:$('cv-title').value,hook:$('cv-hook').value,font_size:$('cv-fs').value,align:$('cv-al').value};}
 function cvGo(){
 if(!CV.svg)$('cv-prev').innerHTML='<div class="cv-skel"></div>';
@@ -3226,13 +3376,20 @@ function cvEdit(){clearTimeout(CV.h);CV.h=setTimeout(cvGo,300);}
 function cvChips(){
 var h=[['vermilion-slab','朱砂拓'],['indigo-slab','青黛拓']].map(function(t){return '<button class="chip'+(CV.tpl===t[0]?' is-active':'')+'" data-cvt="'+t[0]+'">'+t[1]+'</button>';}).join(''),m=(CV.pr||[]).filter(function(p){return p.kind==='cover'&&p.template;});
 if(m.length)h+='<span class="cv-grp">我的模板</span>'+m.map(function(p){return '<button class="chip" data-cvt="'+esc(p.template)+'" title="预设 '+esc(p.id)+'">'+esc(p.label||p.id)+'</button>';}).join('');
+// P0-3：预设读取失败显形（内置两模板仍可用，我的模板列表读不出时出卡）
+if(CV.presetFail)h+=loadFailHTML('封面模板预设',CV.presetFail,'cvLoadPresets');
 $('cv-tpl').innerHTML=h;
+}
+// P0-3：presets 加载自 recycle cvInit 拆出（cvInit 每次进面板都重置表单，
+// 失败重试不应清空已填内容）——成功/失败都重绘 chips
+function cvLoadPresets(){
+getJSON('/api/visual/presets').then(function(d){CV.pr=d.items||[];CV.presetFail='';cvChips();}).catch(function(err){CV.presetFail=err.message||'服务未响应';cvChips();});
 }
 function cvInit(path){
 CV.tpl='vermilion-slab';CV.svg='';CV.q++;CV.art=path||'';
 $('cv-title').value='';$('cv-hook').value='';$('cv-prev').innerHTML='';
 cvChips();cvGo();
-getJSON('/api/visual/presets').then(function(d){CV.pr=d.items||[];cvChips();}).catch(function(){});
+cvLoadPresets();
 }
 async function cvExport(btn){
 btn.disabled=true;
@@ -3315,7 +3472,7 @@ catch(err){toast('移除失败：'+err.message,ER);}
 // cmAddMaterial(material_id)，移除走 removeCmSource 的 material://<id> 定位符（同
 // 一后端）。tab 态/检索词为视图局部变量（CMTAB/cmMtQ）；我的素材清单
 // cmMine 首次切入异步拉取（limit=200 一次，检索纯客户端过滤不回打 API）。
-var CMTAB='disc',cmMtQ='',cmMine=null;
+var CMTAB='disc',cmMtQ='',cmMine=null,cmMineFail='';
 function cmMineRows(added){
 var L=(cmMine||[]).filter(function(m){
 if(!(m.payload||{}).text)return false;
@@ -3329,7 +3486,7 @@ return '<div class="cm-pool-row"><span class="badge '+(m.score>=80?'pass':'queue
 }
 function cmMinePaint(){
 var host=$('cm-mine-list');
-if(host)host.innerHTML=cmMineRows(cmAddedMap());
+if(host)host.innerHTML=(cmMineFail&&!cmMine.length)?loadFailHTML('我的素材',cmMineFail,'cmMineLoad'):cmMineRows(cmAddedMap());
 }
 function cmAddedMap(){
 var added={};
@@ -3337,7 +3494,8 @@ var added={};
 return added;
 }
 function cmMineLoad(){
-getJSON('/api/materials?limit=200').then(function(d){cmMine=Array.isArray(d.items)?d.items:[];renderCmPool();}).catch(function(){cmMine=[];renderCmPool();});
+// P0-3：失败≠「暂无带正文的素材」——catch 显形，cmMineFail 由渲染层出卡
+getJSON('/api/materials?limit=200').then(function(d){cmMine=Array.isArray(d.items)?d.items:[];cmMineFail='';renderCmPool();}).catch(function(err){cmMine=[];cmMineFail=err.message||'服务未响应';renderCmPool();});
 }
 function renderCmPool(){
 var added=cmAddedMap(),cand;
@@ -3345,7 +3503,7 @@ cand=(state.discover||[]).filter(function(c){return (c.score||0)>=80;}).slice(0,
 $('cm-pool').innerHTML=
 '<div class="chips" style="margin-bottom:8px"><button class="chip'+(CMTAB==='disc'?' is-active':'')+'" data-cmt="disc">发现候选</button><button class="chip'+(CMTAB==='mine'?' is-active':'')+'" data-cmt="mine">✦ 我的素材</button></div>'+
 (CMTAB==='mine'
-?'<div class="pub-toolbar" style="margin-bottom:8px"><input id="cm-mt-q" class="input" placeholder="搜我的素材（标题/正文）…" value="'+esc(cmMtQ)+'"></div><div id="cm-mine-list">'+cmMineRows(added)+'</div>'
+?'<div class="pub-toolbar" style="margin-bottom:8px"><input id="cm-mt-q" class="input" placeholder="搜我的素材（标题/正文）…" value="'+esc(cmMtQ)+'"></div><div id="cm-mine-list">'+((cmMineFail&&!cmMine.length)?loadFailHTML('我的素材',cmMineFail,'cmMineLoad'):cmMineRows(added))+'</div>'
 :(cand.length?cand.map(function(c){
 var nm=String(c.path).split('/').pop();
 return '<div class="cm-pool-row"><span class="badge '+(c.score>=90?'pass':'warn')+'">'+c.score+'</span><span class="cm-pool-t" title="'+esc(c.path)+'">'+esc(c.title||nm)+'</span>'+(added[nm]?'<button class="btn mat-del cm-rm" data-cm-rm="'+esc(c.path)+'">移除</button>':'<button class="btn" data-cm-add="'+esc(c.path)+'">加入</button>')+'</div>';
@@ -3466,8 +3624,29 @@ if(!r){state.cmWork=null;$('cm-blocks').innerHTML='';$('cm-blocks-empty').hidden
 bl=cmWorkBlocks(r);
 prev=cmPrevIds(r);
 (r.decisions||[]).forEach(function(d){dm[d.block]=d;});
-$('cm-blocks').innerHTML=(state.cmWork.locN?'<p class="action-hint">本地块 '+state.cmWork.locN+' 个不随入稿——请并入正式块「保存裁决」。</p>':'')+bl.map(function(b){return cmBlockRow(b,dm[b.id],prev[b.id]);}).join('');
+// R3-3：批量保留（2026-11-25）——仅对未裁决块；逐块走单块 decide（同一接口
+// cmDecide），按钮内计数反馈，完结刷新块列表。本地块不随入稿，排除在外。
+var pending=bl.filter(function(b){return !b.loc&&!dm[b.id];});
+$('cm-blocks').innerHTML='<div class="cm-batch-keep"><button class="btn" data-cm-keepall'+(pending.length?'':' disabled')+'>全部保留（'+pending.length+'）</button><span class="muted"> 批量保留未裁决块</span></div>'+
+(state.cmWork.locN?'<p class="action-hint">本地块 '+state.cmWork.locN+' 个不随入稿——请并入正式块「保存裁决」。</p>':'')+bl.map(function(b){return cmBlockRow(b,dm[b.id],prev[b.id]);}).join('');
 $('cm-blocks-empty').hidden=true;
+}
+// R3-3：逐块批量裁决——复用单块 /api/compose/decide（action=keep），带按钮内
+// 计数进度；任一块失败如实 toast，已成功块保留（后端逐块原子，非整批事务）。
+async function cmKeepAll(btn){
+if(!state.cslug)return toast('先建会话',ER);
+var r=cmRound(state.cround);if(!r)return;
+var dm={};(r.decisions||[]).forEach(function(d){dm[d.block]=d;});
+var ids=(state.cmWork&&state.cmWork.round===state.cround?state.cmWork.list:r.blocks).filter(function(b){return !b.loc&&!dm[b.id];}).map(function(b){return b.id;});
+if(!ids.length)return toast('没有未裁决的块',WN);
+btn.disabled=true;var err=0;
+for(var i=0;i<ids.length;i++){
+btn.textContent='保留中 '+(i+1)+'/'+ids.length;
+try{await postJSON('/api/compose/decide',{slug:state.cslug,round:state.cround,block:ids[i],action:'keep',confirm:true});}
+catch(e){err++;}
+}
+await loadComposeDetail(state.cslug,true);renderCompose();
+toast(err?('全部保留完成，'+err+' 块失败'):'已保留 '+ids.length+' 块',err?WN:OK);
 }
 function renderCmRounds(){
 var R=(state.csd&&state.csd.rounds)||[];
@@ -3609,7 +3788,9 @@ catch(err){toast('裁决失败：'+err.message,ER);}
 }
 function cmBlockEl(id){return $('cm-blocks').querySelector('[data-cm-block="'+id+'"]');}
 function cmBlocksClick(e){
-var el=e.target.closest('[data-cm-keep]'),sb;
+var el=e.target.closest('[data-cm-keepall]'),sb;
+if(el&&!el.disabled){cmKeepAll(el);return;}
+el=e.target.closest('[data-cm-keep]');
 if(el){cmDecide(el.getAttribute('data-cm-keep'),'keep');return;}
 el=e.target.closest('[data-cm-edit]');
 if(el){cmEdit(el.getAttribute('data-cm-edit'));return;}
@@ -3911,7 +4092,7 @@ bindCompose();
 // export→job（设计稿缺席同步 200+{ok:false}）。xhs-card schema 仅 title/hook/
 // tag/font_size/align/background_slot 六槽（templates.py:197-206）——无几何/行距
 // 槽，行距控件按实测契约不设（发即 400 未知槽）。
-var DV={art:'',kind:'social',tpl:'xhs-card',spec:'xhs-3x4',params:{},svg:'',w:0,h:0,k:1,st:'idle',dirty:false,sel:-1,dpos:{},order:null,undo:[],redo:[],q:0,h:0,drag:null,pendSpec:'',slots:[],slotHexes:{},recent:[],loadedOnce:false};
+var DV={art:'',kind:'social',tpl:'xhs-card',spec:'xhs-3x4',params:{},svg:'',w:0,h:0,k:1,st:'idle',dirty:false,sel:-1,dpos:{},order:null,undo:[],redo:[],q:0,h:0,drag:null,pendSpec:'',slots:[],slotHexes:{},recent:[],loadedOnce:false,slotFail:''};
 var DSPECS=['xhs-3x4','xhs-4x5','square'],DSIZE={'xhs-3x4':[1242,1656],'xhs-4x5':[1242,1553],'square':[1080,1080]};
 var DTXT={'xhs-card':{1:'tag',2:'title',3:'hook'}};
 function dvSet(st){DV.st=st;dvSync();}
@@ -4079,10 +4260,15 @@ dvSet('ready');
 // F-B（2026-11-18）：色槽 chip 改圆形色点（背景=服务端 slot_hexes、title=槽名）；
 // 槽集随服务端 slots（扩槽自动跟随）；最近 5 槽（localStorage）置顶一行。
 async function dvLoadSlots(){
+// P0-3：模板/色槽读取失败显形（localStorage 解析失败维持静默——非服务读取，
+// 与 probeHealth 同类：本机隐私模式下的 Storage 异常无可重试动作）
 try{var d=await getJSON('/api/visual/templates');DV.slotHexes=d.slot_hexes||{};
 DV.slots=((d.items||[])[0]||{}).color_slots||Object.keys(DV.slotHexes);
-DV.recent=JSON.parse(localStorage.getItem('musespiral-dv-recent')||'[]');}catch(e){}
+DV.slotFail='';}catch(err){DV.slotFail=err.message||'服务未响应';}
+try{DV.recent=JSON.parse(localStorage.getItem('musespiral-dv-recent')||'[]');}catch(e){}
 }
+// P0-3：色槽读取失败的重试入口（重载后重绘色点行）
+async function dvSlotsRetry(){await dvLoadSlots();dvColorChips();}
 function dvRecentAdd(s){
 DV.recent=[s].concat(DV.recent.filter(function(x){return x!==s;})).slice(0,5);
 try{localStorage.setItem('musespiral-dv-recent',JSON.stringify(DV.recent));}catch(e){}
@@ -4091,6 +4277,8 @@ function dvSwatch(s){
 return '<button class="chip'+(DV.params.background_slot===s?' is-active':'')+'" data-dslot="'+esc(s)+'" title="'+esc(s)+'" style="background:'+esc(DV.slotHexes[s]||'var(--paper-2)')+'"></button>';
 }
 function dvColorChips(){
+// P0-3：读取失败出卡（不再渲染缺省五槽冒充数据）；成功路径原样
+if(DV.slotFail){$('dv-colors').innerHTML=loadFailHTML('色槽列表',DV.slotFail,'dvSlotsRetry');return;}
 var slots=DV.slots.length?DV.slots:['primary','text','muted','background','accent'];
 var rec=DV.recent.filter(function(s){return slots.indexOf(s)>=0;});
 $('dv-colors').innerHTML=(rec.length?'<span class="dv-cap">最近</span>'+rec.map(dvSwatch).join(''):'')+slots.map(dvSwatch).join('');
@@ -4256,9 +4444,12 @@ return true;
 function qArt(iconName,label,count){
 return '<span class="qa">'+I(iconName)+esc(label)+(count==null?'':' <span class="qa-n">'+count+'</span>')+'</span>';
 }
-function checkSummary(checks){
+// R3-2：FAIL 徽章直链检查 Tab（2026-11-25）——卡片整体是 <a.article-card>，
+// 内嵌 <a> 会被浏览器隐式闭合、把卡尾 DOM 甩出卡外（Playwright 实测），故用
+// role=link + href 属性的 span 承载深链、键盘可触发，点击委托 stopPropagation。
+function checkSummary(checks,path){
 var fail=(checks&&checks.fail)||0,warn=(checks&&checks.warn)||0,pass=(checks&&checks.pass)||0;
-if(fail>0) return '<span class="qcheck fail" title="有 '+fail+' 项 FAIL——进详情「检查」Tab 看原文与修复命令">'+I('error')+'FAIL '+fail+'</span>';
+if(fail>0) return '<span class="qcheck fail" role="link" tabindex="0" data-checks="'+(path?esc(path):'')+'" href="#article?path='+(path?encodeURIComponent(path):'')+'&tab=checks" title="有 '+fail+' 项 FAIL——进详情「检查」Tab 看原文与修复命令（点击直达）">'+I('error')+'FAIL '+fail+'</span>';
 if(warn>0) return '<span class="qcheck warn" title="有 '+warn+' 项 WARN——进详情「检查」Tab 看原文">'+I('warning')+'WARN '+warn+'</span>';
 return '<span class="qcheck pass">'+I('check')+'检查通过'+(pass?' '+pass+' 项':'')+'</span>';
 }
@@ -4286,7 +4477,7 @@ return '<a class="article-card qcard" href="'+href+'">' +
 (arts.length?'<div class="qcard-arts">'+arts.join('')+'</div>':'') +
 (variants.length?'<div class="tags qcard-variants">'+variants.map(function(code){
 return '<span class="tag accent">'+esc(code)+Z;}).join('')+'</div>':'') +
-'<div class="qcard-foot">'+checkSummary(item.checks)+'<button class="btn btn-ghost qcard-fb" data-fb="'+esc(item.path)+'" title="反哺素材库：全文归档 / 摘取段落 / AI 提炼论点">→ 素材库</button></div>' +
+'<div class="qcard-foot">'+checkSummary(item.checks,item.path)+'<button class="btn btn-ghost qcard-fb" data-fb="'+esc(item.path)+'" title="反哺素材库：全文归档 / 摘取段落 / AI 提炼论点">→ 素材库</button></div>' +
 '</div></a>';
 }
 function mountCovers(){
@@ -4370,7 +4561,7 @@ if(qsel>=0&&cards[qsel])location.hash=cards[qsel].getAttribute('href').slice(1);
 function pubRow(item){
 var href='#article?path='+encodeURIComponent(item.path)+'&tab=edit';
 var f=item.flags||{},variants=Array.isArray(f.variants)?f.variants:[];
-return '<a class="pub-row" href="'+href+'">'+cardStatusBadge(item)+'<span class="pub-row-t">'+esc(item.title||item.path)+'</span><span class="pub-row-pl">'+(variants.length?variants.map(function(code){return '<span class="tag accent">'+esc(code)+Z;}).join(''):'<span class="muted">—')+'</span>'+checkSummary(item.checks)+'<button class="btn btn-ghost qcard-fb" data-fb="'+esc(item.path)+'" title="反哺素材库：全文归档 / 摘取段落 / AI 提炼论点">→素材库</button><span class="pub-row-time">'+esc(item.date||'—')+'</span></a>';
+return '<a class="pub-row" href="'+href+'">'+cardStatusBadge(item)+'<span class="pub-row-t">'+esc(item.title||item.path)+'</span><span class="pub-row-pl">'+(variants.length?variants.map(function(code){return '<span class="tag accent">'+esc(code)+Z;}).join(''):'<span class="muted">—')+'</span>'+checkSummary(item.checks,item.path)+'<button class="btn btn-ghost qcard-fb" data-fb="'+esc(item.path)+'" title="反哺素材库：全文归档 / 摘取段落 / AI 提炼论点">→素材库</button><span class="pub-row-time">'+esc(item.date||'—')+'</span></a>';
 }
 // ── N-2 文章反哺（2026-11-21，设计 §3.2 三路径）────────────────────────
 // 文章 → 素材库回程：mode=full 整篇归档（剥 frontmatter，provenance 记
@@ -4514,7 +4705,15 @@ $('fetch-btn').addEventListener('click',function(e){handleFetch(e.target);});
 // （id 前缀 fb- 独占——viewJob/clipCard 等既有 viewer 用法零干扰）
 $('view-publish').addEventListener('click',function(e){
 var b=e.target.closest('[data-fb]');
-if(b){e.preventDefault();fbOpen(b.getAttribute('data-fb'));}
+if(b){e.preventDefault();fbOpen(b.getAttribute('data-fb'));return;}
+// R3-2：FAIL 徽章直链检查 Tab（span role=link，避开卡片 <a> 内嵌锚的 DOM 折叠）
+var f=e.target.closest('[data-checks]');
+if(f){e.preventDefault();e.stopPropagation();var h=f.getAttribute('href');if(h)location.hash=h.slice(1);}
+});
+$('view-publish').addEventListener('keydown',function(e){
+if(e.key!=='Enter'&&e.key!==' ')return;
+var f=e.target.closest&&e.target.closest('[data-checks]');
+if(f){e.preventDefault();e.stopPropagation();var h=f.getAttribute('href');if(h)location.hash=h.slice(1);}
 });
 $('viewer').addEventListener('click',function(e){
 var m=e.target.closest('[data-fbm]');
@@ -4677,7 +4876,7 @@ var PNN={mp:'公众号',kuaishou:'快手'};
 function renderPlatformBars(){
 var bp=(state.stats&&state.stats.by_platform)||{};
 var rows=state.platforms.map(function(p){var g=bp[p.code]||{};return{name:p.name||PN[p.code]||PNN[p.code]||p.code,pub:g.publishes||0,dft:g.drafts||0};});
-if(!rows.length){$('platform-bars').innerHTML='<p class="action-hint">平台列表为空</p>';return;}
+if(!rows.length){$('platform-bars').innerHTML=state.platFail?loadFailHTML('平台列表',state.platFail,'insReloadData'):'<p class="action-hint">平台列表为空</p>';return;}
 var max=1;rows.forEach(function(r){if(r.pub>max)max=r.pub;});
 $('platform-bars').innerHTML=rows.map(function(r){
 return '<div class="pbar"><span class="pbar-name">'+esc(r.name)+'</span><span class="pbar-track"><span class="pbar-fill" style="width:'+Math.round(r.pub/max*100)+'%"></span></span><span class="pbar-n">'+r.pub+' 篇'+(r.dft?' · 草稿 '+r.dft:'')+'</span></div>';}).join('');}
@@ -4703,12 +4902,15 @@ catch(err){toast('回采失败：'+err.message,ER);}finally{SB.disabled=false;}}
 function renderInsight(){
 var st=state.stats||{},pub=st.total_publish||0;
 // P1-4 洞察零态引导：零发布时瓷砖区换引导卡（一张卡横跨四砖位，.tiles .empty），非零态保持原四砖
-if(!pub)$('stat-tiles').innerHTML='<div class="empty"><div class="empty-icon" data-icon="publish">'+I('publish')+'</div><div class="empty-title">发布第一篇后，此处显示漏斗与趋势</div><div class="empty-text">素材与草稿已在积累，发布后四项指标在此生长。</div><a class="btn btn-primary empty-action" href="#publish">去发布中心</a></div>';
+// P0-3：统计读取失败时优先显形失败卡——零态引导只在真读到了数据时才出现
+if(!pub)$('stat-tiles').innerHTML=state.statsFail?loadFailHTML('统计数据',state.statsFail,'insReloadData'):'<div class="empty"><div class="empty-icon" data-icon="publish">'+I('publish')+'</div><div class="empty-title">发布第一篇后，此处显示漏斗与趋势</div><div class="empty-text">素材与草稿已在积累，发布后四项指标在此生长。</div><a class="btn btn-primary empty-action" href="#publish">去发布中心</a></div>';
 else $('stat-tiles').innerHTML=[['已发布',pub],['待审',pendingCount()],['总阅读',st.total_reads||0],['平台数',state.platforms.length]].map(function(t){
 return '<div class="tile"><div class="tile-value">'+esc(t[1])+D+'<div class="tile-label">'+esc(t[0])+'</div></div>';}).join('');
 QA('[data-irange]').forEach(function(el){el.classList.toggle('is-active',+el.getAttribute('data-irange')===state.irange);});
 renderIdeaFunnel();renderTrend();renderStatsTrend();renderWriting();renderPlatformBars();renderContrib();renderScoreDist();renderAiUsage();renderComposeAct();renderRadar();
 }
+// P0-3：统计/平台读取失败的重试入口（重载后整面重绘——两卡的 data-loadretry 目标）
+function insReloadData(){return Promise.all([loadStats(true),loadPlatforms(true)]).then(renderInsight);}
 // 入口 C §五 选题雷达（纯只读 GET /api/topic_radar）。零落库零 POST——刷新/立即生成只弹
 // CLI 引导 toast；kind 徽三色 radar=viz-1 青黛/kb=viz-5 石板/star=jade；AI 角度行青黛左边线
 var RK={radar:'var(--viz-1)',kb:'var(--viz-5)',star:'var(--jade)'};
@@ -5529,7 +5731,11 @@ $('prompt-state').textContent=ov[t]?'已覆盖内置缺省（保存即整体覆�
 }
 function renderSettings(){
 var st=state.settings;
-if(!st){$('settings-sub').textContent='设置读取失败';return;}
+// P0-3：设置读取失败显形（原因+重试）——此前只改 sub 一行小字，主体静默空白
+if(!st){$('settings-sub').textContent='设置读取失败：'+(state.setFail||'服务未响应');
+var kb=$('kb-sources-body');
+if(kb)kb.innerHTML='<tr><td colspan="5">'+loadFailHTML('设置',state.setFail,'setFailRetry')+'</td></tr>';
+return;}
 var kb=st.kb||{},ai=st.ai||{},ap=ai.profiles||{},names=Object.keys(ap.profiles||{});
 $('kb-root-input').value=kb.root||'';
 $('kb-origin').innerHTML='根：'+(kb.root?(I(kb.root_exists?'check':'warning')+' '+esc(kb.root)):'未配置')+' · 源：'+(kb.origin==='kb_sources.json'?'kb_sources.json':kb.origin==='kb_root.txt'?'kb_root.txt 回退+内置默认源表':'内置默认源表');
@@ -5549,6 +5755,8 @@ var pr=ai.prompts||{},ov=pr.overrides||{};
 $('prompt-task-select').innerHTML=(pr.tasks||[]).map(function(t){return '<option value="'+esc(t)+'">'+esc(t)+'</option>';}).join('');
 pickPrompt();
 }
+// P0-3：设置读取失败的重试入口（重载后重绘设置面）
+function setFailRetry(){return loadSettings().then(renderSettings);}
 // 路由入口（原 renderRoute settings 分支整体迁入——A 类专项：分支归视图）
 VAPI.settings={enter:async function(){
 await loadSettings();
@@ -5894,7 +6102,7 @@ bindPlugins();
 // AI-3 重生成（2026-11-21，裁决三件套最后一件）：每条 range 与成稿旁 [🔄]——
 // POST /api/pipelines/runs/<run_id>/regenerate（step ks/aw，feedback 可选改进
 // 要求）→ job 面轮询 → 重拉 runs+segments；旧版后端自动归档 outputs.vN。
-var PR={mode:'',pipeId:'',def:null,runId:'',jobId:'',timer:null,t0:0,steps:[],status:'',error:'',artifacts:[],segs:null,ranges:null,edits:{},editIdx:-1,rngDel:{},rngAdd:{},pipes:[],miss:0,hasSegs:false,hasArticle:false,awStatus:'',verdicts:{},regen:0,regenOpen:''};
+var PR={mode:'',pipeId:'',def:null,runId:'',jobId:'',timer:null,t0:0,steps:[],status:'',error:'',artifacts:[],segs:null,ranges:null,edits:{},editIdx:-1,rngDel:{},rngAdd:{},pipes:[],miss:0,hasSegs:false,hasArticle:false,awStatus:'',verdicts:{},regen:0,regenOpen:'',fail:''};
 // hasSegs 门控（复核 medium-4）：链上存在 segments 型输出端口才挂载转写编辑面板
 // ——判定数据全部来自 manifest（def.nodes 联表 / runs 读面 plugins 输出表），
 // 「manifest 即 UI」同纪律；无 segments 的链（如 csv 导出）跑完不再被套上转写面板。
@@ -6018,8 +6226,11 @@ async function prLoadPipes(){
 try{
 var d=await getJSON('/api/pipelines');
 PR.pipes=d.pipelines||d.pipes||[];
-}catch(err){PR.pipes=[];}
+PR.fail='';
+}catch(err){PR.pipes=[];PR.fail=err.message||'服务未响应';}
 }
+// P0-3：流水线清单读取失败的重试入口（重载后重绘 pick 面）
+function prPipesRetry(){return prLoadPipes().then(prPaint);}
 async function prLoadPipe(id){
 try{
 PR.def=await getJSON(`/api/pipelines/${encodeURIComponent(id)}`);
@@ -6160,7 +6371,7 @@ $('pr-back-btn').hidden=pick;
 $('pr-reset-btn').hidden=pick;
 $('pr-run-btn').hidden=PR.mode!=='pipe';
 $('pr-title').textContent=PR.mode==='pick'?'流水线':((PR.def&&PR.def.name)?String(PR.def.name):'流水线画布');
-$('pr-sub').textContent=pick?('共 '+PR.pipes.length+' 条已存流水线'):(PR.mode==='run'?'运行 '+PR.runId:(PR.pipeId||''));
+$('pr-sub').textContent=pick?(PR.fail?'流水线读取失败':'共 '+PR.pipes.length+' 条已存流水线'):(PR.mode==='run'?'运行 '+PR.runId:(PR.pipeId||''));
 var b=$('pr-badge');
 b.textContent={running:'运行中',done:'完成',failed:'失败',cancelled:'已取消'}[PR.status]||'待运行';
 b.className='badge '+({running:'running',done:'done',failed:'failed'}[PR.status]||'queued');
@@ -6172,7 +6383,7 @@ $('pr-logs').innerHTML=prLogsHtml();
 $('pr-out').innerHTML=prOutHtml();
 }
 function prPipesHtml(){
-if(!PR.pipes.length)return '<div class="empty"><div class="empty-icon">'+I('flow')+'</div><div class="empty-title">暂无流水线</div><div class="empty-text">到「插件」清单新建一条（输入 → 处理 → 输出），保存后在这里运行。</div><button class="btn btn-primary" data-prnew>去新建</button></div>';
+if(!PR.pipes.length)return (PR.fail?loadFailHTML('流水线列表',PR.fail,'prPipesRetry'):'<div class="empty"><div class="empty-icon">'+I('flow')+'</div><div class="empty-title">暂无流水线</div><div class="empty-text">到「插件」清单新建一条（输入 → 处理 → 输出），保存后在这里运行。</div><button class="btn btn-primary" data-prnew>去新建</button></div>');
 return '<div class="pr-pipes">'+PR.pipes.map(function(p){
 var n=(p.nodes||[]).length;
 return '<button class="pr-pipe" data-propen="'+esc(p.id)+'"><span class="pr-pipe-i">'+I('flow')+'</span><span class="pr-pipe-main"><span class="pr-pipe-name">'+esc(p.name||p.id)+'</span><span class="pr-pipe-sub">'+esc(p.id)+' · '+n+' 节点</span></span><span class="pr-pipe-go">'+I('play')+'</span></button>';

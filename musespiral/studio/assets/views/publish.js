@@ -12,9 +12,9 @@ return true;
 function qArt(iconName,label,count){
 return '<span class="qa">'+I(iconName)+esc(label)+(count==null?'':' <span class="qa-n">'+count+'</span>')+'</span>';
 }
-function checkSummary(checks){
+function checkSummary(checks,path){
 var fail=(checks&&checks.fail)||0,warn=(checks&&checks.warn)||0,pass=(checks&&checks.pass)||0;
-if(fail>0) return '<span class="qcheck fail" title="有 '+fail+' 项 FAIL——进详情「检查」Tab 看原文与修复命令">'+I('error')+'FAIL '+fail+'</span>';
+if(fail>0) return '<span class="qcheck fail" role="link" tabindex="0" data-checks="'+(path?esc(path):'')+'" href="#article?path='+(path?encodeURIComponent(path):'')+'&tab=checks" title="有 '+fail+' 项 FAIL——进详情「检查」Tab 看原文与修复命令（点击直达）">'+I('error')+'FAIL '+fail+'</span>';
 if(warn>0) return '<span class="qcheck warn" title="有 '+warn+' 项 WARN——进详情「检查」Tab 看原文">'+I('warning')+'WARN '+warn+'</span>';
 return '<span class="qcheck pass">'+I('check')+'检查通过'+(pass?' '+pass+' 项':'')+'</span>';
 }
@@ -42,7 +42,7 @@ return '<a class="article-card qcard" href="'+href+'">' +
 (arts.length?'<div class="qcard-arts">'+arts.join('')+'</div>':'') +
 (variants.length?'<div class="tags qcard-variants">'+variants.map(function(code){
 return '<span class="tag accent">'+esc(code)+Z;}).join('')+'</div>':'') +
-'<div class="qcard-foot">'+checkSummary(item.checks)+'<button class="btn btn-ghost qcard-fb" data-fb="'+esc(item.path)+'" title="反哺素材库：全文归档 / 摘取段落 / AI 提炼论点">→ 素材库</button></div>' +
+'<div class="qcard-foot">'+checkSummary(item.checks,item.path)+'<button class="btn btn-ghost qcard-fb" data-fb="'+esc(item.path)+'" title="反哺素材库：全文归档 / 摘取段落 / AI 提炼论点">→ 素材库</button></div>' +
 '</div></a>';
 }
 function mountCovers(){
@@ -122,7 +122,7 @@ if(qsel>=0&&cards[qsel])location.hash=cards[qsel].getAttribute('href').slice(1);
 function pubRow(item){
 var href='#article?path='+encodeURIComponent(item.path)+'&tab=edit';
 var f=item.flags||{},variants=Array.isArray(f.variants)?f.variants:[];
-return '<a class="pub-row" href="'+href+'">'+cardStatusBadge(item)+'<span class="pub-row-t">'+esc(item.title||item.path)+'</span><span class="pub-row-pl">'+(variants.length?variants.map(function(code){return '<span class="tag accent">'+esc(code)+Z;}).join(''):'<span class="muted">—')+'</span>'+checkSummary(item.checks)+'<button class="btn btn-ghost qcard-fb" data-fb="'+esc(item.path)+'" title="反哺素材库：全文归档 / 摘取段落 / AI 提炼论点">→素材库</button><span class="pub-row-time">'+esc(item.date||'—')+'</span></a>';
+return '<a class="pub-row" href="'+href+'">'+cardStatusBadge(item)+'<span class="pub-row-t">'+esc(item.title||item.path)+'</span><span class="pub-row-pl">'+(variants.length?variants.map(function(code){return '<span class="tag accent">'+esc(code)+Z;}).join(''):'<span class="muted">—')+'</span>'+checkSummary(item.checks,item.path)+'<button class="btn btn-ghost qcard-fb" data-fb="'+esc(item.path)+'" title="反哺素材库：全文归档 / 摘取段落 / AI 提炼论点">→素材库</button><span class="pub-row-time">'+esc(item.date||'—')+'</span></a>';
 }
 var FB={slug:'',mode:'full'};
 function fbSlug(path){return String(path||'').replace(/\.md$/i,'').split('/').pop();}
@@ -250,7 +250,14 @@ handleDropFiles(files);
 $('fetch-btn').addEventListener('click',function(e){handleFetch(e.target);});
 $('view-publish').addEventListener('click',function(e){
 var b=e.target.closest('[data-fb]');
-if(b){e.preventDefault();fbOpen(b.getAttribute('data-fb'));}
+if(b){e.preventDefault();fbOpen(b.getAttribute('data-fb'));return;}
+var f=e.target.closest('[data-checks]');
+if(f){e.preventDefault();e.stopPropagation();var h=f.getAttribute('href');if(h)location.hash=h.slice(1);}
+});
+$('view-publish').addEventListener('keydown',function(e){
+if(e.key!=='Enter'&&e.key!==' ')return;
+var f=e.target.closest&&e.target.closest('[data-checks]');
+if(f){e.preventDefault();e.stopPropagation();var h=f.getAttribute('href');if(h)location.hash=h.slice(1);}
 });
 $('viewer').addEventListener('click',function(e){
 var m=e.target.closest('[data-fbm]');

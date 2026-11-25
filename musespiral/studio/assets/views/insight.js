@@ -50,7 +50,7 @@ var PNN={mp:'公众号',kuaishou:'快手'};
 function renderPlatformBars(){
 var bp=(state.stats&&state.stats.by_platform)||{};
 var rows=state.platforms.map(function(p){var g=bp[p.code]||{};return{name:p.name||PN[p.code]||PNN[p.code]||p.code,pub:g.publishes||0,dft:g.drafts||0};});
-if(!rows.length){$('platform-bars').innerHTML='<p class="action-hint">平台列表为空</p>';return;}
+if(!rows.length){$('platform-bars').innerHTML=state.platFail?loadFailHTML('平台列表',state.platFail,'insReloadData'):'<p class="action-hint">平台列表为空</p>';return;}
 var max=1;rows.forEach(function(r){if(r.pub>max)max=r.pub;});
 $('platform-bars').innerHTML=rows.map(function(r){
 return '<div class="pbar"><span class="pbar-name">'+esc(r.name)+'</span><span class="pbar-track"><span class="pbar-fill" style="width:'+Math.round(r.pub/max*100)+'%"></span></span><span class="pbar-n">'+r.pub+' 篇'+(r.dft?' · 草稿 '+r.dft:'')+'</span></div>';}).join('');}
@@ -75,12 +75,13 @@ try{var d=await postJSON('/api/action/sync_stats',{confirm:true});await queued(d
 catch(err){toast('回采失败：'+err.message,ER);}finally{SB.disabled=false;}};}
 function renderInsight(){
 var st=state.stats||{},pub=st.total_publish||0;
-if(!pub)$('stat-tiles').innerHTML='<div class="empty"><div class="empty-icon" data-icon="publish">'+I('publish')+'</div><div class="empty-title">发布第一篇后，此处显示漏斗与趋势</div><div class="empty-text">素材与草稿已在积累，发布后四项指标在此生长。</div><a class="btn btn-primary empty-action" href="#publish">去发布中心</a></div>';
+if(!pub)$('stat-tiles').innerHTML=state.statsFail?loadFailHTML('统计数据',state.statsFail,'insReloadData'):'<div class="empty"><div class="empty-icon" data-icon="publish">'+I('publish')+'</div><div class="empty-title">发布第一篇后，此处显示漏斗与趋势</div><div class="empty-text">素材与草稿已在积累，发布后四项指标在此生长。</div><a class="btn btn-primary empty-action" href="#publish">去发布中心</a></div>';
 else $('stat-tiles').innerHTML=[['已发布',pub],['待审',pendingCount()],['总阅读',st.total_reads||0],['平台数',state.platforms.length]].map(function(t){
 return '<div class="tile"><div class="tile-value">'+esc(t[1])+D+'<div class="tile-label">'+esc(t[0])+'</div></div>';}).join('');
 QA('[data-irange]').forEach(function(el){el.classList.toggle('is-active',+el.getAttribute('data-irange')===state.irange);});
 renderIdeaFunnel();renderTrend();renderStatsTrend();renderWriting();renderPlatformBars();renderContrib();renderScoreDist();renderAiUsage();renderComposeAct();renderRadar();
 }
+function insReloadData(){return Promise.all([loadStats(true),loadPlatforms(true)]).then(renderInsight);}
 var RK={radar:'var(--viz-1)',kb:'var(--viz-5)',star:'var(--jade)'};
 function rr(c){var r=c.refs,s=+c.score||0,q=c.reasons||[],e=c.excluded,
 t='<span data-t>'+esc(c.title)+'</span>',o;

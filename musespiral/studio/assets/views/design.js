@@ -1,4 +1,4 @@
-var DV={art:'',kind:'social',tpl:'xhs-card',spec:'xhs-3x4',params:{},svg:'',w:0,h:0,k:1,st:'idle',dirty:false,sel:-1,dpos:{},order:null,undo:[],redo:[],q:0,h:0,drag:null,pendSpec:'',slots:[],slotHexes:{},recent:[],loadedOnce:false};
+var DV={art:'',kind:'social',tpl:'xhs-card',spec:'xhs-3x4',params:{},svg:'',w:0,h:0,k:1,st:'idle',dirty:false,sel:-1,dpos:{},order:null,undo:[],redo:[],q:0,h:0,drag:null,pendSpec:'',slots:[],slotHexes:{},recent:[],loadedOnce:false,slotFail:''};
 var DSPECS=['xhs-3x4','xhs-4x5','square'],DSIZE={'xhs-3x4':[1242,1656],'xhs-4x5':[1242,1553],'square':[1080,1080]};
 var DTXT={'xhs-card':{1:'tag',2:'title',3:'hook'}};
 function dvSet(st){DV.st=st;dvSync();}
@@ -166,8 +166,10 @@ dvSet('ready');
 async function dvLoadSlots(){
 try{var d=await getJSON('/api/visual/templates');DV.slotHexes=d.slot_hexes||{};
 DV.slots=((d.items||[])[0]||{}).color_slots||Object.keys(DV.slotHexes);
-DV.recent=JSON.parse(localStorage.getItem('musespiral-dv-recent')||'[]');}catch(e){}
+DV.slotFail='';}catch(err){DV.slotFail=err.message||'服务未响应';}
+try{DV.recent=JSON.parse(localStorage.getItem('musespiral-dv-recent')||'[]');}catch(e){}
 }
+async function dvSlotsRetry(){await dvLoadSlots();dvColorChips();}
 function dvRecentAdd(s){
 DV.recent=[s].concat(DV.recent.filter(function(x){return x!==s;})).slice(0,5);
 try{localStorage.setItem('musespiral-dv-recent',JSON.stringify(DV.recent));}catch(e){}
@@ -176,6 +178,7 @@ function dvSwatch(s){
 return '<button class="chip'+(DV.params.background_slot===s?' is-active':'')+'" data-dslot="'+esc(s)+'" title="'+esc(s)+'" style="background:'+esc(DV.slotHexes[s]||'var(--paper-2)')+'"></button>';
 }
 function dvColorChips(){
+if(DV.slotFail){$('dv-colors').innerHTML=loadFailHTML('色槽列表',DV.slotFail,'dvSlotsRetry');return;}
 var slots=DV.slots.length?DV.slots:['primary','text','muted','background','accent'];
 var rec=DV.recent.filter(function(s){return slots.indexOf(s)>=0;});
 $('dv-colors').innerHTML=(rec.length?'<span class="dv-cap">最近</span>'+rec.map(dvSwatch).join(''):'')+slots.map(dvSwatch).join('');

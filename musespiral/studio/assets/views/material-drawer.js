@@ -34,7 +34,7 @@ tsugBox(m)+
 (meta.original_ref?'<div class="action-row"><button class="btn btn-ghost" data-morig="1" style="font-size:var(--fs-caption)">原始章节</button></div>':'')+
 '</div>'+
 '<div id="mi-body" hidden></div>'+
-'<div class="action-row mat-acts">'+(m.type==='text'?'<button class="btn" data-mdraft="'+esc(o.uri)+'"'+(m.drafted?' disabled':'')+'>生成骨架</button>':'')+((meta.url||p.url)?'<a class="btn" href="'+esc(meta.url||p.url)+'" target="_blank" rel="noopener">查看原文</a>':'')+'<button class="btn" data-mcolladd="'+esc(m.id)+'">+ 集合</button><button class="btn" data-mstar="'+esc(m.id)+'">'+(tri.starred?'取消收藏':'收藏')+'</button><button class="btn" data-mread="'+esc(m.id)+'">'+(tri.read?'已读':'未读')+'</button><button class="btn" data-moff="'+esc(m.id)+'">'+(tri.enabled?'禁用':'启用')+'</button><button class="btn" data-mai="'+esc(m.id)+'">AI 摘要</button><button class="btn mat-del" data-mdel="'+esc(m.id)+'">删除</button></div>'+
+'<div class="action-row mat-acts">'+(m.type==='text'?'<button class="btn" data-mdraft="'+esc(o.uri)+'"'+(m.drafted?' disabled':'')+'>生成骨架</button>':'')+((meta.url||p.url)?'<a class="btn" href="'+esc(meta.url||p.url)+'" target="_blank" rel="noopener">查看原文</a>':'')+'<button class="btn" data-mcolladd="'+esc(m.id)+'">+ 集合</button><button class="btn" data-mcm="'+esc(m.id)+'">加入创作</button><button class="btn" data-mstar="'+esc(m.id)+'">'+(tri.starred?'取消收藏':'收藏')+'</button><button class="btn" data-mread="'+esc(m.id)+'">'+(tri.read?'已读':'未读')+'</button><button class="btn" data-moff="'+esc(m.id)+'">'+(tri.enabled?'禁用':'启用')+'</button><button class="btn" data-mai="'+esc(m.id)+'">AI 摘要</button><button class="btn mat-del" data-mdel="'+esc(m.id)+'">删除</button></div>'+
 '';
 if(window.__mdpubMatIter)__mdpubMatIter.repaint(state.mdrawer);
 if(window.__mdpubMatLineage)__mdpubMatLineage.repaint(state.mdrawer);
@@ -159,6 +159,27 @@ ctxShow(e,(state.colls.length?state.colls.map(function(c){
 return '<button class="cp-item" data-ctg="'+esc(c.id)+'|'+esc(mid)+'">'+((state.collOf[mid]||[]).indexOf(c.id)>=0?'✓ ':'＋ ')+esc(c.name)+' · '+c.active_member_count+'</button>';
 }).join(''):'<span class="cp-item">先在左轨「+ 新建」建集合</span>'));
 }
+async function matToCompose(mid,e){
+if(e)e.preventDefault();
+await loadCompose(true);
+var L=(state.cs||[]).filter(function(s2){return s2.status==='composing';});
+if(!L.length){location.hash='#compose';toast('新建会话后，在素材池「我的素材」里找到它',WN);return;}
+if(L.length===1)return matComposeAdd(L[0].slug,mid);
+state.mcpMid=mid;
+var sel=$('mcp-sel');sel.innerHTML=L.map(function(s2){return '<option value="'+esc(s2.slug)+'">'+esc(s2.title||s2.slug)+'</option>';}).join('');
+openDlg('mat-cm-pick','#mcp-sel');
+}
+async function matComposeAdd(slug,mid){
+try{var d=await postJSON('/api/compose/add',{slug:slug,material_id:mid,confirm:true});
+state.cslug=slug;location.hash='#compose?s='+encodeURIComponent(slug);
+toast('已入创作池：'+(d.path||mid)+'（在「我的素材」tab 可见）',OK);}
+catch(err){toast('加入创作失败：'+err.message,ER);}
+}
+$('mcp-ok')&&$('mcp-ok').addEventListener('click',function(){
+var v=$('mcp-sel').value;if(!v)return;
+var mid=state.mcpMid;closeDlg('mat-cm-pick');matComposeAdd(v,mid);
+});
+$('mcp-x')&&$('mcp-x').addEventListener('click',function(){closeDlg('mat-cm-pick');});
 async function collTg(cid,mid){
 var has=(state.collOf[mid]||[]).indexOf(cid)>=0,c=null;
 state.colls.forEach(function(x){if(x.id===cid)c=x;});

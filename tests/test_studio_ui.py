@@ -666,7 +666,8 @@ def test_svg_icon_set_complete() -> None:
     assert "var ICONS={" in src  # 内嵌 JS 对象 {iconName: pathData}
     # 共享前缀 + 包装函数：ICONS 值只存 path 数据，icon() 统一拼 <svg> 壳
     assert (
-        "var TAG='<svg aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" "
+        "var TAG='<svg aria-hidden=\"true\" width=\"16\" height=\"16\" "
+        "viewBox=\"0 0 24 24\" fill=\"none\" "
         "stroke=\"currentColor\" stroke-width=\"1.7\">';" in src
     )
     assert "function icon(name){return ICONS[name]?TAG+ICONS[name]+'</svg>':'';}" in src
@@ -4074,12 +4075,14 @@ def test_feat5_empty_state_guidance_with_actions() -> None:
     每个空态至少一个现在就能点的按钮，绑定与头部既有动作同路。"""
     src = _source()
     # 源中枢：不再是「settings.json / POST /api/sources」开发者措辞
-    # （W2 重设计后空态由 JS 渲染进 #src-mine-body，静态壳只留骨架；断言域转 JS）
+    # （W2 重设计后空态由 JS 渲染进 #src-mine-body，静态壳只留骨架；断言域转 JS。
+    #   R2 清理（2026-11-25）：静态 #src-empty 节点与 #src-empty-add 绑定退役——
+    #   JS 内联空态为唯一正典，其 CTA 走 #src-mine-body 的 data-srcadd 委托）
     vs = _view_js("sources")
     assert "还没有接上任何源" in vs and "添加源" in vs
     assert "POST /api/sources 注册" not in src
-    assert 'id="src-empty-add"' in src
-    assert 'id="src-empty"' in src
+    assert 'id="src-empty-add"' not in src
+    assert 'id="src-empty"' not in src
     # 插件：真空态双 CTA（新建/重扫）
     assert 'id="pg-empty-new"' in src and 'id="pg-empty-rescan"' in src
     # 视觉编辑：空态可直达「载入」
@@ -4087,9 +4090,11 @@ def test_feat5_empty_state_guidance_with_actions() -> None:
     # 书籍：搜索占位引导卡配可行动按钮（订阅管理/导入书源）——R4 批文案契约不动
     assert 'id="bk-guide-subs"' in src and 'id="bk-guide-import"' in src
     assert "搜索结果渲染 · R4 批" in src  # 契约锁仍成立（壳静态文案；JS 赋值字面量另锁于 books.js）
-    # 绑定与头部动作同路（sources→srcAddOpen / plugins→hash 与 refresh-btn / design→dvLoad / books→subs tab 与 imOpen）
+    # 绑定与头部动作同路（sources→srcAddOpen 经 #src-mine-body 委托 / plugins→hash 与 refresh-btn / design→dvLoad / books→subs tab 与 imOpen）
     vs = _view_js("sources")
-    assert "srcAddOpen" in vs and "$('src-empty-add').addEventListener('click',function(){srcAddOpen('rss');" in vs
+    assert "srcAddOpen" in vs
+    assert ("var add=e.target.closest('[data-srcadd]');if(add){srcAddOpen"
+            "(add.getAttribute('data-srcadd'));return;}") in vs
     vp = _view_js("plugins")
     assert "$('pg-empty-new').addEventListener('click',function(){location.hash='#plugins?new=1';});" in vp
     assert "$('pg-empty-rescan').addEventListener('click',function(){$('pg-refresh-btn').click();});" in vp
@@ -4136,3 +4141,266 @@ def test_feat5_dark_mode_live_preview_and_tokens() -> None:
     # 段落以 .empty-actions{ 为界——FEAT-5 三族规则在 core.css 中连续排列）
     kbd_seg = css[css.index(".kbd-modal{"):css.index(".empty-actions{")]
     assert "#" not in kbd_seg, f"FEAT-5 样式混入硬编码色: {kbd_seg[:120]}"
+
+
+# ── R1「P0 止血」批（2026-11-25 审查 §3：显示错误/信息欺骗级三修）──────────
+
+
+def test_r1_p01_icon_tag_fixed_size() -> None:
+    """P0-1 图标失控根治：mdpubIcon 的 TAG 公共前缀自带 width/height。
+
+    根因：I() 输出被直接拼进无 CSS 约束的容器（源卡片巨箭头 / 搜索结果
+    .rg-h 实测 1153px），svg 无尺寸属性即无上限——生成端单点根治全站；
+    CSS 约束（[data-icon] svg / .hx 系）优先级高于表现属性，既有视图
+    的放大缩小不受影响。"""
+    src = _js()
+    assert (
+        'var TAG=\'<svg aria-hidden="true" width="16" height="16" '
+        'viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="1.7">\';' in src
+    )
+    # CSS 约束仍在（属性是兜底，不是替代）
+    assert "[data-icon] svg{width:16px;height:16px" in _css()
+
+
+def test_r1_p02_src_search_failed_not_disguised_as_empty() -> None:
+    """P0-2 书籍搜索失败不再渲染成「0 结果」：srcDoSearch 的 waitForJob 消费
+    必须分辨 job.status==='failed'，引擎失败渲染「引擎读取失败+重试入口」，
+    与「书籍里没找到」空态严格分开；素材腿静默 catch 同步显错（对齐 books
+    视图 bkSearch 渲染 r.error 的正确样板）。"""
+    vs = _view_js("sources")
+    # failed 分支：取 job.error，不再把 failed 的空 result 当 0 结果
+    assert "if(job&&job.status==='failed')R.booksFail=(job.error||'引擎读取失败');" in vs
+    # 素材腿 catch 写旗（不再静默吞成「素材 0」）
+    assert "catch(err){R.matsFail=" in vs
+    # 渲染层：失败卡先于「没找到」空态判定（顺序即优先级——引擎失败≠无结果）
+    body = _src_of("function srcSearchRender(){", "async function srcDoSearch(){")
+    assert body.index("if(R.booksFail)") < body.index("书籍里没找到")
+    assert "引擎读取失败：" in body
+    assert "素材库读取失败：" in body
+    assert "data-srcretry" in body  # 重试入口
+    # 重试点击接线在 #src-results 委托首位
+    assert "var rt=e.target.closest('[data-srcretry]');if(rt){srcDoSearch();return;}" in vs
+
+
+def test_r1_p03_load_fail_card_and_retry_wiring() -> None:
+    """P0-3 读取失败诚实化：公共 loadFailHTML 警示卡 + data-loadretry 重试
+    委托；11 处读取点 catch 不再吞（失败≠空态）。probeHealth 故意静默是设计
+    （不改）——本锚不覆盖它。"""
+    core = _core_js()
+    # 公共 helper 与重试委托（document 级、按全局名回呼目标函数）
+    assert "function loadFailHTML(what,err,retry){" in core
+    assert 'class="notice-card is-error"' in core  # 复用既有警示 token，零新增颜色
+    assert "data-loadretry=" in core
+    assert "e.target.closest('[data-loadretry]')" in core
+    js = _js()
+    # core 侧 7 处失败旗（源/设置/平台/统计/集合/标签/任务中心）
+    for mark in ("state.srcFail=", "state.setFail=", "state.platFail=",
+                 "state.statsFail=", "state.collFail=", "state.tagFail=",
+                 "state.jobsFail="):
+        assert mark in js, mark
+    # 视图侧 4 处（compose 素材池+封面模板、plugin-run 流水线、design 色槽）
+    for mark in ("cmMineFail=", "CV.presetFail=", "PR.fail=", "DV.slotFail="):
+        assert mark in js, mark
+    # 失败卡渲染锚（抽查三处宿主：源清单/统计瓷砖/任务面板，其余同构）
+    assert "loadFailHTML('源清单'" in js
+    assert "loadFailHTML('统计数据'" in js
+    assert "loadFailHTML('后台任务列表'" in core
+    # 重试目标函数（window 名回呼的落点）全部在位
+    for fn in ("srcFailRetry", "setFailRetry", "collFailRetry", "insReloadData",
+               "prPipesRetry", "dvSlotsRetry", "cvLoadPresets"):
+        assert f"function {fn}(" in js, fn
+    # CSS：窄容器（chips 行/任务下拉/素材 rail）收窄规则，防警示卡挤压变形
+    css = _css()
+    assert ".chips>.notice-card{flex:1 1 100%;padding:12px 14px}" in css
+    assert ".jobs-menu .notice-card,.coll-rail .notice-card{padding:12px 14px}" in css
+
+
+# ── R2「交互一致性」批（2026-11-25：P1-1 浮层收口 / P1-4 空库首落地 / 三步走
+#    横幅 / P1-2 搜索等待反馈 / P1-3 引擎失败联动 / P1-5 badge 口径 / 空态清理）──
+
+
+def test_r2_p1_1_overlay_close_call_chain() -> None:
+    """P1-1 浮层统一收口：视图切换（CURVIEW 变化）触发 closeOverlays——复用既有
+    关闭函数（cpClose/ctxHide/jobs 收起停轮询/spark/closeDlg 族），阅读面板经
+    VAPI.reader.close（跨视图治理契约：rdClose 真身在 reader 块，core 不直呼）。
+    判例：⌘K 面板跨视图残留遮挡页面——切走再切回，视图不残留打开的弹层。"""
+    core = _core_js()
+    # 触发条件挂 showView 视图切换位（非每次 renderRoute）——同视图 hash 深链/
+    # 筛选不收口，不误伤用户开着的弹层
+    assert "if(CURVIEW!==view){CURVIEW=view;closeOverlays();}" in core
+    body = core[core.index("function closeOverlays(){"):core.index("function viewRepaint(view){")]
+    for fn in ("cpClose()", "ctxHide()", "jobsPollStop()", "sparkClose()",
+               "OVERLAY_DLGS.forEach(closeDlg)"):
+        assert fn in body, f"收口调用链缺 {fn}"
+    # 阅读面板：DOM 在位且未关才经 VAPI 调 close（reader 未注入 $() 为 null 即跳过）
+    assert "if(rp&&!rp.hidden&&vr&&vr.close)vr.close();" in body
+    assert "close:rdClose" in _view_js("reader")
+    # 弹窗登记表：壳级（含 askConfirm #modal 与 ⌘K 残留判例域）+ 视图内弹窗/抽屉
+    for dlg in ("'modal'", "'clip-form'", "'viewer'", "'kbd-modal'",
+                "'src-form'", "'src-aicfg'", "'sc-modal'", "'cv-pm'",
+                "'coll-form'", "'cm-ch-modal'", "'im'", "'dv-sw'", "'dv-ex'",
+                "'src-drawer'", "'mat-drawer'", "'syn-panel'", "'gen-panel'"):
+        assert dlg in core, f"浮层登记表缺 {dlg}"
+
+
+def test_r2_p1_4_first_land_empty_library() -> None:
+    """P1-4 空库首落地：首载无 hash 走 bootLand——文章与素材都空落地 #sources
+    （流程起点），任一非空/读取失败保守落 #publish；articles 回填 state 缓存。"""
+    core = _core_js()
+    # init 分支：无 hash 延后一拍判路，有 hash 直路由（老用户零变化）
+    assert "if(!location.hash)bootLand().then(renderRoute);" in core
+    assert "else renderRoute();" in core
+    body = core[core.index("async function bootLand(){"):core.index("function init(){")]
+    # 双空 → #sources；文章非空 → #publish；素材判空用 /api/materials 探针（matQS）
+    assert "if(state.articles.length)return history.replaceState(null,'','#publish');" in body
+    assert "getJSON(matQS(1))" in body
+    assert "'#sources'" in body and "'#publish'" in body
+    # 失败保守落 #publish（catch 分支——不为网络抖动改默认视图）
+    assert "catch(err){return history.replaceState(null,'','#publish');}" in body
+    # articles 缓存回填（loadArticles 同口径，进发布中心零重复请求）
+    assert "state.articlesLoaded=true" in body
+
+
+def test_r2_guide_banner_render_condition() -> None:
+    """三步走横幅：文章数为 0 才显示——renderSources 按 state.articlesLoaded+
+    articles.length 切 #src-guide；enter 强刷文章计数（缓存旧值会让写出第一篇稿
+    后横幅赖着不灭）；节点可点跳 #sources/#material/#compose（复用 pipeline-bar/
+    pl-chain 既有样式，零新增 CSS）。"""
+    s = _view_section("sources")
+    assert 'id="src-guide"' in s and "三步走" in s
+    # 复用既有 pl-chain 样式族 + 三节点深链
+    assert 'class="pipeline-bar"' in s and 'class="pl-chain"' in s
+    for href in ('href="#sources"', 'href="#material"', 'href="#compose"'):
+        assert href in s, href
+    assert "接源" in s and "攒素材" in s and "写成稿" in s
+    # 渲染条件：未读到位不亮（articlesLoaded 留 false 的失败路径不误导）+ 文章数 0
+    vs = _view_js("sources")
+    assert "if(gd)gd.hidden=!(state.articlesLoaded&&!(state.articles||[]).length);" in vs
+    # enter 强刷：loadArticles(true) 进 Promise.all（force 跳缓存）
+    assert "await Promise.all([refreshSrcData(),loadMaterials(),refreshJobs(),loadArticles(true)]);" in vs
+
+
+def test_r2_p1_2_search_wait_feedback() -> None:
+    """P1-2 搜索等待反馈：骨架屏带「已等待 Ns」计时文案——5s 间隔轮询、srcDoSearch
+    起跑重置计时起点（防抖不计入）、srcSearchRender 双分支收口（loading 起表/
+    结果态停表/清空停表——所有状态变化都过本渲染器，零漏停）。"""
+    vs = _view_js("sources")
+    for token in ("var srcWaitTimer=null,srcWaitT0=0;",
+                  "function srcWaitStop(){if(srcWaitTimer){clearInterval(srcWaitTimer);srcWaitTimer=null;}}",
+                  "setInterval(srcWaitTick,5000)",
+                  "已等待 '"):
+        assert token in vs, token
+    # 计时节点在骨架屏里（role=status 区域内、带 id 可被 tick 定点更新）
+    assert "id=\"src-wait\"" in vs and "正在搜索" in vs
+    # 停表收口三锚：清空停表先于起表；结果态收尾 srcWaitStop；起跑重置计时起点
+    body = _src_of("function srcSearchRender(){", "async function srcDoSearch(){")
+    assert body.index("if(!q){srcWaitStop();") < body.index("if(loading||!R){srcWaitStart();")
+    do = _src_of("async function srcDoSearch(){", "async function srcOpenReaderWeb(url){")
+    assert do.index("srcWaitT0=Date.now();") < do.index("state.srcResults=R;state.srcSearching=false;srcSearchRender();")
+    assert "srcWaitStop();\n" in body  # 结果态分支起行即停表（骨架→结果切换不留计时）
+
+
+def test_r2_p1_3_engine_line_failure_linkage() -> None:
+    """P1-3 引擎失败联动：上次搜索失败优先显示在 engine-line（不让「引擎在线」
+    绿灯掩盖 job 失败）；搜索结束联动重绘、清空回落常态灯；「启动方法」按钮
+    补接线（原渲染无消费）。"""
+    vs = _view_js("sources")
+    body = _src_of("function renderSrcEngine(){", "async function srcCustomToggle(id,en){")
+    # 失败分支优先（先于引擎在线探测）；engineOff 与 booksFail 两源
+    assert "var R=state.srcResults;" in body
+    assert "if(R&&(R.engineOff||R.booksFail)){" in body
+    assert body.index("if(R&&(R.engineOff||R.booksFail)){") < body.index("getJSON('/api/booksource/engine')")
+    assert "上次书籍搜索失败：" in body and "bookengine 未启动" in body
+    # 搜索结束联动（srcDoSearch 收尾双渲染）+ 清空回落（!q 分支重绘引擎灯）
+    assert "state.srcResults=R;state.srcSearching=false;srcSearchRender();\nrenderSrcEngine();" in vs
+    assert "if(!q){srcWaitStop();box.hidden=true;$('src-overview').hidden=false;$('src-q-clear').hidden=true;$('src-q-kbd').textContent='/';renderSrcEngine();return;}" in vs
+    # 启动方法按钮接线 + 失败态重试入口（engine-line 自有委托）
+    assert "$('src-engine-line').addEventListener('click',function(e){" in vs
+    assert "var h=e.target.closest('[data-srcenginehelp]');" in vs
+    assert "var rt=e.target.closest('[data-srcretry]');if(rt)srcDoSearch();" in vs
+
+
+def test_r2_p1_5_badge_titles_and_cleanup() -> None:
+    """P1-5 badge 口径 + R2 清理收尾：三个 badge 位带 title 口径说明（素材=未读/
+    发布=待审/源=异常源）；静态 #src-empty 退役后 JS 引用清零；README 视图数
+    对齐 12（含 reader）。"""
+    src = _source()
+    assert 'id="nav-badge-material"' in src and "未读" in src.split('id="nav-badge-material"')[1].split("</a>")[0]
+    assert 'id="nav-badge-publish"' in src and "待审" in src.split('id="nav-badge-publish"')[1].split("</a>")[0]
+    assert 'id="nav-badge-sources"' in src and "异常源" in src.split('id="nav-badge-sources"')[1].split("</a>")[0]
+    # 清理：源视图 JS 不再引用静态空态节点
+    vs = _view_js("sources")
+    assert "$('src-empty')" not in vs and "src-empty-add" not in vs
+    # README 视图口径：12 个前端视图（reader 落册）
+    readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
+    assert "12 个前端视图" in readme and "11 个前端视图" not in readme
+    assert "阅读面板" in readme
+
+
+def test_r3_join_creation_button_rendered() -> None:
+    """R3-1 素材→创作直通（批次闭环补链）：素材行模板与详情抽屉动作区各有一个
+    「加入创作」按钮（data-mcm 委托），会话选择复用既有 coll-form 弹壳族
+    （#mat-cm-pick），无会话引导去 #compose。"""
+    core = _mat_part("core")
+    # 两处渲染锚：行模板（matRow）+ 抽屉动作排（paintMatDrawer 在 drawer 段）
+    assert core.count('data-mcm="') >= 1
+    assert _mat_part("drawer").count('data-mcm="') >= 1
+    # 委托挂在 matActsClick（行/抽屉/右键菜单同源），经 matPart('drawer') 懒载 helper
+    assert "[data-mcm]" in core
+    assert "matPart('drawer').then(function(){matToCompose(" in core
+    drawer = _mat_part("drawer")
+    assert "async function matToCompose(mid,e){" in drawer
+    assert "s2.status==='composing'" in drawer
+    assert "postJSON('/api/compose/add',{slug:slug,material_id:mid,confirm:true})" in drawer
+    assert "新建会话后，在素材池「我的素材」里找到它" in drawer
+    # 会话选择弹窗复用既有 modal-overlay 壳（零新造 UI 框架）
+    mat = _view_section("material")
+    assert 'id="mat-cm-pick"' in mat and 'id="mcp-sel"' in mat
+    assert "选择会话" in mat
+    # 浮层登记：ESC 与视图切换收口都覆盖新弹窗
+    assert "'mat-cm-pick'" in _core_js()
+
+
+def test_r3_fail_badge_links_to_checks_tab() -> None:
+    """R3-2 FAIL 徽章直链检查 Tab（2026-11-25）：checkSummary 的 FAIL 分支带
+    href="#article?path=<path>&tab=checks"，卡片整体是 <a.article-card>（e2e 选择器
+    兼容），故徽章用 span role=link 避开嵌套 <a> 折叠 DOM，点击/键盘委托跳深链。"""
+    js = _view_js("publish")
+    assert "function checkSummary(checks,path){" in js
+    assert 'data-checks="' in js and "&tab=checks" in js
+    assert "role=\"link\" tabindex=\"0\"" in js
+    # 两处消费点都传 path（卡片 + 列表行）
+    assert js.count("checkSummary(item.checks,item.path)") >= 2
+    # 委托：点击 preventDefault + stopPropagation（防卡片抢航）、键盘 Enter/Space
+    assert "var f=e.target.closest('[data-checks]');" in js
+    assert "f.getAttribute('href');if(h)location.hash=h.slice(1);" in js
+    assert "e.key!=='Enter'&&e.key!==' '" in js
+    # 视觉 affordance：cursor + 焦点环（core.css 含 qcheck 组件）
+    assert ".qcheck[data-checks]{cursor:pointer" in _css()
+
+
+def test_r3_keep_all_batch_decision() -> None:
+    """R3-3 批量裁决：renderCmBlocks 生成 data-cm-keepall 按钮（对当前未裁决块
+    计数），cmKeepAll 逐块 POST /api/compose/decide（单块接口，同 cmDecide），
+    按钮内进度反馈、完结刷新块列表。"""
+    js = _view_js("compose")
+    # 按钮渲染在块区、只对未裁决且非本地块计数
+    assert "data-cm-keepall" in js and "全部保留（'+pending.length+'）" in js
+    assert "!b.loc&&!dm[b.id]" in js
+    # 批量函数：复用单块 decide 接口（逐块），带 slug/round/block/action=keep
+    assert "async function cmKeepAll(btn){" in js
+    assert "postJSON('/api/compose/decide',{slug:state.cslug,round:state.cround,block:ids[i],action:'keep',confirm:true})" in js
+    assert "'保留中 '+(i+1)+'/'+ids.length" in js
+    assert "await loadComposeDetail(state.cslug,true);renderCompose();" in js
+    # 点击委托（按钮启用态由 pending 数决定）
+    assert "e.target.closest('[data-cm-keepall]')" in js
+    assert "if(el&&!el.disabled){cmKeepAll(el);return;}" in js
+
+
+def test_r3_settings_ai_card_cli_hint() -> None:
+    """R3-4 设置 AI 卡指引：卡头加一行 muted 提示，未配置时先跑 CLI。"""
+    s = _view_section("settings")
+    assert "未配置时先跑 CLI：musespiral ai config --profile" in s
+    hint = s[s.index("AI 档案与路由"):s.index("id=\"ai-profiles-body\"")]
+    assert 'class="action-hint muted"' in hint
