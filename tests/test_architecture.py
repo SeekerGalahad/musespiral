@@ -385,6 +385,8 @@ CONTRACT_GET_EXACT = {
     "/api/booksource/engine",
     # §3.10 新增（R3 书源接驳+R3.5 提炼 2026-11-18：三读面——详情/目录/章节原文）
     "/api/book/info", "/api/book/toc", "/api/book/original",
+    # 2026-11-24 源中枢重设计批：阅读面板「未入库先读章」（零落盘代理）
+    "/api/book/chapter",
     # §3.16 新增（G-T5 TTS 朗读 2026-11-19，正典=《musespiral-调研吸收功能设计-
     # 2026-11-18》§六）：朗读产物 MP3 字节流（前端内嵌 <audio src> 直指；
     # 仅 .mp3 + 魔数复核）。GET 33→34。
@@ -429,6 +431,8 @@ CONTRACT_POST_EXACT = {
     "/api/action/annotate_rewrite", "/api/action/fetch", "/api/action/discover_draft",
     "/api/discover/star", "/api/action/sync_stats", "/api/settings/kb", "/api/settings/ai",
     "/api/materials/triage", "/api/materials/delete", "/api/sources/verify",
+    # 2026-11-24 源中枢重设计批：登记前「测试连接」（只探测不注册、零落盘）
+    "/api/sources/probe",
     "/api/sources/enabled", "/api/sources", "/api/action/ingest", "/api/action/refine",
     "/api/compose/new", "/api/compose/add", "/api/compose/generate", "/api/compose/decide",
     "/api/compose/adopt",

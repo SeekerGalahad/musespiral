@@ -437,7 +437,8 @@ var VSTANDALONE={compose:['__mdpubOutline','__mdpubRolling','__mdpubDual','__mdp
 function __onViewHtml(view){
 mountChrome();
 if(view==='article')bindEditorRefs();
-if(view==='sources'){on2('src-clip-btn',function(){clipOpen('clip');});on2('src-crawl-btn',function(){clipOpen('crawl');});}
+// W2 重设计（2026-11-24）：src-clip-btn/src-crawl-btn 退役——剪藏/爬取入口
+// 并入统一搜索流（粘贴网址 → reader 视图网页阅读 → adopt/crawl），无骨架按钮可绑。
 if(view==='material')on2('mat-reg-btn',function(){clipOpen('video');});
 // FEAT-5 骨架屏（首访窗口）：HTML 已注入、enter 的数据在途——列表区先画骨架，
 // 免「空白/空态误闪」（renderMaterials 首轮 state.mats=[] 时 mat-empty 会闪「暂无素材」）。

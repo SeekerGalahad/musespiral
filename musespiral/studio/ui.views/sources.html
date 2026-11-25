@@ -3,53 +3,85 @@
 <div class="view-head">
 <div>
 <h1 class="view-title">源中枢</h1>
-<p class="view-sub" id="sources-sub">加载中…</p>
+<p class="view-sub">源是内容的进水口：这里接上的每个源，都会把内容送进素材库。</p>
 </div>
 <div class="action-row">
-<button class="btn" id="src-add-btn"><span data-icon="plus"></span>注册源</button>
-<button class="btn" id="src-clip-btn" title="URL→预览→人工确认入库（零落盘预览）">剪藏 URL</button>
-<button class="btn" id="src-crawl-btn" title="单页→待决区（无自动抓取，确认闸绝对）">手动爬取</button>
-<button class="btn" id="src-verify-all-btn" title="逐源手动探测健康（无自动轮询）">验证全部</button>
+<button class="btn btn-ghost" id="src-verify-all-btn" title="逐源手动探测健康（无自动轮询）">验证全部</button>
+<button class="btn" id="src-add-btn"><span data-icon="plus"></span>添加源</button>
 <button class="btn btn-primary" id="src-ingest-all-btn" title="刷新全部源（ingest 任务，进度见任务中心）"><span data-icon="refresh"></span>刷新全部</button>
 </div>
 </div>
-<div class="eco-tiles" id="eco-tiles"></div>
-<div class="pub-toolbar">
-<div class="chips" id="src-filters" aria-label="类型筛选">
-<button class="chip is-active" data-srctype="">全部类型</button>
-<button class="chip" data-srctype="radar_hub">雷达</button>
-<button class="chip" data-srctype="kb">知识库</button>
-<button class="chip" data-srctype="dir">目录</button>
-<button class="chip" data-srctype="rss">RSS</button>
+<div class="chips src-stats" id="src-stats" aria-label="概览"></div>
+
+<section class="src-pipeline" id="src-pipeline" aria-label="在内容流水线中的位置">
+<ol class="pl-chain">
+<li><span class="pl-node is-here"><span data-icon="download"></span>源中枢<span class="pl-role">输入</span></span></li>
+<li class="pl-sep" aria-hidden="true"><span data-icon="arrow-right"></span></li>
+<li><a class="pl-node" href="#material">素材库<span class="pl-role">汇集</span></a></li>
+<li class="pl-sep" aria-hidden="true"><span data-icon="arrow-right"></span></li>
+<li><a class="pl-node" href="#compose">创作工坊<span class="pl-role">处理</span></a></li>
+<li class="pl-sep" aria-hidden="true"><span data-icon="arrow-right"></span></li>
+<li><a class="pl-node" href="#publish">发布中心<span class="pl-role">输出</span></a></li>
+</ol>
+<p class="pl-note">和「插件」页是同一套分法：<b>输入 → 处理 → 输出</b>。源就是这条线的输入端，它只做一件事：把别处的内容取回来，放进素材库。</p>
+<button class="btn btn-ghost btn-sm pl-fold" id="src-pl-fold" aria-expanded="false">精简</button>
+</section>
+
+<section class="src-search" aria-label="统一搜索">
+<div class="src-search-box">
+<span data-icon="search"></span>
+<input class="input" id="src-q" type="search" placeholder="搜书名、作者，或粘贴网址直接阅读" aria-label="搜索书籍、素材，或粘贴网址阅读网页" autocomplete="off" spellcheck="false">
+<button class="btn btn-ghost btn-icon" id="src-q-clear" aria-label="清空搜索" hidden><span data-icon="close"></span></button>
+<span class="kbd" id="src-q-kbd" aria-hidden="true">/</span>
 </div>
-<span class="action-hint">健康灯只在手动验证或刷新时回写，无自动轮询；进入本页自动拉一次全部源状态。</span>
+<p class="engine-line" id="src-engine-line" aria-live="polite"></p>
+</section>
+
+<div id="src-overview">
+<section class="src-sec" aria-labelledby="src-mine-title">
+<div class="sec-head">
+<h2 id="src-mine-title">我的源</h2>
+<span class="sec-sub" id="src-mine-sub"></span>
+<div class="chips sec-tools" id="src-filters" role="group" aria-label="按范围筛选源"></div>
 </div>
-<table class="set-table src-table" aria-label="内容源列表"><thead><tr><th>健康</th><th>源</th><th>类型</th><th>订阅</th><th>素材（未读）</th><th>上次正常</th><th>近 7 次失败</th><th>启停</th><th></th></tr></thead><tbody id="src-rows"></tbody></table>
+<div id="src-mine-body"></div>
+</section>
+<section class="src-sec" aria-labelledby="src-more-title">
+<div class="sec-head">
+<h2 id="src-more-title">还能接什么</h2>
+<span class="sec-sub">每种源只需要你告诉它一件事：去哪里取。</span>
+</div>
+<div class="con-grid" id="src-con-grid"></div>
+</section>
+</div>
+
+<section class="results" id="src-results" aria-live="polite" hidden></section>
+
 <div class="empty" id="src-empty" hidden>
 <div class="empty-icon" data-icon="settings"></div>
 <div class="empty-title">还没有内容源</div>
-<div class="empty-text">源是采集的起点：注册源（radar_hub / kb / dir / rss 四型）后点「刷新全部」，素材会汇入素材库供综合与创作引用。健康灯只在手动验证或刷新时回写。</div>
-<button class="btn btn-primary empty-action" id="src-empty-add">注册第一个源</button>
+<div class="empty-text">源是采集的起点：从下面挑一种，告诉它去哪里取内容，点「刷新」后素材会出现在素材库。</div>
+<button class="btn btn-primary empty-action" id="src-empty-add">添加第一个源</button>
 </div>
+
 <aside class="drawer" id="src-drawer" hidden aria-label="源详情">
 <div class="drawer-head"><b id="src-drawer-title">源</b><button class="btn btn-ghost btn-icon" id="src-drawer-close" type="button" aria-label="关闭"><span data-icon="close"></span></button></div>
 <div class="drawer-body" id="src-drawer-body"></div>
 </aside>
+
 <div class="modal-overlay" id="src-form" hidden>
-<div class="modal" role="dialog" aria-modal="true">
-<h3 class="modal-title">注册源（POST /api/sources）</h3>
-<div style="display:flex;flex-direction:column;gap:8px">
-<select id="sf-type" class="input"><option value="radar_hub">radar_hub</option><option value="kb">kb</option><option value="dir">dir</option><option value="rss">rss</option></select>
-<input id="sf-id" class="input" placeholder="id（kebab-case）">
-<input id="sf-base" class="input" placeholder="base：radar-hub 回环 URL（host=127.0.0.1）">
-<textarea id="sf-subs" class="set-area" rows="3" placeholder="订阅（每行一条，仅 radar_hub）"></textarea>
-<input id="sf-root" class="input" placeholder="kb 根绝对路径" hidden>
-<input id="sf-path" class="input" placeholder="目录绝对路径" hidden>
-<input id="sf-url" class="input" placeholder="url：RSS 订阅地址（http/https）" hidden>
+<div class="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="sf-title">
+<h3 class="modal-title" id="sf-title">添加源</h3>
+<p class="action-hint">先选一种源，再告诉它去哪里取内容。名字可以不改，会自动起。</p>
+<div class="sf-body">
+<div id="sf-types" class="sf-types" role="radiogroup" aria-label="源类型"></div>
+<form id="sf-fields" novalidate></form>
 </div>
-<div class="modal-actions"><button class="btn btn-secondary" id="sf-cancel">取消</button><button class="btn btn-primary" id="sf-ok">注册</button></div>
+<div id="sf-test" aria-live="polite"></div>
+<div class="modal-actions"><button class="btn" id="sf-test-btn">测试连接</button><button class="btn btn-secondary" id="sf-cancel">取消</button><button class="btn btn-primary" id="sf-ok">接上</button></div>
 </div>
 </div>
+
 <div class="modal-overlay" id="src-aicfg" hidden>
 <div class="modal" role="dialog" aria-modal="true">
 <h3 class="modal-title" id="sac-sub"></h3>

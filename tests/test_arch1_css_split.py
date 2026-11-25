@@ -260,8 +260,25 @@ def test_css_split_rule_multiset_equivalent_to_head() -> None:
                    b".bs-st.ok{color:var(--jade)}",
                    b".bs-st.failed{color:var(--crimson)}",
                    b".bs-st.pending{color:var(--ink-3)}"}
-    assert set(missing) <= known_missing, f"有非预期规则丢失: {list(set(missing) - known_missing)[:3]}"
-    assert set(extra) <= known_extra, f"有非预期规则新增: {list(set(extra) - known_extra)[:3]}"
+    # 2026-11-24 W2 源中枢重设计：表格→卡片，旧 eco-tile/src-table 规则退役、
+    # 新 .src-*/.st-*/.pl-*/.con-*/.rg-*/.sf-* 规则进入 core+sources；这是
+    # 一次**有意的大替换**（原型=源中枢-输入端重设计.html），故本轮按域精确
+    # 豁免，下一轮基线刷新后回到逐条列举的严格模式。
+    W2_MISSING_PREFIXES = (b".eco-", b".eco-tile", b".eco-n", b".eco-l", b".src-table")
+    W2_EXTRA_PREFIXES = (b".src-", b".st-", b".st-chip", b".pl-", b"a.pl-", b".con-", b".rg-", b".sf-", b".notice-card", b".pipeline-bar", b".sec-", b".results-", b".rgroup", b".modal-lg", b".spin", b".hx", b".io-", b".slow", b".cnt", b".engine-line", b".n-ic", b".n-body", b".n-act", b".src-search", b".sf-body", b".sf-types", b".sf-type", b".sf-field", b".sf-test")
+    def _w2_owned(rule, prefixes):
+        if isinstance(rule, bytes):
+            return rule.startswith(prefixes)
+        if isinstance(rule, tuple) and len(rule) == 2:
+            inner = rule[1]
+            return isinstance(inner, bytes) and inner.startswith(prefixes)
+        return False
+    unaccounted_missing = [r for r in set(missing) - known_missing
+                           if not _w2_owned(r, W2_MISSING_PREFIXES)]
+    unaccounted_extra = [r for r in set(extra) - known_extra
+                        if not _w2_owned(r, W2_EXTRA_PREFIXES)]
+    assert not unaccounted_missing, f"W2 域外非预期规则丢失: {unaccounted_missing[:3]}"
+    assert not unaccounted_extra, f"W2 域外非预期规则新增: {unaccounted_extra[:3]}"
 
 
 def test_view_css_sources_and_products_complete() -> None:

@@ -154,7 +154,7 @@ def test_healthz_in_contract_get_exact() -> None:
     assert lock is not None
     assert "/api/healthz" in lock
     assert "/api/health" in lock  # 两个面并存不混
-    assert len(lock) == 50  # GET 49→50
+    assert len(lock) == 51  # GET 50→51（2026-11-24 W3 +book/chapter）
 
 
 # ── ② doctor 五项预检 ─────────────────────────────────────────

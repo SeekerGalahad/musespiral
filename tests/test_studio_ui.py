@@ -185,6 +185,8 @@ CONTRACT_PATHS = {
     "/api/booksource/subs/add",
     "/api/booksource/subs/del",
     "/api/booksource/refresh",
+    "/api/sources/probe",  # W2 源中枢重设计批（2026-11-24）：添加源「测试连接」
+    "/api/book/chapter",  # W3 阅读面板（2026-11-24）：未入库先读章（零落盘代理）
     "/api/action/bookengine_demo",
     # W8（2026-11-24）：批量审核/打包——前端从零消费变已消费
     "/api/action/batch_check",
@@ -288,8 +290,9 @@ def _js() -> str:
     assert CORE_JS.exists(), f"core.js 产物不存在: {CORE_JS}"
     files = [CORE_JS] + sorted(
         p for p in VIEWS_JS.glob("*.js") if not p.name.endswith(".html.js"))
-    # UIX-3（2026-11-22）：material 三拆 → 13 行为脚本（10 单文件视图 + material 三子段）
-    assert len(files) == 14, f"视图产物应为 13 个，实为 {len(files) - 1}: {files}"
+    # UIX-3（2026-11-22）：material 三拆；W3（2026-11-24）：+reader 独立视图
+    # → 15 行为脚本（10 单文件视图 + material 三子段 + reader）
+    assert len(files) == 15, f"视图产物应为 14 个，实为 {len(files) - 1}: {files}"
     return "\n".join(p.read_text(encoding="utf-8") for p in files)
 
 
@@ -442,8 +445,13 @@ def test_ui_has_no_external_resource_references() -> None:
     抽出的引用 + 下方 link 标签计数两条共同锁死——只锁引用清单会漏掉无
     href 的 <link rel=preload> 形态）。
     """
+    # 2026-11-24 源中枢重设计批：雷达枢纽默认地址（127.0.0.1:8787）是功能性
+    # 本机回环默认值，非外域资源——先剥离回环/localhost 字面量再扫 https?://。
+    # 门的本意是拦 CDN/外域，不是拦本机服务地址（雷达 base 回环钉死与它同源）。
+    _LOCAL_HOST_LIT = re.compile(r"https?://(?:127\.0\.0\.1|localhost)(?=[:/\"'])", re.IGNORECASE)
     for blob in (_source(), _js(), _css()):
-        assert re.search(r"https?://", blob, re.IGNORECASE) is None
+        stripped = _LOCAL_HOST_LIT.sub("", blob)
+        assert re.search(r"https?://", stripped, re.IGNORECASE) is None
         assert re.search(r"(?:src|href)\s*=\s*[\"']//", blob, re.IGNORECASE) is None
         assert "@import" not in blob
         # F72 批（2026-11-17）：FileReader.readAsDataURL( 含子串 "URL(" 被
@@ -1391,7 +1399,9 @@ def test_custom_confirm_modal_and_toast() -> None:
     # 四个动作（adapt/pack/publish/batch_adapt）+ F46 KB 设置保存 + F48 创作台
     # 「采纳入稿」+ P20 M3 删除素材两步 confirm（连坐声明/终确认各一）+ P2 源
     # 两步删除（终步=禁用下线，契约无删除端点）+ F-C 素材撤池（2026-11-18）都先走确认弹层
-    assert src.count("askConfirm({") == 13  # W8 +批量打包（11-24）+W17 订阅删除确认
+    assert src.count("askConfirm({") == 12  # W3 阅读面板「存入素材库」+1（W2 源停用改一步后 11）
+    # 确认 + 无删除端点（契约仅启停）→ 老版「停用两步 + 源删除两步」共减 2 处；
+    # 其余 11 处（四个动作 + KB 设置 + 采纳入稿 + 素材删除 + 源两步删除等）不动。
     for action in ("handleAdapt", "handlePack", "handlePublish", "handleBatch"):
         assert action in src
 
@@ -1660,13 +1670,13 @@ def test_ime_guards_on_all_editor_and_compose_keydown_handlers() -> None:
     src = _js()
     guard = "if(e.isComposing||e.keyCode===229)return;"
     head = "addEventListener('keydown',function(e){\n"
-    assert src.count(head + guard) == 22, (
-        f"内联 keydown 处理器首行 IME 守卫应为 22 处，实为 {src.count(head + guard)}"
+    assert src.count(head + guard) == 23, (  # W3 +reader 的 Esc 收口守卫
+        f"内联 keydown 处理器首行 IME 守卫应为 23 处，实为 {src.count(head + guard)}"
     )
     # 第 23 处：askConfirm 弹层 onKey（具名函数，removeEventListener 需具名引用）
     assert "function onKey(e){ " + guard in src
-    assert src.count(guard) == 23, (
-        f"IME 守卫总数（内联 22 + onKey 1）应为 23 处，实为 {src.count(guard)}"
+    assert src.count(guard) == 24, (
+        f"IME 守卫总数（内联 23 + onKey 1）应为 24 处，实为 {src.count(guard)}"
     )
 
 
@@ -2237,7 +2247,9 @@ def test_filters_persist_in_hash() -> None:
     assert "if(mtp==='review')mtp='revisit';" in src
     assert "if(mtp==='all'||mtp==='starred'||mtp==='unread'||mtp==='hiunread'||mtp==='derived'||mtp==='revisit')state.mtab=mtp;" in src
     # 源中枢：行选中 src= 写 hash；洞察：range 30/90 写 hash
-    assert "function syncSrcHash(){history.replaceState(null,'','#sources'+(state.ssrc?'?src='+encodeURIComponent(state.ssrc):''));}" in src
+    # 2026-11-24 W2 重设计：源选中态从「表格选中行入 hash」改为「抽屉打开不入
+    # URL」（src=?src= 深链退役——卡片直点即开抽屉，无跨页恢复语义）。
+    assert "syncSrcHash" not in src
     assert "history.replaceState(null,'','#insight'+(state.irange!==30?'?range='+state.irange:''));" in src
     # 空态二分：filtered（来源/分诊/类型/搜索任一）→ 清除筛选按钮；本来就没有 → 引导
     assert "var filtered=state.msrc!==''||tab!=='all'||!!state.mtype||!!state.mspark||!!state.mquery||!!state.mtag||!!state.mcoll;" in src
@@ -2381,34 +2393,35 @@ def test_settings_sources_block() -> None:
     parsed = _structure()
     src = _shell_js_css()
     assert "view-sources" in parsed.ids
-    assert {"eco-tiles", "src-rows", "src-filters", "src-empty", "src-verify-all-btn", "src-ingest-all-btn"} <= set(parsed.ids)
+    # 2026-11-24 W2 重设计：表格→卡片（原型=源中枢-输入端重设计.html）。
+    assert {"src-stats", "src-pipeline", "src-q", "src-mine-body", "src-con-grid",
+            "src-verify-all-btn", "src-ingest-all-btn"} <= set(parsed.ids)
     assert "源连接" in src  # 设置页迁出说明（指向源中枢）
-    # 数据面：GET /api/sources 权威行（与 settings.sources 同源同形，契约 §2.1-1）
+    # 数据面：GET /api/sources 权威行（与 settings.sources 同源同形，契约 §2.1-1）——零变更
     assert "async function loadSources(){" in src
     assert "getJSON('/api/sources')" in src
-    # 生态带：启用源/今日新增/未读/失败源四微 tile（mats+health+jobs 前端聚合，零新后端）
     assert "function renderSources(){" in src
-    assert "['启用源',en+'/'+list.length,'']" in src
-    assert "['失败源',bad,bad?'amber':'']" in src
-    # 健康灯三态（§四-13）：ok 竹绿实心 / down 绛 / 未探测空心灰 + title 载 last_ok
-    assert "'<span class=\"health-dot '+st+'\"" in src
-    assert ".health-dot.ok{background:var(--jade)" in src
-    assert ".health-dot.down{background:var(--crimson)" in src
-    assert ".health-dot.unknown{background:transparent;border:1.5px solid var(--ink-3)" in src
+    # 概览 chips（在用/需要处理/素材库/未读——原型 stat-chips 的产品化）
+    assert "function srcStatsChips(list){" in src
+    # 健康三态语义不变，载体从 .health-dot 表格列改为卡片 .st-dot
+    assert ".st-dot.ok{background:var(--jade)}" in _css() or ".st-dot.ok{background:var(--jade)}" in _view_css("sources")
     # 失败计数：任务中心 ingest job 历史按 source_id 聚合（近 7 次窗口，零新后端）
-    assert "function srcFailCounts(){" in src
-    assert "if(seen[sid]<=7&&j.status==='failed')c[sid]=(c[sid]||0)+1;" in src
-    assert "title=\"近 7 次拉取失败 '+fails[s.id]+' 次\"" in src
+    # W2：失败计数原 srcFailCounts（任务历史聚合）随表格退役；卡片域以
+    # srcCountsDecor（素材/未读计数）+ health.last_error 呈现。归因锚随之迁移。
+    # （旧 srcFailCounts 近 7 次失败聚合断言随表格退役——卡片域以
+    # 健康灯 + last_error 呈现，任务历史仍可经任务中心按源查。）
+    # （旧近 7 次失败列随表格退役——同上 srcFailCounts 迁移注记。）
     # 每源行：订阅数 / 素材（未读徽章）/ 上次正常 / 启停拨杆 / 验证+刷新
-    assert "((s.subscriptions||[]).length||'—')" in src
-    assert "data-srcen=\"'+esc(s.id)+'\"'+(s.enabled?' checked':'')" in src
-    assert "data-srcverify=\"'+esc(s.id)+'\">验证</button> <button class=\"btn\" data-srcrefresh=\"'+esc(s.id)+'\">刷新</button>" in src
+    # （订阅计数列随表格退役——radar 卡片以「N 条订阅筛选」呈现于 srcGives。）
+    # （表格行内启停 checkbox 随表格退役——卡片为「启用/停用」按钮走两步确认。）
+    # （行内按钮串随表格退役——卡片的验证/刷新/启停分别经 srcCustomVerify、
+    # data-srcrefresh→matIngest、srcCustomToggle 走，绑定在 #src-mine-body。）
     # 写契约：手动验证/启停（confirm:true；无自动轮询——诚实边界：只在手动验证或刷新回写）
     assert "postJSON('/api/sources/verify',{id:id,confirm:true})" in src
     assert "postJSON('/api/sources/enabled',{id:id,enabled:en,confirm:true})" in src
-    assert "$('src-rows').addEventListener('click'" in src
-    assert "$('src-rows').addEventListener('change'" in src
-    assert "async function srcVerifyAll(){" in src  # 页头「验证全部」逐源探测
+    assert "var body=$('src-mine-body');" in src and "body.addEventListener('click'" in src
+    # （change 监听随 checkbox 退役——启停走按钮两步确认。）
+    assert "async function srcCustomVerifyAll(){" in src  # W2 重命名：页头「验证全部」逐源探测
 
 def test_ingest_job_and_refresh_entries() -> None:
     """M3 任务中心 ingest 行：JN 标签+jobTarget 源名；刷新全部（素材页头）/单步刷新此源（源行）。"""
@@ -2425,7 +2438,7 @@ def test_ingest_job_and_refresh_entries() -> None:
     assert "if(r){matIngest(r.getAttribute('data-srcrefresh'));return;}" in src  # 源行「刷新」=单步刷新此源
     # 完成后素材面+源面重拉（新采集立即可见；源中枢在台前时同步刷新生态带）
     assert "await Promise.all([loadMaterials(),refreshSrcData()]);" in src
-    assert "if(!$('view-sources').hidden)renderSources();" in src
+    assert "if(!$('view-sources').hidden)viewRepaint('sources');" in src  # W2 重设计：repaint 统一入口
 
 
 def test_material_ai_summary_hook() -> None:
@@ -2569,7 +2582,7 @@ def test_p1_view_file_names_canonical() -> None:
     # R4 #books 批（2026-11-18）+1 视图文件；PL-3 批 +plugins +plugin-run；
     # ARCH-1 批（2026-11-21）+article（原 tmpl 硬编码骨架外移——十一视图源）
     assert names == ["article", "books", "compose", "design", "insight", "material",
-                     "plugin-run", "plugins", "publish", "settings", "sources"], names
+                     "plugin-run", "plugins", "publish", "reader", "settings", "sources"], names  # W3 +reader
 
 
 def test_p1_nav_badges_wired() -> None:
@@ -2585,7 +2598,7 @@ def test_p1_nav_badges_wired() -> None:
     assert "function updateNavBadge(id,count){" in src
     assert "el.hidden=!(count>0);" in src  # >0 显数 / 0 隐藏
     for call in (
-        "updateNavBadge('nav-badge-sources',bad)",
+        "updateNavBadge('nav-badge-sources',",  # W2：参数改内联过滤表达式
         "updateNavBadge('nav-badge-material',ur)",
         "updateNavBadge('nav-badge-compose',act)",
         "updateNavBadge('nav-badge-publish',n.pending)",
@@ -2625,22 +2638,34 @@ def test_p3_block_structure_ops() -> None:
 
 
 def test_p2_source_register_form_and_drawer() -> None:
-    """P2 源注册表单（类型三选→参数域联动→POST /api/sources）+ 源详情抽屉（行点击展开）。"""
+    """P2 源注册表单 + 详情抽屉（W2 重设计 2026-11-24 按原型重写）。
+
+    旧结构（sf-type 下拉 + 手填 kebab id + 分散字段 hidden 切换）改为
+    「左选类型卡 + 右填一件事 + 测试连接 + 接上」；id 自动生成（W1 A5），
+    测试连接走 W1 A3 的 /api/sources/probe。抽屉保持 aside.drawer 判例。
+    契约面零变更：注册 POST /api/sources、启停 POST /api/sources/enabled。
+    """
     parsed = _structure()
-    assert {"src-add-btn", "src-form", "sf-type", "sf-id", "sf-base", "sf-subs", "sf-root", "sf-path", "sf-ok"} <= set(parsed.ids)
-    assert {"src-drawer", "src-drawer-title", "src-drawer-body", "src-drawer-close"} <= set(parsed.ids)
     src = _js()
-    # 参数域联动：radar_hub→base+订阅 / kb→root / dir→path
-    assert "$('sf-base').hidden=$('sf-subs').hidden=t!=='radar_hub';" in src
-    # B4a 扩：rss 第四型（url 域联动 + K-map 注册）
-    assert "var K={radar_hub:['base','sf-base'],kb:['root','sf-root'],dir:['path','sf-path'],rss:['url','sf-url']}[t];" in src
-    assert "$('sf-url').hidden=t!=='rss';" in src
-    # 写契约：POST /api/sources {id,type,config,subscriptions,confirm:true}
-    assert "postJSON('/api/sources',{id:id,type:t,config:cfg,subscriptions:subs,confirm:true})" in src
-    # 抽屉：订阅列表 + 启停/验证（同源委托属性）+ 两步删除降级（契约无删除端点→禁用下线）
-    assert "data-srcverify=\"'+esc(s.id)+'\">验证</button>" in src
-    assert "postJSON('/api/sources/enabled',{id:id,enabled:false,confirm:true});await refreshSrcData();refreshSourcesView();paintSrcDrawer(id);" in src
-    assert "renderSources();paintSrcDrawer(state.ssrc);" in src
+    assert {"src-add-btn", "src-form", "sf-types", "sf-fields", "sf-test", "sf-ok", "sf-cancel"} <= set(parsed.ids)
+    assert {"src-drawer", "src-drawer-title", "src-drawer-body", "src-drawer-close"} <= set(parsed.ids)
+    # 类型选择（radiogroup 语义）与字段联动
+    assert "SRC_ADD_TYPES=['rss','radar_hub','kb','dir'];" in src
+    assert "function renderSrcAdd(){" in src
+    # 手填 id 退役：label 只起名（id 自动）
+    assert "起个名字" in src and "sf-id" not in _source()
+    # 测试连接（W1 A3 端点）+ 校验（blur 逐字段）
+    assert "async function srcAddTest(){" in src
+    assert "postJSON('/api/sources/probe',{type:state.srcAddType,config:srcAddConfig(),confirm:true})" in src
+    assert "function srcAddValidate(inp){" in src
+    # 注册（不传 id → 后端自动生成）
+    assert "postJSON('/api/sources',{type:t,label:label,config:cfg,subscriptions:subs,enabled:true,confirm:true})" in src
+    # 抽屉：四段结构（读什么/得什么/边界/AI 加工）+ 保存
+    assert "function srcDrawerOpen(id){" in src
+    assert "async function srcDrawerSave(id){" in src
+    # 两步停用确认语义保持（askConfirm 走源级 confirm）
+    assert "postJSON('/api/sources/enabled',{id:id,enabled:en,confirm:true})" in src
+
 
 
 def test_p4_context_menus_cmdk_prefix_gseq_plan() -> None:
@@ -3830,8 +3855,8 @@ def test_m3_view_products_exist() -> None:
     UIX-3 起 material 为三子段产物 material-core/drawer/media，单文件退役）。"""
     expected = {"sources", "books", "compose", "design",
                 "publish", "insight", "article", "settings",
-                "plugins", "plugin-run"} | {"material-core", "material-drawer",
-                                            "material-media"}
+                "plugins", "plugin-run", "reader"} | {"material-core", "material-drawer",
+                                                      "material-media"}
     # ARCH-1：views/ 另有 <view>.html.js 骨架注入器（stem 带 .html 后缀）——排除
     actual = {p.stem for p in VIEWS_JS.glob("*.js")
               if not p.name.endswith(".html.js")}
@@ -4049,9 +4074,12 @@ def test_feat5_empty_state_guidance_with_actions() -> None:
     每个空态至少一个现在就能点的按钮，绑定与头部既有动作同路。"""
     src = _source()
     # 源中枢：不再是「settings.json / POST /api/sources」开发者措辞
-    assert "还没有内容源" in src and "注册第一个源" in src
+    # （W2 重设计后空态由 JS 渲染进 #src-mine-body，静态壳只留骨架；断言域转 JS）
+    vs = _view_js("sources")
+    assert "还没有接上任何源" in vs and "添加源" in vs
     assert "POST /api/sources 注册" not in src
     assert 'id="src-empty-add"' in src
+    assert 'id="src-empty"' in src
     # 插件：真空态双 CTA（新建/重扫）
     assert 'id="pg-empty-new"' in src and 'id="pg-empty-rescan"' in src
     # 视觉编辑：空态可直达「载入」
@@ -4059,9 +4087,9 @@ def test_feat5_empty_state_guidance_with_actions() -> None:
     # 书籍：搜索占位引导卡配可行动按钮（订阅管理/导入书源）——R4 批文案契约不动
     assert 'id="bk-guide-subs"' in src and 'id="bk-guide-import"' in src
     assert "搜索结果渲染 · R4 批" in src  # 契约锁仍成立（壳静态文案；JS 赋值字面量另锁于 books.js）
-    # 绑定与头部动作同路（sources→sfOpen / plugins→hash 与 refresh-btn / design→dvLoad / books→subs tab 与 imOpen）
+    # 绑定与头部动作同路（sources→srcAddOpen / plugins→hash 与 refresh-btn / design→dvLoad / books→subs tab 与 imOpen）
     vs = _view_js("sources")
-    assert "$('src-empty-add').addEventListener('click',sfOpen);" in vs
+    assert "srcAddOpen" in vs and "$('src-empty-add').addEventListener('click',function(){srcAddOpen('rss');" in vs
     vp = _view_js("plugins")
     assert "$('pg-empty-new').addEventListener('click',function(){location.hash='#plugins?new=1';});" in vp
     assert "$('pg-empty-rescan').addEventListener('click',function(){$('pg-refresh-btn').click();});" in vp

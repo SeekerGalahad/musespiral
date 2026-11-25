@@ -212,8 +212,8 @@ def test_sources_get_shape(server, studio_root, env) -> None:
 
 
 def test_sources_register_validation(server, studio_root, env) -> None:
-    # 必填面：id/type/config
-    assert _request(server, "POST", "/api/sources", {"type": "dir", "config": {"path": "/tmp"}, "confirm": True})[0] == 400
+    # 必填面：type/config（id 缺省=自动生成——W1 A5 语义，返回 200 而非 400）
+    assert _request(server, "POST", "/api/sources", {"type": "dir", "config": {"path": "/tmp"}, "confirm": True})[0] == 200
     assert _request(server, "POST", "/api/sources", {"id": "d1", "config": {"path": "/tmp"}, "confirm": True})[0] == 400
     assert _request(server, "POST", "/api/sources", {"id": "d1", "type": "dir", "confirm": True})[0] == 400
     # 类型完备：dir 必带 path

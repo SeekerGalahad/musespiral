@@ -168,6 +168,20 @@ def _action_materials_collections(ctx: _StudioContext, data: dict[str, Any]) -> 
     raise _HttpError(400, "action 必须是 create/add/remove/rename/delete 之一")
 
 
+def _action_sources_probe(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
+    """POST /api/sources/probe {type, config}：登记前「测试连接」（零落盘）。
+
+    探测失败返回 state=down + 人话原因（不 400/不 500）——对话框要显示它。
+    """
+    stype = _require_str(data, "type")
+    config = data.get("config")
+    if config is not None and not isinstance(config, dict):
+        raise _HttpError(400, "config 必须是对象")
+    from ...services import sources_service
+
+    return sources_service.probe_source(stype, config or {})
+
+
 def _action_sources_verify(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
     """POST /api/sources/verify {id}：手动验证一条源（健康探测回写，无自动轮询）。"""
     sid = _require_str(data, "id")
@@ -317,7 +331,12 @@ def _action_sources_register(ctx: _StudioContext, data: dict[str, Any]) -> dict[
     """
     from ...services import sources_service
 
-    sid = _require_str(data, "id")
+    # 2026-11-24 A5（源中枢重设计批）：id 缺省时由 service 层自动生成
+    # （auto_source_id——前端新表单不再要求手填 kebab id）；显式传入仍走原校验。
+    sid = data.get("id") if isinstance(data.get("id"), str) and data.get("id").strip() else None
+    if sid is not None:
+        data = dict(data)
+        data["id"] = sid
     stype = data.get("type")
     if not isinstance(stype, str) or not stype.strip():
         raise _HttpError(400, "缺少必填字段 type（radar_hub/kb/dir/rss）")
@@ -337,16 +356,16 @@ def _action_sources_register(ctx: _StudioContext, data: dict[str, Any]) -> dict[
     label = data.get("label")
     subscriptions = data.get("subscriptions")
     row = {
-        "id": sid,
+        "id": sid,  # None → service 层 auto_source_id 生成（A5）
         "type": stype.strip(),
-        "label": label.strip() if isinstance(label, str) and label.strip() else sid,
+        "label": label.strip() if isinstance(label, str) and label.strip() else None,
         "enabled": data["enabled"] if isinstance(data.get("enabled"), bool) else True,
         "config": cfg,
         "subscriptions": subscriptions if isinstance(subscriptions, list) else [],
     }
     if "ai_config" in data:
         row["ai_config"] = data.get("ai_config")
-    else:
+    elif sid:  # 自动 id 是新源，无从保留旧 AI 配置
         existing = sources_service.get_source(sid)
         if existing is not None and existing.get("ai_config"):
             row["ai_config"] = existing["ai_config"]
@@ -382,6 +401,7 @@ ROUTES: dict[str, Callable[[_StudioContext, dict[str, Any]], dict[str, Any]]] = 
     "/api/materials/register": _action_materials_register,  # A 扩展 F61：视频登记（零出网幂等）
     "/api/materials/collections": _action_materials_collections,  # A 扩展 F62：手工集合五动作（GET/POST 双态）
     "/api/materials/from-chapters": _action_from_chapters,  # R3+R3.5：选章入素材库 → job book_fetch
+    "/api/sources/probe": _action_sources_probe,  # 2026-11-24：登记前测试连接（零落盘）
     "/api/sources/verify": _action_sources_verify,  # M3：源健康手动验证回写
     "/api/sources/enabled": _action_sources_enabled,  # M3：源启停
     "/api/sources": _action_sources_register,  # M4：源注册/更新（F53 两段式接入写面）

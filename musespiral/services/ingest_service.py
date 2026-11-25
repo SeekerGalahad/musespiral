@@ -129,7 +129,9 @@ def refresh_source(source_id: str, *, articles_root: str | Path | None = None) -
             return _refresh_radar(source, articles_root=articles_root)
         if stype == "rss":
             return _refresh_rss(source)
-        raise ValueError(f"源类型 {stype!r} 暂不支持刷新（支持 kb / radar_hub / rss）")
+        if stype == "dir":
+            return _refresh_dir(source)
+        raise ValueError(f"源类型 {stype!r} 暂不支持刷新（支持 kb / dir / radar_hub / rss）")
 
 
 def refresh_all(*, articles_root: str | Path | None = None) -> list[dict[str, Any]]:
@@ -199,6 +201,52 @@ def _refresh_kb(source: dict[str, Any]) -> dict[str, Any]:
             )
     # 同一文档可能被子源重叠覆盖扫到两次——add_many 批内等值去重收敛；
     # 等值重采（仅 fetched_at/triage 前进）预滤跳过不改写，真漂移仍 fail-fast
+    existing = {m["id"]: m for m in materials_service.list_materials()}
+    fresh, stale, _drifted = _split_stale(rows, existing)
+    result = materials_service.add_many(fresh)
+    return {
+        "source_id": source["id"],
+        "status": "ok",
+        "scanned": len(rows),
+        "added": result["added"],
+        "skipped": result["skipped"] + stale,
+    }
+
+
+def _refresh_dir(source: dict[str, Any]) -> dict[str, Any]:
+    """dir 刷新：扫本地目录（.md）→ type=text 素材批量落库（引用不复制）。
+
+    与 kb 的差别只在「扫描面」：kb 有子源层级（config.sources[].relpath 相对
+    根解析），dir 是单个独立目录，故 uri 用**绝对路径**——同一文件重扫 id
+    稳定（id=sha1(source_id|type|uri)），且天然不与 kb 的相对路径冲突。
+
+    config.path 必填且必须存在（可读报错，不猜路径）；单篇损坏由 scanner
+    跳过不塌（scan_dir 既有语义）。
+    """
+    from ..core.discovery import scanner  # 函数体内导入（导入期零扫描器依赖）
+
+    cfg = source.get("config") or {}
+    raw_path = cfg.get("path")
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        raise ValueError(f"dir 源 {source['id']!r} 未配置 config.path（设置面登记本地目录）")
+    root = Path(raw_path).expanduser()
+    if not root.is_dir():
+        raise ValueError(f"dir 源 {source['id']!r} 的目录不存在: {raw_path}")
+
+    fetched_at = _now_iso()
+    rows: list[dict[str, Any]] = []
+    for meta in scanner.scan_dir(root):
+        abs_path = str(Path(meta["path"]).resolve())
+        rows.append(
+            model.make_material(
+                mtype="text",
+                source_id=source["id"],
+                uri=abs_path,
+                title=str(meta.get("title") or ""),
+                payload={"local_path": abs_path},  # 引用不复制：正文不入库
+                fetched_at=fetched_at,
+            )
+        )
     existing = {m["id"]: m for m in materials_service.list_materials()}
     fresh, stale, _drifted = _split_stale(rows, existing)
     result = materials_service.add_many(fresh)

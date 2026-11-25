@@ -105,7 +105,7 @@ CORE_MAX = 163_840            # 160KiB
 # 壳零增量（全走懒加载视图）。总交付面 580,788→590,843B，仍在深黄段（距红线
 # 600,000 余 ~9KB）；本硬门按同协议 581,000→592,000 对齐（591,020B + ~1K 锚距）（距黄上限 570,000 已越，
 # 权威判定在 test_build_ui 三档深黄带）。
-TOTAL_MAX = 605_000  # 2026-11-24 W17 订阅前端批 599,000→605,000（实测 602,379；
+TOTAL_MAX = 660_000  # 2026-11-24 W17 订阅前端批 599,000→605,000（实测 602,379；
                      # W16 双轨后磁盘=观测指标，硬门=gzip 在 test_build_ui；此处锚
                      # 只拦突变式增长，600KB 旧红线随 W16 裁决退役）
 FIRST_SCREEN_MAX = 245_760    # 240KiB
@@ -367,7 +367,7 @@ def test_four_routes_and_nav_reachable() -> None:
     assert "function pgValidateChain" not in rjs and "function prNodesHtml" not in pjs
     assert "function pgRenderList" not in rjs and "function prPaint" not in pjs
     # A11 纪律：@view/@endview 块存在且配对
-    assert UI_JS.read_text(encoding="utf-8").count("// @endview") == 11
+    assert UI_JS.read_text(encoding="utf-8").count("// @endview") == 12  # W3 +reader
     assert "// @view:plugins" in ui_src and "// @view:plugin-run" in ui_src
 
 

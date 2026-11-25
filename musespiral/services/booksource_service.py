@@ -347,6 +347,17 @@ def import_apply(
             booksource_store.save_source(source)
             _upsert_index(source, imported_at=stamp)
             imported.append(url)
+    # 用户视角修复（2026-11-24）：URL 导入是「订阅一个书源包」，落库后应自动登记
+    # 订阅，否则「导入成功但订阅管理空」的困惑（订阅表与书源库是两个实体，
+    # 但用户从 URL 导入的语义本就是订阅这一 URL 以便自动更新）。
+    subscribed: str | None = None
+    text_stripped = text.strip()
+    if imported and importer.is_absolute_url(text_stripped):
+        try:
+            add_sub(text_stripped, name=f"导入自 {urlparse_hostname(text_stripped)}")
+            subscribed = text_stripped
+        except (ValueError, BookSourceFetchError):
+            subscribed = None  # 订阅登记失败不回滚已落库的书源（非致命）
     return {
         "ok": True,
         "kind": classifier.KIND_BOOKSOURCE,
@@ -355,11 +366,20 @@ def import_apply(
         "skipped": skipped,
         "stored": len(imported),
         "deduped_from": occurrences,
+        "subscribed": subscribed,
     }
 
 
 # ── 订阅 CRUD ────────────────────────────────────────────────────
 
+
+def urlparse_hostname(url: str) -> str:
+    """URL → host（订阅名展示用；失败回空串）。"""
+    try:
+        from urllib.parse import urlparse as _up
+        return _up(url).netloc or ""
+    except Exception:
+        return ""
 
 def list_subs() -> list[dict[str, Any]]:
     """订阅清单（读盘直出）。"""

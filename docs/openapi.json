@@ -2,7 +2,7 @@
  "openapi": "3.1.0",
  "info": {
   "title": "musespiral Studio local API",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "本地回环 API（127.0.0.1:8766）。全部 POST 动作需 confirm:true。本规格由 scripts/gen_openapi.py 从路由自省清单生成。"
  },
  "servers": [

@@ -60,13 +60,27 @@ def get_source(source_id: str) -> dict[str, Any] | None:
     return None
 
 
+def auto_source_id(stype: str) -> str:
+    """按类型生成 kebab-case 源 id（如 rss-a1b2c3）。短哈希降低碰撞概率。"""
+    import hashlib as _h
+    import time as _t
+    seed = f"{stype}|{_t.time()}|{_h.sha1(stype.encode()).hexdigest()}"
+    return f"{stype}-{_h.sha1(seed.encode()).hexdigest()[:6]}"
+
+
 def register_source(source: dict[str, Any]) -> dict[str, Any]:
     """注册/更新一条源（upsert：同 id 覆盖，id 集唯一）。
 
-    写入校验（kebab id / type 枚举 / radar_hub 回环钉死）由 registry.
-    validate_source 把关；首次落盘会把读侧合成面（kb 条目）一并固化——
-    合成→权威的自然切换，无独立迁移步骤。
+    写入校验（kebab id / type 枚举 / radar_hub 回环钉死 / dir.path 必填）由
+    registry.validate_source 把关；首次落盘会把读侧合成面（kb 条目）一并
+    固化——合成→权威的自然切换，无独立迁移步骤。
+
+    id 缺省时自动生成（2026-11-24 源中枢重设计批：界面不再要用户手填
+    kebab-case id）。显式传入仍走原校验，向后兼容。
     """
+    if not source.get("id") and source.get("type"):
+        source = dict(source)
+        source["id"] = auto_source_id(str(source["type"]))
     registry.validate_source(source)
     normalized = registry.normalize_source(source)
     assert normalized is not None  # validate 已保证 id 非空 str
@@ -177,6 +191,56 @@ def remove_source(source_id: str) -> dict[str, Any]:
 
 
 # ── 健康三态（显式探测回写）─────────────────────────────────────────
+
+
+def probe_source(stype: str, config: dict[str, Any]) -> dict[str, Any]:
+    """登记前「测试连接」：只探测不入库、零落盘（2026-11-24 源中枢重设计批）。
+
+    与 check_health 的分工：那个探测**已注册**的源并回写 health；本函数探测
+    尚未注册的输入，回答「这样填能不能通」。探测失败是**信息不是错误**——
+    返回 state=down + 人话原因，不 raise（对话框里要能显示）。
+    """
+    stype = str(stype or "").strip()
+    cfg = config if isinstance(config, dict) else {}
+    detail_extra = ""
+    try:
+        if stype == "radar_hub":
+            base = cfg.get("base")
+            registry.validate_base_url(str(base or ""))
+            health = radarhub.RadarHubClient(str(base)).health()
+            ok = health.get("ok") is True
+            return {"ok": True, "state": "ok" if ok else "down", "checked": "雷达服务探活",
+                    "detail": "雷达枢纽在线，可以读。" if ok else f"雷达服务没有响应（{base}）"}
+        if stype == "rss":
+            registry.validate_rss_url(str(cfg.get("url") or ""))
+            from ..infra import fetcher as _fetcher
+            from ..infra.sources import rss as _rss
+            fr = _fetcher.fetch(str(cfg["url"]))
+            feed = _rss.parse_feed(fr.body)
+            n = len(feed.get("items") or [])
+            return {"ok": True, "state": "ok", "checked": "拉取并解析订阅",
+                    "detail": f"连接成功：读到订阅，{n} 篇文章。"}
+        if stype in ("kb", "dir", "internal"):
+            key = {"kb": "root", "dir": "path", "internal": "scan_root"}[stype]
+            raw = cfg.get(key)
+            if not isinstance(raw, str) or not raw.strip():
+                return {"ok": True, "state": "down", "checked": "目录存在性",
+                        "detail": f"还没填目录（config.{key}）"}
+            path = Path(raw).expanduser()
+            if not path.is_dir():
+                return {"ok": True, "state": "down", "checked": "目录存在性",
+                        "detail": f"找不到这个目录：{raw}"}
+            try:
+                n_md = sum(1 for _ in path.rglob("*.md"))
+            except OSError:
+                n_md = 0
+            return {"ok": True, "state": "ok", "checked": "目录存在性",
+                    "detail": f"目录存在，里面有 {n_md} 篇 .md 文档。" + detail_extra}
+        return {"ok": True, "state": "down", "checked": "类型", "detail": f"不支持探测的类型：{stype}"}
+    except ValueError as exc:
+        return {"ok": True, "state": "down", "checked": "参数格式", "detail": str(exc)}
+    except Exception as exc:  # 网络/解析失败一律转「信息」，不 500
+        return {"ok": True, "state": "down", "checked": "连通性", "detail": f"探测失败：{exc}"}
 
 
 def check_health(source_id: str) -> dict[str, Any]:

@@ -36,7 +36,7 @@ FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 # 每视图核心元素（id）——来自 ui.views/<v>.html 实读（W19a 盘点 2026-11-24）
 # 断言每个元素存在且 is_visible()（首屏 publish 无需注入等待，其余走 wait_for）
 SNAPSHOT_IDS: dict[str, tuple[str, ...]] = {
-    "sources": ("src-add-btn", "src-clip-btn", "src-crawl-btn", "src-verify-all-btn"),
+    "sources": ("src-add-btn", "src-q", "src-pipeline", "src-con-grid"),  # W2 重设计：剪藏/爬取并入搜索流
     "material": ("mat-upload-btn", "mat-gen-btn", "mat-reg-btn", "coll-rail"),
     "books": ("bk-lamp", "bk-subs-btn", "bk-search-box", "bk-guide"),
     "compose": ("cm-new-slug", "cm-new-title", "cm-smart-btn", "cm-new-btn"),

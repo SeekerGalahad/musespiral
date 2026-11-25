@@ -300,11 +300,13 @@ def test_p1_six_views_smoke(e2e_server: studio.ThreadingHTTPServer) -> None:
         expect(pg.locator("#queue-filters .chip")).to_have_count(6)
         pg.locator('[data-pview="list"]').click()
         expect(pg.locator("#pub-rows")).to_be_visible()
-        # 源中枢：生态带四 tile + 源总表行（demo 下 kb/radar_hub 预置至少一行）
+        # 源中枢（W2 重设计 2026-11-24）：概览 chips + 流水线位置条 + 源卡片
+        # （demo 下 kb/radar_hub 预置至少一卡）+ 连接器目录
         pg.goto(f"{base}/#sources")
-        expect(pg.locator("#eco-tiles .eco-tile")).to_have_count(4)
-        expect(pg.locator("#eco-tiles .eco-tile").first).to_contain_text("启用源")
-        pg.wait_for_selector("#src-rows tr[data-srcrow]")
+        expect(pg.locator("#src-stats .st-chip").first).to_contain_text("个源在用")
+        expect(pg.locator("#src-pipeline .pl-node").first).to_contain_text("源中枢")
+        pg.wait_for_selector("#src-mine-body .src-card")
+        expect(pg.locator("#src-con-grid .con-tile").first).to_be_visible()
         # 素材库：集合轨三段 + 密度 chips + 详情抽屉深链（无素材 fixture 下空态亦成立）
         pg.goto(f"{base}/#material")
         expect(pg.locator("#coll-rail")).to_be_visible()

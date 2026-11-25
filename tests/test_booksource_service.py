@@ -122,6 +122,24 @@ def test_import_apply_persists_and_indexes(home: Path) -> None:
     assert "ruleSearch" not in rows[0], "索引是轻量投影，不载规则大字段"
 
 
+def test_import_apply_from_url_registers_subscription(home: Path, monkeypatch) -> None:
+    """用户视角修复（2026-11-24）：从 URL 导入（用户视图「订阅一个书源包」）落库后
+    应自动登记订阅，否则「导入成功但订阅管理空」的困惑。JSON 文本导入则不登记。"""
+    body = _dump(_src("https://a.com", name="A"))
+    # 打桩 fetcher：URL → 返回书源包文本
+    out = svc.import_apply(
+        "https://pack.example/sources.json",
+        fetcher=lambda url: body,
+    )
+    assert out["subscribed"] == "https://pack.example/sources.json"
+    subs = svc.list_subs()
+    assert len(subs) == 1
+    assert subs[0]["url"] == "https://pack.example/sources.json"
+    # JSON 纯文本导入不登记订阅
+    home2_out = svc.import_apply(body)
+    assert home2_out["subscribed"] is None
+    assert len(svc.list_subs()) == 1  # 未新增
+
 def test_import_apply_three_states_and_selections(home: Path) -> None:
     """三态：isNew/isUpdate 默认落、latest 默认跳；selections 可覆盖。"""
     svc.import_apply(_dump(_src("https://a.com", lu=100)))
@@ -476,6 +494,12 @@ def test_engine_client_available_and_loopback_pinned(monkeypatch) -> None:
         "toc": lambda: client.toc("https://s", "https://b"),
         "content": lambda: client.content("https://s", "https://b", "https://c"),
     }
+    # 环境脆弱修复（2026-11-24）：本机可能真的在 8792 跑着 JVM 引擎（bookengine-jvm），
+    # 原测试假设端口空→不可达→抛异常会随环境失败。改为强制打桩不可达（测试只验契约）。
+    def _unreachable(*a, **k):
+        raise bookengine.BookEngineUnavailable("打桩：引擎不可达")
+    monkeypatch.setattr(bookengine, "_request_json", _unreachable)
+    monkeypatch.setattr(bookengine, "_get", _unreachable)
     for name, call in calls.items():
         with pytest.raises(bookengine.BookEngineUnavailable):
             call()
@@ -484,6 +508,9 @@ def test_engine_client_available_and_loopback_pinned(monkeypatch) -> None:
 def test_engine_available_false_when_unreachable(monkeypatch) -> None:
     """真实回环探测（8792 没服务时 → False，不抛）。"""
     monkeypatch.delenv("MUSESPIRAL_ENGINE_MOCK", raising=False)
+    # 环境脆弱修复：本机 8792 可能真跑着 JVM 引擎——打桩强制不可达
+    monkeypatch.setattr(bookengine, "_get",
+                        lambda *a, **k: (_ for _ in ()).throw(bookengine.BookEngineUnavailable("打桩")))
     assert bookengine.BookEngineClient(timeout=0.2).available() is False
 
 # ── URL 二次拉取缓存（2026-11-23 实测判例回归）───────────────────────

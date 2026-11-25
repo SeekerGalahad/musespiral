@@ -418,4 +418,6 @@ def test_frontend_source_ai_config_wiring() -> None:
     assert "ai_config:cfg" in js
     # 点击/保存事件已绑定
     assert "$('sac-ok').addEventListener('click',srcAiSave)" in js
-    assert "srcAiOpen(a.getAttribute('data-srcai'))" in js
+    # W2 重设计（2026-11-24）：AI 配置入口从表格行内 ⚙ 改为源设置抽屉按钮
+    assert "data-srcai=\"'+esc(s.id)+'\"" in js  # 抽屉渲染带 data-srcai
+    assert "function srcAiOpen(id){" in js

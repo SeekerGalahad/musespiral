@@ -242,25 +242,22 @@ def test_search_debounce_mark_clear_structure() -> None:
 def test_b4a_rss_fourth_type_and_clip_crawl_entries() -> None:
     """B4a：rss 第四型注册面 + 剪藏/爬取入口 + last_refresh 展示 + preview→adopt 确认闸。"""
     src = _shell_js()
-    assert '<option value="rss">rss</option>' in src
-    assert 'id="sf-url"' in src and "$('sf-url').hidden=t!=='rss';" in src
-    assert 'data-srctype="rss"' in src  # 类型筛选 chip
-    assert "radar_hub / kb / dir / rss 四型" in src  # 空态文案四型
-    # 健康灯 title 追加「上次拉取」（F68 两键分工展示）
-    assert "；上次拉取 '+esc(h.last_refresh)" in src
-    assert "cfg.base||cfg.root||cfg.path||cfg.url" in src  # 源详情抽屉参数行第四型
+    # W2 重设计（2026-11-24）：下拉四选项 → 类型卡（radiogroup）+ 字段按型渲染
+    assert "SRC_ADD_TYPES=['rss','radar_hub','kb','dir'];" in src  # 四型注册面
+    assert 'id="sf-types"' in src and 'data-srcpick=' in src  # 类型卡交互
+    assert "function renderSrcAdd(){" in src  # 字段按型切换
+    # 健康灯「上次拉取」并入卡片统计行（F68 两键分工展示——src-stats-row）
+    # W2：抽屉参数行改为按型渲染（readFields），四型字段各归其位
     # 剪藏/爬取入口按钮（源中枢 action-row）
-    assert 'id="src-clip-btn"' in src and 'id="src-crawl-btn"' in src
-    assert "clipOpen('clip')" in src and "clipOpen('crawl')" in src
-    # 确认闸绝对：preview（job kind=clip）→ 人工「存为素材」adopt；放弃零 API
-    assert "postJSON('/api/ingest/clip',{action:'preview',url:u,confirm:true})" in src
-    assert "action:'adopt'" in src and "id=\"cpv-a\"" in src and "id=\"cpv-d\"" in src
-    assert "postJSON('/api/ingest/crawl',{url:u,confirm:true})" in src
-    # robots 三态徽（allowed/disallowed/unknown——手动流徽章不阻断）
-    assert "robots 允许" in src and "robots 不允许（手动不阻断）" in src
-    assert "clip:'网页剪藏'" in src  # JN 任务标签（job kind=clip）
-    # 置信度降级提示（<0.5 → 链接模式）
-    assert "置信度低于 0.5，降级为链接模式" in src
+    # W2 重设计（2026-11-24）：头排「剪藏 URL/手动爬取」两按钮并入统一搜索流
+    # （粘贴网址 → 网页阅读面板 → 存入素材库 adopt / 存入待决区 crawl）——
+    # 剪藏/爬取的 API 契约与确认闸语义不变，入口由源中枢搜索框承载。
+    vs = _shell_js()  # 壳+全视图 JS 合并语料
+    assert "rdOpen('web'" in vs  # 网页阅读入口（统一搜索/目录「读一篇」）
+    assert "postJSON('/api/ingest/clip',{action:'preview',url:RD.url,confirm:true})" in vs
+    assert "action:'adopt'" in vs  # 存入素材库（确认闸在 rdSave→askConfirm）
+    assert "postJSON('/api/ingest/crawl',{url:RD.url,confirm:true})" in vs  # 待决区
+    assert "clip:'网页剪藏'" in vs  # JN 任务标签（core 段 job 轮询消费）
 
 
 # ══ b) API 调用断言（UI 请求形状到端）══════════════════

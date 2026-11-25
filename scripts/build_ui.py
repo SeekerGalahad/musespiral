@@ -320,7 +320,9 @@ def _split_js(js: bytes) -> tuple[bytes, bytes]:
 # VJS[view] 首载 -core，其余 part 由视图内 matPart() 按需拉取——进抽屉/开面板才载）。
 # 登记表锁子段名与顺序：乱序/缺失/多余/错视图/未登记视图出现子标记，一律拒绝构建
 # （防静默漏拆；与 EXPECTED_VIEWS 同一纪律）。
-EXPECTED_SUBVIEWS: dict[str, tuple[str, ...]] = {"material": ("core", "drawer", "media")}
+EXPECTED_SUBVIEWS: dict[str, tuple[str, ...]] = {
+    "material": ("core", "drawer", "media"),
+}
 _SUBVIEW_BEGIN_RE = re.compile(rb"^// @([a-z0-9-]+)$")
 _VIEW_BEGIN_RE = re.compile(rb"^// @view:([a-z0-9-]+)$", re.MULTILINE)
 _VIEW_END = b"// @endview"
@@ -329,7 +331,9 @@ _VIEW_END = b"// @endview"
 # plugin-run；缺失/多余即拒绝构建，防静默漏拆）
 EXPECTED_VIEWS = ("sources", "material", "books", "compose", "design",
                   "publish", "insight", "article", "settings",
-                  "plugins", "plugin-run")
+                  "plugins", "plugin-run",
+                  # 2026-11-24 W3：阅读面板独立视图（源中枢统一搜索 → 书籍/网页阅读）
+                  "reader")
 
 
 def split_ui_js(js: bytes) -> tuple[bytes, dict[str, bytes]]:
@@ -523,6 +527,25 @@ def load_view_css() -> dict[str, bytes]:
     return css_views
 
 
+def _inject_version(shell: bytes) -> bytes:
+    """把壳内 `musespiral v<semver>` 换成本包实际 __version__（根治硬编码漂移）。
+
+    测试 test_shell_topbar_and_statusbar 断言底栏版本随 __version__；原模板写死
+    导致发版后不同步（2026-11-24 订阅批暴露）。用正则替换保留其余文本。
+    """
+    import re
+    from pathlib import Path as _P
+    ver = None
+    try:
+        init = (_P(__file__).resolve().parent.parent / "musespiral" / "__init__.py").read_text()
+        m = re.search(r'__version__\s*=\s*"([^"]+)"', init)
+        ver = m.group(1) if m else None
+    except OSError:
+        ver = None
+    if not ver:
+        return shell
+    return re.sub(rb"musespiral v[0-9]+\.[0-9]+\.[0-9]+", rb"musespiral v" + ver.encode(), shell, count=1)
+
 def render(tmpl: bytes, views: dict[str, bytes], css: bytes, js: bytes) -> bytes:
     """源字节 → 壳字节（纯函数，无副作用）。
 
@@ -601,7 +624,7 @@ def build() -> Path:
     css = CSS.read_bytes()
     js = JS.read_bytes()
     css_views = load_view_css()  # CSS 片段（ui.views/*.css，十懒视图）
-    shell = render(tmpl, views, css, js)
+    shell = _inject_version(render(tmpl, views, css, js))
     core_js = render_core_js(js)
     core_css = render_core_css(css)
     _, js_views = split_ui_js(js)

@@ -243,9 +243,10 @@ def validate_source(source: dict[str, Any]) -> None:
       - radar_hub：config.base 必填且过 validate_base_url（回环钉死）；
       - rss：config.url 必填且过 validate_rss_url；interval_minutes ∈
         [15,10000] 整数、max_items ∈ [1,500] 整数（缺省 normalize 补）；
-      - kb / dir / internal：base 键不得出现（回环钉死只属 radar_hub；
-        internal 的 config.scan_root 必填校验归 studio 注册动作层——与
-        kb→root / dir→path 的既有分工同位，本层不猜路径存在性）；
+      - kb / dir / internal：base 键不得出现（回环钉死只属 radar_hub）；
+        dir 的 config.path 必填（2026-11-24 dir 采集落地批，只校验必填、
+        不猜存在性——存在性归健康探测/刷新期）；internal 的 config.scan_root
+        必填校验归 studio 注册动作层；
       - subscriptions 每项为非空 str（表达式语法解析归服务层）。
     """
     sid = source.get("id")
@@ -278,6 +279,10 @@ def validate_source(source: dict[str, Any]) -> None:
                 raise ValueError(f"{key} 必须是 {low}-{high} 的整数")
     elif "base" in cfg:
         raise ValueError(f"type={stype} 源不接受 config.base（回环钉死只属 radar_hub）")
+    elif stype == "dir":
+        path = cfg.get("path")
+        if not isinstance(path, str) or not path.strip():
+            raise ValueError("dir 源必须配置 config.path（本地目录绝对路径）")
     subs = source.get("subscriptions")
     if subs is not None:
         if not isinstance(subs, list):

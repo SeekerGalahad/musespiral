@@ -1,0 +1,16 @@
+document.getElementById('view-reader').innerHTML=`
+<button class="rd-scrim" id="rd-scrim" aria-label="关闭阅读面板" hidden></button>
+<aside class="reader-pane" id="reader-pane" role="dialog" aria-modal="true" aria-label="阅读面板" hidden>
+<div class="rd-head">
+<button class="btn btn-ghost btn-icon" data-rd="close" aria-label="关闭阅读面板"><span data-icon="close"></span></button>
+<b class="rd-title" id="rd-title">阅读</b>
+<div class="rd-tools">
+<div class="seg" role="group" aria-label="正文字号"><button data-rd="fs" data-d="-1" aria-label="缩小正文">A−</button><button data-rd="fs" data-d="1" aria-label="放大正文">A＋</button></div>
+<div class="seg" role="group" aria-label="底色"><button data-rd="mode" data-v="paper" aria-pressed="true">纸张</button><button data-rd="mode" data-v="night" aria-pressed="false">夜间</button></div>
+<button class="btn btn-ghost btn-icon" data-rd="focus" aria-label="专注阅读"><span data-icon="external-link"></span></button>
+</div>
+</div>
+<div class="rd-scroll" id="rd-scroll"></div>
+<div class="rd-foot" id="rd-foot"></div>
+</aside>
+`;

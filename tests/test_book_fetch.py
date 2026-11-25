@@ -628,7 +628,8 @@ def test_route_surface_locked_to_contract() -> None:
     from musespiral.studio.routing import _GET_ROUTES
 
     get_paths = {p for p in _GET_ROUTES if p.startswith("/api/book/")}
-    assert get_paths == {"/api/book/info", "/api/book/toc", "/api/book/original"}
+    assert get_paths == {"/api/book/info", "/api/book/toc", "/api/book/original",
+                         "/api/book/chapter"}  # W3（2026-11-24）：阅读面板读章
     post_paths = {p for p in _ACTION_ROUTES if p.startswith("/api/book/") or p == "/api/materials/from-chapters"}
     assert post_paths == {"/api/book/search", "/api/materials/from-chapters"}
 

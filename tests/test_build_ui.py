@@ -544,7 +544,13 @@ def test_build_product_exists_and_matches_sources() -> None:
     assert CORE_JS.is_file() and CORE_CSS.is_file(), "assets 产物缺失（须跑 scripts/build_ui.py）"
     mod = _build_module()
     tmpl, views, css, js = _sources(mod)
-    assert OUT.read_bytes() == mod.render(tmpl, views, css, js), \
+    # 2026-11-24：build() 在 render 之后注入实际版本号（_inject_version，
+    # 底栏版本随 __version__ 的修复）——对拍口径必须同步过同一注入，
+    # 否则模板写死的 v0.5.2 与产物 v0.5.4 永久漂移。
+    composed = mod.render(tmpl, views, css, js)
+    if hasattr(mod, "_inject_version"):
+        composed = mod._inject_version(composed)
+    assert OUT.read_bytes() == composed, \
         "ui.html 与源合成结果不一致（须跑 scripts/build_ui.py）"
     assert CORE_JS.read_bytes() == mod.render_core_js(js), \
         "assets/core.js 与 ui.js core 段压缩结果不一致（须跑 scripts/build_ui.py）"
@@ -1016,7 +1022,7 @@ def test_views_directory_layout() -> None:
     # ARCH-1 批（2026-11-21）：+article（十一个源文件——publish 留壳内联，
     # 其余十个出 html.js 注入器）
     assert names == ["article", "books", "compose", "design", "insight", "material",
-                     "plugin-run", "plugins", "publish", "settings", "sources"], names
+                     "plugin-run", "plugins", "publish", "reader", "settings", "sources"], names  # W3 +reader
     for name in names:
         blob = (VIEWS / f"{name}.html").read_bytes()
         assert blob, name
@@ -1065,11 +1071,12 @@ def test_arch1_shell_placeholder_and_first_screen_inline() -> None:
             assert 'id="article-list"' in shell
         else:
             assert (opening + b"</section>").decode() in shell, name
-    # 占位恰好 10 个（article/books/compose/design/insight/material/plugin-run/
-    # plugins/settings/sources）；publish 的 section 非空。
+    # 占位 11 个（article/books/compose/design/insight/material/plugin-run/
+    # plugins/reader/settings/sources）；publish 的 section 非空。
+    # 2026-11-24 W3 +reader（阅读面板独立懒视图）。
     placeholders = re.findall(
         r'<section id="view-[a-z0-9-]+"[^>]*></section>', shell)
-    assert len(placeholders) == 10, placeholders
+    assert len(placeholders) == 11, placeholders
 
 
 def test_arch1_lazy_skeleton_not_in_shell() -> None:

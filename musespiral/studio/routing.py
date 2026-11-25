@@ -17,6 +17,7 @@ from .agent_payload import _agent_runs_payload  # Phase D F75.4：/api/agent/run
 from .ai_payload import _ai_budget_payload, _ai_usage_payload  # G1 批 F1：AI 治理两读面
 from .assets import _asset_response, _meta_payload
 from .book_actions import (  # R3 书源接驳+R3.5 提炼（契约 §3.10）：三读面
+    _book_chapter_payload,
     _book_info_payload,
     _book_original_payload,
     _book_toc_payload,
@@ -206,6 +207,8 @@ _GET_ROUTES = _RouteSet(
             "/api/book/info",
             "/api/book/toc",
             "/api/book/original",
+            # 2026-11-24 源中枢重设计批：阅读面板「未入库先读章」（零落盘）
+            "/api/book/chapter",
             # §3.16 新增（G-T5 TTS 朗读 2026-11-19，调研吸收 §六）：朗读产物
             # MP3 字节流（内嵌 <audio src> 直指，仅 .mp3 + 魔数复核）
             "/api/tts/file",
@@ -322,6 +325,8 @@ def _get_response(
         return 200, _JSON_CTYPE, _json_bytes(_book_toc_payload(ctx, query))
     if path == "/api/book/original":
         return 200, _JSON_CTYPE, _json_bytes(_book_original_payload(ctx, query))
+    if path == "/api/book/chapter":
+        return 200, _JSON_CTYPE, _json_bytes(_book_chapter_payload(ctx, query))
     # G-T5 TTS 朗读（契约 §3.16）：MP3 字节流（三道门在 tts_actions）
     if path == "/api/tts/file":
         return _tts_file_response(ctx, query)

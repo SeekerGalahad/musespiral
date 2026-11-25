@@ -11,6 +11,10 @@ tests/test_book_studio.py）。
                                     内边界 + .txt 白名单 + 50k 折叠两段）
   - GET  /api/book/info            ?sourceUrl=&bookUrl=：引擎详情代理（同步）
   - GET  /api/book/toc             ?sourceUrl=&bookUrl=：引擎目录代理（同步）
+  - GET  /api/book/chapter         ?sourceUrl=&bookUrl=&chapterUrl=：单章正文代理
+                                    （2026-11-24 源中枢重设计批：阅读面板
+                                    「未入库先读章」——**零落盘**，要入库走
+                                    from-chapters；正文截断 CHAPTER_CAP）
 
 confirm 闸门由 server.py 全局收口；形状校验 400 在本层，业务可读错误
 200 {ok:false}（引擎缺席/提交校验失败——错误双层语义 §1.3）。
@@ -34,6 +38,8 @@ ORIG_FOLD_CHARS = 50_000
 ORIG_HEAD_CHARS = 20_000
 # 单文件读入上限（引擎侧有抓取上限，这里是防御面——异常大文件不整体进内存）
 ORIG_READ_CAP = 2_000_000
+# 读章正文上限（2026-11-24）：超长章节截断，防撑爆前端渲染
+CHAPTER_CAP = 200_000
 
 
 def _runner():
@@ -173,6 +179,39 @@ def _book_toc_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> dict[
     return {"ok": True, "status": "ok", "chapters": chapters, "total": payload.get("total", len(chapters))}
 
 
+def _book_chapter_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> dict[str, Any]:
+    """GET /api/book/chapter?sourceUrl=&bookUrl=&chapterUrl=：单章正文（同步代理）。
+
+    阅读面板「先读后决定」的数据面：**零落盘**——只把正文取回来展示，
+    不入缓存、不入素材（要入库走 /api/materials/from-chapters 的 job）。
+    引擎缺席与 info/toc 同语义：200 + status:"absent"。
+    """
+    source_url = _query_str(query, "sourceUrl")
+    book_url = _query_str(query, "bookUrl")
+    chapter_url = _query_str(query, "chapterUrl")
+    if source_url is None or book_url is None or chapter_url is None:
+        raise _HttpError(400, "缺少必填参数 sourceUrl / bookUrl / chapterUrl")
+    from ..infra.engine_select import get_engine_client
+
+    try:
+        payload = get_engine_client().content(source_url, book_url, chapter_url)
+    except BookEngineUnavailable as exc:
+        return _engine_absent_payload(exc)
+    text = payload.get("content") or ""
+    if not isinstance(text, str):
+        text = str(text)
+    truncated = len(text) > CHAPTER_CAP
+    if truncated:
+        text = text[:CHAPTER_CAP]
+    return {
+        "ok": True,
+        "status": "ok",
+        "title": payload.get("title") or "",
+        "content": text,
+        "chars": len(text),
+        "truncated": truncated,
+    }
+
 __all__ = [
     "_action_book_search",
     "_action_bookengine_demo",
@@ -180,6 +219,7 @@ __all__ = [
     "_book_info_payload",
     "_book_original_payload",
     "_book_toc_payload",
+    "_book_chapter_payload",
 ]
 
 def _action_bookengine_demo(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:

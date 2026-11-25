@@ -1,12 +1,88 @@
-/* sources 视图专属样式（ARCH-1 ② 自 ui.css 拆出；构建产物=assets/views/sources.css，随视图懒加载注入） */
+/* sources 视图专属样式（2026-11-24 源中枢重设计批：表格→卡片，按原型落地）
+   构建产物=assets/views/sources.css，随视图懒加载注入。全部走既有 token，零新增颜色。 */
 .amb-sources{background:linear-gradient(90deg,var(--indigo),var(--viz-5))}
-/* 源中枢（§3.1）：生态带 + 健康灯三态 + 选中行 */
-.eco-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:var(--space-sm);margin-bottom:var(--space-md)}
-.eco-tile{display:flex;flex-direction:column;gap:2px;padding:var(--space-sm) var(--space-md);background:var(--paper-2);border-radius:var(--radius-btn)}
-.eco-n{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2}
-.eco-l{font-size:var(--fs-caption);color:var(--ink-2)}
-.eco-tile.amber .eco-n{color:var(--amber)}
-.src-table tr.sel>td:first-child{box-shadow:inset 3px 0 0 var(--vermilion)}
-/* UIX #4：源名称与 ID 分行，ID 灰显细体 + 左分隔排版，消除「知识库kb」连读歧义 */
-.src-table td:nth-child(2) .meta-path{display:block;margin-top:2px;color:var(--ink-3);font-size:11px;word-break:break-all}
-.src-table td:nth-child(2) .meta-path:before{content:'ID ';color:var(--ink-3);font-family:inherit}
+
+.src-stats{margin-bottom:var(--space-md);min-height:30px}
+.st-chip{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:3px 11px;border:1px solid var(--line-1);border-radius:var(--radius-pill);background:var(--paper-1);font-size:var(--fs-caption);color:var(--ink-1)}
+.st-chip b{font-weight:600;font-variant-numeric:tabular-nums}
+.st-chip.bad{color:var(--crimson);border-color:color-mix(in srgb,var(--crimson) 45%,transparent)}
+.st-chip.warn{color:var(--amber);border-color:color-mix(in srgb,var(--amber) 45%,transparent)}
+.st-dot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--ink-3)}
+.st-dot.ok{background:var(--jade)}.st-dot.down{background:var(--crimson)}.st-dot.warn{background:var(--amber)}
+
+.src-search{margin-bottom:var(--space-lg)}
+.src-search-box{display:flex;align-items:center;gap:10px;height:46px;padding:0 8px 0 14px;background:var(--paper-1);border:1px solid var(--line-2);border-radius:10px;transition:border-color var(--dur-fast),box-shadow var(--dur-fast)}
+.src-search-box:focus-within{border-color:var(--vermilion);box-shadow:0 0 0 3px color-mix(in srgb,var(--vermilion) 15%,transparent)}
+.src-search-box .hx{width:18px;height:18px;color:var(--ink-2);flex:none}
+.src-search-box .input{flex:1;min-width:0;height:100%;border:0;background:transparent;font-size:15px;box-shadow:none}
+.src-search-box .input:focus{box-shadow:none}
+.src-search-box input::-webkit-search-cancel-button{display:none}
+.engine-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0 0;font-size:var(--fs-caption);color:var(--ink-2);line-height:1.6}
+.engine-line .link{color:var(--indigo);border:0;background:none;padding:0;font:inherit;display:inline-flex;align-items:center;gap:3px}
+
+.src-sec{margin-bottom:var(--space-lg)}
+.sec-head{display:flex;align-items:baseline;gap:4px 12px;flex-wrap:wrap;margin-bottom:12px}
+.sec-head h2{font-size:var(--fs-h2);font-weight:700;letter-spacing:-.01em;margin:0}
+.sec-sub{color:var(--ink-2);font-size:var(--fs-caption)}
+.sec-tools{margin-left:auto}
+
+.src-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.src-card{display:flex;flex-direction:column;gap:10px;padding:16px;background:var(--paper-1);border:1px solid var(--line-1);border-radius:var(--radius-modal);transition:border-color var(--dur-base),box-shadow var(--dur-base)}
+.src-card:hover{border-color:var(--line-2);box-shadow:var(--shadow-sm)}
+.src-card.is-off{opacity:.72}
+.src-top{display:flex;align-items:flex-start;gap:12px}
+.src-glyph{flex:none;width:40px;height:40px;border-radius:10px;display:grid;place-items:center;background:var(--tint);color:var(--indigo)}
+.src-glyph .hx{width:18px;height:18px}
+.src-id{flex:1;min-width:0}
+.src-name{font-size:var(--fs-h3);font-weight:600;line-height:1.35;margin:0;overflow-wrap:anywhere}
+.src-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:2px 0 0;font-size:var(--fs-caption);color:var(--ink-2);line-height:1.5}
+.src-meta.is-down{color:var(--crimson)}
+.src-io{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0;font-size:var(--fs-caption);line-height:1.6}
+.io-k{font-size:10px;letter-spacing:.02em;color:var(--ink-2);border:1px solid var(--line-1);border-radius:4px;padding:0 5px}
+.src-io .hx{width:14px;height:14px;color:var(--ink-3)}
+.src-io b{font-weight:600}
+.src-alert{margin:0;font-size:var(--fs-caption);color:var(--crimson);line-height:1.5;overflow-wrap:anywhere}
+.src-stats-row{display:flex;gap:16px 20px;flex-wrap:wrap;margin:0;font-size:var(--fs-caption);color:var(--ink-2)}
+.src-stats-row div{display:inline-flex;gap:5px;align-items:baseline}
+.src-stats-row dd{margin:0;color:var(--ink-1);font-weight:600;font-variant-numeric:tabular-nums}
+.src-stats-row button{border:0;background:none;padding:0;font:inherit;font-weight:600;color:var(--indigo);cursor:pointer}
+.src-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:4px}
+
+.slow{margin:10px 0 0;font-size:var(--fs-caption);color:var(--amber);display:flex;gap:6px;align-items:center}
+
+@media (max-width:820px){
+.src-pipeline{padding-right:14px}
+.pl-fold{position:static;margin-top:4px}
+.sf-body{grid-template-columns:1fr}
+.src-grid,.con-grid{grid-template-columns:1fr}
+.src-search-box .input{font-size:16px}
+.rg-row{align-items:flex-start}
+.rg-go{margin-top:10px}
+}
+/* 流水线位置条 + 区块头（2026-11-24 W2：原型「源=输入端」叙事，跨视图通用，从 sources.css 提入 core 层） */
+.pipeline-bar{position:relative;margin-bottom:var(--space-lg);padding:12px 88px 12px 14px;border:1px solid var(--line-1);border-radius:var(--radius-modal);background:var(--paper-1)}
+.pl-chain{display:flex;align-items:center;gap:4px;flex-wrap:wrap;list-style:none;margin:0;padding:0}
+.pl-node{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:4px 10px 4px 8px;border-radius:var(--radius-card);font-size:var(--fs-caption);font-weight:500;color:var(--ink-2);text-decoration:none}
+a.pl-node:hover{background:var(--tint);color:var(--ink-1)}
+.pl-node .hx{width:16px;height:16px}
+.pl-node.is-here{background:color-mix(in srgb,var(--vermilion) 8%,transparent);color:var(--ink-1);font-weight:600;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--vermilion) 38%,transparent)}
+.pl-node.is-here .hx{color:var(--vermilion)}
+.pl-role{font-size:10px;letter-spacing:.02em;padding:1px 7px;border-radius:var(--radius-pill);background:var(--wash);color:var(--ink-2);font-weight:500}
+.pl-node.is-here .pl-role{background:var(--vermilion);color:#fff}
+.pl-sep{color:var(--ink-3);display:inline-flex;padding:0 2px}
+.pl-note{margin:8px 0 0;font-size:var(--fs-caption);line-height:1.6;color:var(--ink-2);max-width:76ch}
+.pl-note b{color:var(--ink-1);font-weight:600}
+.pipeline-bar.folded .pl-note,.pipeline-bar.folded .pl-role{display:none}
+.pipeline-bar.folded{padding-top:8px;padding-bottom:8px}
+.pl-fold{position:absolute;top:10px;right:12px}
+
+/* 连接器目录通用件（2026-11-24 W2：与插件页「输入/处理/输出」同族卡片，跨视图共用） */
+.con-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.con-tile{display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid var(--line-1);border-radius:var(--radius-modal);background:var(--paper-1)}
+.con-top{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px}
+.con-top .src-glyph{width:32px;height:32px;border-radius:var(--radius-card)}
+.con-name{font-weight:600;flex:1 0 auto;min-width:0;overflow-wrap:anywhere;margin:0}
+.con-io{display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;margin:0;font-size:var(--fs-caption);line-height:1.6}
+.con-io > span{min-width:0;overflow-wrap:anywhere}
+.con-note{margin:0;font-size:var(--fs-caption);color:var(--ink-2);line-height:1.55}
+.con-act{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:2px}
