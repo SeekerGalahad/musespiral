@@ -13,7 +13,7 @@ document.getElementById('view-material').innerHTML=`
 <input type="file" id="mat-file" multiple accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.docx,.epub,.md,.markdown,.txt" hidden>
 <button class="btn" id="mat-upload-btn" title="选择/拖放/粘贴图片上传">+ 上传图片</button>
 <button class="btn gen-ai" id="mat-gen-btn">AI 生成图</button>
-<button class="btn" id="mat-reg-btn" title="登记视频 URL（零出网）">+ 登记视频</button>
+<button class="btn" id="mat-reg-btn" title="登记视频：URL（零出网）或本地文件路径（读盘落仓+时长/首帧探测）">+ 登记视频</button>
 <button class="btn" id="mat-ingest-btn" title="刷新全部源（ingest 任务，进度见任务中心）">刷新全部</button></div>
 </div>
 <div class="mat-layout">

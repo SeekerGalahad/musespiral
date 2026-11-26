@@ -160,6 +160,22 @@ def build_prompt(session: CompositionSession, *, template: str | None = None) ->
             if material is None:
                 continue
             content = str((material.get("payload") or {}).get("text") or "")
+            # D4' 修复（2026-11-26 闭环一断点）：localbook 素材正文不入 payload
+            # （§五「只读不复制」红线——有意与网络书 book_fetch 差异），生成
+            # 时经 localbook_service 按章节现取；素材现取失败退摘录（excerpt
+            # 有值时），两者皆空才真跳过（书被删/移走的宽容语义）。
+            _uri = str((material.get("origin") or {}).get("uri") or "")
+            if not content and _uri.startswith("localbook:"):
+                try:
+                    from .. import localbook_service
+
+                    _bid, _, _n = _uri[len("localbook:"):].partition("#")
+                    content = str(localbook_service.book_chapter(_bid, int(_n or 1)).get("content") or "")
+                except Exception:
+                    content = ""
+                if not content:
+                    _pl = material.get("payload") or {}
+                    content = str(_pl.get("excerpt") or "")
             title = str((material.get("origin") or {}).get("title") or s.material_id)
             sources_payload.append({"path": s.path, "title": title, "content": content})
             continue

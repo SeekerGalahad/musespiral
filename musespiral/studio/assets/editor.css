@@ -110,3 +110,25 @@
 .cm-ghost-text{color:var(--ink-3);opacity:.5;font-style:italic;white-space:pre-wrap}
 .ed-ghost-hint{font-size:11px;color:var(--ink-3);white-space:nowrap}
 .ed-ghost-hint[hidden]{display:none}
+
+/* ── B3 插入媒体弹层（2026-11-26）——复用 modal/chips/tag 既有 token，只补布局 ── */
+.ed-med-ov{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
+  background:color-mix(in srgb,var(--ink-1) 45%,transparent)}
+.ed-med-panel{width:min(560px,92vw);max-height:70vh;display:flex;flex-direction:column;gap:8px;
+  padding:14px;border-radius:var(--radius-card);background:var(--paper-1);
+  border:1px solid var(--line-1);box-shadow:0 8px 24px rgba(0,0,0,.18)}
+.ed-med-head{display:flex;align-items:center;gap:8px;font-weight:600}
+.ed-med-hint{flex:1;font-size:11px;font-weight:400;color:var(--ink-3)}
+.ed-med-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;
+  overflow:auto;min-height:120px}
+.ed-med-cell{display:flex;flex-direction:column;gap:4px;padding:6px;border:1px solid var(--line-1);
+  border-radius:var(--radius-btn);background:var(--paper-0);text-align:left}
+.ed-med-cell:hover{border-color:var(--vermilion)}
+.ed-med-cell img{width:100%;height:64px;object-fit:cover;border-radius:4px;background:var(--paper-2)}
+.ed-med-vid{position:relative;height:64px;display:flex;align-items:center;justify-content:center;
+  border-radius:4px;background:var(--paper-2);color:var(--ink-3);font-size:22px;overflow:hidden}
+.ed-med-vid img{width:100%;height:64px}
+.ed-med-vid i{position:absolute;right:3px;bottom:3px;font-style:normal;font-size:11px;
+  color:#fff;background:rgba(0,0,0,.6);border-radius:3px;padding:0 4px}
+.ed-med-t{font-size:11px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ed-med-empty{grid-column:1/-1;margin:0;font-size:12px;color:var(--ink-3);padding:16px 0}

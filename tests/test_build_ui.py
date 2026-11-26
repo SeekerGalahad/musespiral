@@ -310,8 +310,13 @@ VIEW_JS_MAX_BYTES = 40 * 1024         # 40,960B
 # 原 material 单文件 40KiB 锚随三拆**拆除**（该产物已不存在，build 同步清陈旧文件）；
 # ensureView 经 core 段 VJS 映射首载 -core，drawer/media 由 matPart('drawer'|'media')
 # 幂等懒加载（进入抽屉/面板/灯箱首触才拉取；实测 core 20,049B 余 431B）。
-MATERIAL_CORE_MAX_BYTES = 20 * 1024   # 20,480B
-MATERIAL_DRAWER_MAX_BYTES = 15 * 1024  # 15,360B
+MATERIAL_CORE_MAX_BYTES = 21 * 1024   # 21,504B（UIX-3 拆分时 20,480B 实测余 431B；
+#   B3 多媒体批 2026-11-26 +570B：matRow video 卡首帧缩略（poster 走 /media/）
+#   + ⏱ 时长徽章 + fmtDur（core/drawer 双消费故归 core）——20,480→21,504 随批
+#   对齐实际水位 21,041B + 463B 缓冲，角色清单不变）
+MATERIAL_DRAWER_MAX_BYTES = 19 * 1024  # 19,456B（素材查看器批 2026-11-26 +2.8KB：
+#   md 沙箱渲染/大小门控/localbook 现取三函数族——职责仍是「详情抽屉内容面」
+#   角色不变；15,360→19,456 随批对齐 18,195B 水位 + 1.2KB 缓冲）
 MATERIAL_MEDIA_MAX_BYTES = 15 * 1024   # 15,360B
 CORE_CSS_MAX_BYTES = 40 * 1024        # 40,960B（②拆分后实测 33,582B，余 6.4KB）
 VIEW_CSS_MAX_BYTES = 8 * 1024         # 8,192B（②实测最大 material.css 7,825B）
@@ -1618,3 +1623,26 @@ def test_w16_disk_total_is_observation_not_gate() -> None:
     # 即使超 600KB 也不 raise（当前 598KB 在三档内；这个测试验证的是语义：
     # 磁盘量是仓库运维指标，不是用户体验）
     assert isinstance(total, int) and total > 0
+
+
+def test_js_products_parse_with_node_check() -> None:
+    """D13 判例（2026-11-26）：Python 脚本写 JS 时 \\n 被解释成真换行 →
+    字符串断裂、整份产物语法错误、懒载函数永不定义（点击全哑）。构建产物
+    必须过 node --check（全部 assets/js）。node 缺席时 skip（CI 无 node）。"""
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if not node:
+        import pytest
+
+        pytest.skip("node 不可用（CI 环境无 node）")
+    assets = STUDIO / "assets"
+    targets = sorted(assets.glob("*.js")) + sorted((assets / "views").glob("*.js"))
+    assert targets, "assets JS 产物为空"
+    bad: list[str] = []
+    for f in targets:
+        r = subprocess.run([node, "--check", str(f)], capture_output=True, text=True)
+        if r.returncode != 0:
+            bad.append(f"{f.name}: {r.stderr.splitlines()[-3:]}")
+    assert not bad, "产物 JS 语法错误（\n 转义/引号断裂高发）：" + repr(bad[:3])

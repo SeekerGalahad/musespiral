@@ -1,19 +1,21 @@
 document.getElementById('view-books').innerHTML=`
 <div class="view-head"><div>
 <h1 class="view-title">书籍</h1>
-<p class="view-sub" id="bk-sub">订阅书源 → 搜索书籍 → 选章入素材库（引擎取文，人工选章触发）。</p>
+<p class="view-sub" id="bk-sub">本地 TXT 只读磁盘上的文件（不入库复制）／网络书源引擎取文。</p>
 </div><div class="action-row">
 <span class="bk-lamp" id="bk-lamp"><span class="health-dot unknown"></span>…</span>
 <button class="btn btn-ghost" id="bk-subs-btn">订阅管理</button>
 </div></div>
+<div class="tabs" id="bk-tabs"><button class="tab is-active" data-bktab="search">网络书源</button><button class="tab" data-bktab="local">本地书架</button><button class="tab" data-bktab="subs">订阅管理</button></div>
+<div id="bk-local" hidden></div>
 <div id="bk-search">
 <input id="bk-search-box" class="input bk-search-input" placeholder="搜索书名 / 作者 / 关键词…" aria-label="搜索书籍">
 <div class="empty" id="bk-guide">
 <div class="empty-icon" data-icon="docs"></div>
-<div class="empty-title" id="bk-guide-t">搜索结果渲染 · R4 批</div>
-<div class="empty-text" id="bk-guide-x">四桶搜索与多源换源 R4 批开放；详情可从素材行《书名》深链进入。</div>
+<div class="empty-title" id="bk-guide-t">搜索书名 / 作者</div>
+<div class="empty-text" id="bk-guide-x">四桶搜索与多源换源；详情可从素材行深链进入。</div>
 <div class="action-row empty-actions"><button class="btn btn-primary" id="bk-guide-subs">订阅管理</button><button class="btn" id="bk-guide-import">导入书源</button><button class="btn" id="bk-guide-demo" hidden>开启体验模式</button></div>
-<p class="action-hint">按 Enter 搜索（引擎可搜或体验模式时）。</p>
+<p class="action-hint">按 Enter 搜索。</p>
 </div>
 <div id="bk-results" hidden>
 <div class="bk-res-head"><b id="bk-res-n">0</b> 条结果<span class="muted" id="bk-res-meta"></span></div>
@@ -24,7 +26,7 @@ document.getElementById('view-books').innerHTML=`
 <a class="back-link" href="#books">返回书籍</a>
 <div class="empty" id="bk-absent" hidden>
 <div class="empty-title">bookengine 未就绪</div>
-<div class="empty-text">详情与取文暂不可用（R1-R2 建设中）；订阅与书源管理不受影响。</div>
+<div class="empty-text">详情与取文暂不可用；订阅与书源管理不受影响。</div>
 </div>
 <div class="skel" id="bk-skel" hidden><div class="skel-line w90"></div><div class="skel-line w70"></div></div>
 <div id="bk-body" hidden>
@@ -80,7 +82,7 @@ document.getElementById('view-books').innerHTML=`
 <div id="im-paste"><textarea id="im-text" class="input im-area" rows="4" placeholder="粘贴书源 JSON（数组或单对象均可）"></textarea><div class="action-row"><button class="btn btn-primary" id="im-parse" type="button">解析预览</button></div></div>
 <div id="im-url" hidden><input id="im-url-in" class="input" placeholder="订阅 URL（http(s) 开头，服务端 64MB 门内拉取）"><div class="action-row"><button class="btn btn-primary" id="im-parse-url" type="button">拉取并解析</button></div></div>
 <div id="im-file" hidden><input id="im-file-in" type="file" accept=".json,application/json"><div class="action-row"><button class="btn btn-primary" id="im-parse-file" type="button">读取并解析</button></div></div>
-<p class="action-hint" id="im-prog" hidden>拉取并解析中…<span id="im-prog-t"></span>（大包 7–20MB 需 10–25 秒，请勿关闭窗口）</p>
+<p class="action-hint" id="im-prog" hidden>拉取并解析中…<span id="im-prog-t"></span>（大包需 10–25 秒）</p>
 </div>
 <div id="im-filters" hidden>
 <input id="im-kw" class="input im-kw" placeholder="过滤：名称 / 分组 / URL 关键词">

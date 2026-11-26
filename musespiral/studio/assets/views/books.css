@@ -77,3 +77,9 @@
 .bs-st.ok{color:var(--jade)}
 .bs-st.failed{color:var(--crimson)}
 .bs-st.pending{color:var(--ink-3)}
+.lb-card{display:flex;flex-direction:column;gap:6px;cursor:pointer}
+.lb-cover{height:120px;border-radius:var(--radius-btn);display:grid;place-items:center;color:#fff;font-size:22px;font-weight:700}
+.lb-title{font-weight:600;font-size:var(--fs-caption);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-meta{display:flex;flex-wrap:wrap;gap:0 8px;font-size:var(--fs-micro)}
+.lb-del{position:absolute;top:6px;right:6px;opacity:0;font-size:var(--fs-micro);padding:1px 5px}
+.lb-card:hover .lb-del,.lb-card:focus-within .lb-del{opacity:1}

@@ -1,11 +1,12 @@
-"""materials 域动作：/api/materials/* + /api/sources/* + /api/ingest/*（15 条）。
+"""materials 域动作：/api/materials/* + /api/sources/* + /api/ingest/*（16 条）。
 
 R-2 自 actions.py 按域迁入（行为零变更）：8 个执行体（triage/delete/
 register/collections/sources_verify/sources_enabled/sources_register/ingest
 + _ensure_radarhub_preset 前置件）原样迁移；委托路由（from-chapters/
 ingest 三动作）执行体在既有 book_actions/ingest_actions，此处仅登记。
 N-2 素材闭环批（2026-11-21）增三执行体：spark / from-article /
-sources/internal/refresh（本文件内实现）。
+sources/internal/refresh（本文件内实现）。B3 多媒体批（2026-11-26）
+增 register-local（本地视频文件登记）。
 job 提交复用共享管道 `_runner`（同包 platform 域持有，actions re-export
 面不变）。
 """
@@ -123,6 +124,31 @@ def _action_materials_register(ctx: _StudioContext, data: dict[str, Any]) -> dic
 
     with _http_400_on(ValueError):
         result = materials_service.register_video(url, **optional)
+    return {"ok": True, **result}
+
+
+def _action_materials_register_local(
+    ctx: _StudioContext, data: dict[str, Any]
+) -> dict[str, Any]:
+    """POST /api/materials/register-local {path, title?, note?}（B3 2026-11-26）。
+
+    本地视频文件登记：读盘→硬链接/复制进素材仓→ffprobe 时长 + ffmpeg 首帧
+    封面探测（缺席/失败如实置空不报错——服务层纪律）。路径门（绝对/~/、
+    mp4/webm/mov、存在性）在服务层；文件不存在 → 404（与 read_material_file
+    的「素材文件缺失」同语义），其余可读拒绝 → 400。同文件重登记 → dedup。
+    """
+    path = _require_str(data, "path")
+    optional = {
+        key: (data[key] if key in data else "") for key in ("title", "note", "duration_text")
+    }
+    from ...services import materials_service
+
+    try:
+        result = materials_service.register_local_video(path, **optional)
+    except FileNotFoundError as err:
+        raise _HttpError(404, str(err)) from None
+    except ValueError as err:
+        raise _HttpError(400, str(err)) from None
     return {"ok": True, **result}
 
 
@@ -399,6 +425,8 @@ ROUTES: dict[str, Callable[[_StudioContext, dict[str, Any]], dict[str, Any]]] = 
     "/api/materials/triage": _action_materials_triage,  # 第二十期 M3：素材分诊窄门（本期扩 tags 四键）
     "/api/materials/delete": _action_materials_delete,  # M3：删除=墓碑+连坐清单（两步 confirm 第二步后）
     "/api/materials/register": _action_materials_register,  # A 扩展 F61：视频登记（零出网幂等）
+    # B3 2026-11-26：本地视频文件登记（读盘落仓 + ffprobe/ffmpeg 元数据如实探测）
+    "/api/materials/register-local": _action_materials_register_local,
     "/api/materials/collections": _action_materials_collections,  # A 扩展 F62：手工集合五动作（GET/POST 双态）
     "/api/materials/from-chapters": _action_from_chapters,  # R3+R3.5：选章入素材库 → job book_fetch
     "/api/sources/probe": _action_sources_probe,  # 2026-11-24：登记前测试连接（零落盘）

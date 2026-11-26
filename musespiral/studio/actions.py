@@ -22,10 +22,15 @@
   - 长动作契约不变：建 job 返 {ok, job_id}（R4），产物在 job.result；
     二进制旁路 /api/materials/upload 仍在 server._BINARY_POST_ROUTES
     （不占本表，契约锁取并集对拍）
-  - 契约锁：CONTRACT_POST_EXACT 77 = 本表 73 ∪ 动态段占位 3（plugin_actions.
+  - 契约锁：CONTRACT_POST_EXACT 91 = 本表 87 ∪ 动态段占位 3（plugin_actions.
     POST_DYNAMIC_SURFACE，AI-1 adopt/discard + AI-3 regenerate）∪ 二进制旁路 1，
     增删路由先改契约文档再改表（test_architecture 红灯兜底）；GET 面注册表
-    仍在 routing.py（_GET_ROUTES，48 条，本文件不承载 GET）
+    仍在 routing.py（_GET_ROUTES，55 条，本文件不承载 GET——/media/<rel>
+    是 server 层只读旁路不进契约锁，B3 批同 /assets/* 先例）。B1 本地书籍批
+    （2026-11-26，契约 §3.27）：本表 +4（/api/localbook/add|remove|reparse +
+    /api/materials/from-local-chapters）、GET +4（list/info/toc/chapter）。
+    B3 多媒体批（2026-11-26）：本表 +2（/api/materials/register-local +
+    /api/action/insert_media）。
 """
 from __future__ import annotations
 
@@ -54,6 +59,7 @@ from .handlers.platform import (
     _runner,
     _submit,
 )
+from .localbook_actions import ROUTES as _LOCALBOOK_ROUTES  # B1 本地书籍（2026-11-26）
 from .plugin_actions import ROUTES as _PLUGIN_ROUTES  # PL-3 接驳批（复核修复 2026-11-20）
 from .security import _StudioContext
 
@@ -65,4 +71,7 @@ _ACTION_ROUTES: dict[str, Callable[[_StudioContext, dict[str, Any]], dict[str, A
     **_DISCOVER_ROUTES,  # /api/action/discover_draft|sync_stats + /api/discover/star（3）
     **_ASSIST_ROUTES,  # /api/action/cover|refine|tags_suggest（3）
     **_PLUGIN_ROUTES,  # /api/plugins/refresh + /api/pipelines(±run)（3，契约 §3.18）
+    # B1 本地书籍（2026-11-26，契约 §3.27）：书架三动作 + 选章入素材库
+    # （/api/localbook/add|remove|reparse + /api/materials/from-local-chapters）
+    **_LOCALBOOK_ROUTES,
 }

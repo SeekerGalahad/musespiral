@@ -3,10 +3,12 @@ function rdScroll(){return $('rd-scroll');}
 function rdFoot(){return $('rd-foot');}
 function rdOpen(kind,data){
 var p=$('reader-pane');RD.opener=document.activeElement;
+var host=$('view-reader');if(host)host.hidden=false;
 if(RD.pane===null){RD.mode=document.documentElement.getAttribute('data-theme')==='dark'?'night':'paper';}
 RD.pane=kind;RD.book=(data&&data.book)||null;RD.url=(data&&data.url)||'';RD.n=(data&&data.n)||1;RD.range='one';
 p.hidden=false;$('rd-scrim').hidden=false;
 p.setAttribute('aria-label',kind==='book'?'书籍阅读':'网页阅读');
+var bk=$('rd-back');if(bk)bk.hidden=(kind!=='book');
 if(kind==='web'){
 RD.phase='loading';rdRenderWeb();
 var tok=(RD.webTok||0)+1;RD.webTok=tok;
@@ -33,13 +35,15 @@ void p.offsetWidth;p.classList.add('open');
 function rdClose(now){
 var p=$('reader-pane');RD.pane=null;RD.webTok=(RD.webTok||0)+1;
 p.classList.remove('open');$('rd-scrim').hidden=true;
-if(now){p.hidden=true;rdScroll().innerHTML='';rdFoot().innerHTML='';return;}
-setTimeout(function(){if(!RD.pane){p.hidden=true;rdScroll().innerHTML='';rdFoot().innerHTML='';}},260);
+var host=$('view-reader'),hideHost=function(){if(host)host.hidden=true;};
+if(now){p.hidden=true;hideHost();rdScroll().innerHTML='';rdFoot().innerHTML='';return;}
+setTimeout(function(){if(!RD.pane){p.hidden=true;hideHost();rdScroll().innerHTML='';rdFoot().innerHTML='';}},260);
 var o=RD.opener;if(o&&o.focus&&document.contains(o)&&o.offsetParent!==null)o.focus();
 }
 function rdTop(){
 var title=RD.pane==='book'?((RD.book&&RD.book.name)||'书籍'):'网页阅读';
-return '<div class="rd-head"><button class="btn btn-ghost btn-icon" data-rd="close" aria-label="关闭阅读面板"><span data-icon="close"></span></button>'+
+var backBtn=RD.pane==='book'?'<button class="btn btn-ghost btn-sm" data-rd="close" aria-label="返回列表"><span data-icon="arrow-left"></span>返回列表</button>':'';
+return '<div class="rd-head">'+backBtn+'<button class="btn btn-ghost btn-icon" data-rd="close" aria-label="关闭阅读面板"><span data-icon="close"></span></button>'+
 '<b class="rd-title">'+esc(title)+'</b><div class="rd-tools">'+
 '<div class="seg" role="group" aria-label="正文字号"><button data-rd="fs" data-d="-1" aria-label="缩小正文">A−</button><button data-rd="fs" data-d="1" aria-label="放大正文">A＋</button></div>'+
 '<div class="seg" role="group" aria-label="底色"><button data-rd="mode" data-v="paper" aria-pressed="'+(RD.mode==='paper')+'">纸张</button><button data-rd="mode" data-v="night" aria-pressed="'+(RD.mode==='night')+'">夜间</button></div>'+
@@ -50,33 +54,111 @@ var p=$('reader-pane');p.dataset.mode=RD.mode;p.classList.toggle('focus',RD.focu
 p.style.setProperty('--read-scale',RD.fs);
 rdScroll().classList.toggle('plain',RD.mode==='paper'&&RD.pane==='book');
 }
+function rdIsLocal(b){return String((b||{}).origin||'').indexOf('localbook:')===0;}
+function rdLocalId(b){var s=String((b||{}).origin||'');return s.indexOf('localbook:')===0?s.slice('localbook:'.length):'';}
 function rdRenderBookDetail(){
 var b=RD.book||{};
 rdApply();
-rdScroll().innerHTML='<div class="rd-body"><div class="bk-head">'+
-'<span class="bk-cover">'+esc((b.name||'?').slice(0,2))+'</span><div class="bk-info"><h1>'+esc(b.name||'(无题)')+'</h1>'+
-'<p class="bk-author">'+esc([b.author,b.kind,b.wordCount].filter(Boolean).join(' · '))+'</p>'+
-'<button class="bk-origin" data-rd="swap" aria-label="换源（当前 '+esc(b.originName||b.origin||'')+'）">来源：'+esc(b.originName||b.origin||'—')+'</button></div></div>'+
-(b.intro?'<p class="bk-intro">'+esc(b.intro)+'</p>':'')+
-'<div class="rd-sec-head"><h2>目录</h2><span class="muted" style="font-size:12px">由 bookengine 解析</span></div><div class="bk-toc" id="rd-toc"><p class="action-hint">正在取目录…</p></div></div>';
-rdFoot().innerHTML='<span class="muted" style="font-size:12px">点章节先读，再决定入不入素材库。</span>';
+if(rdIsLocal(b)){rdRenderLocalDetail(b);return;}
+var t0=Date.now();
+rdScroll().innerHTML='<div class="rd-body">'+
+'<p class="rd-fetch" role="status"><span class="st-dot ok src-pulse"></span>正在从「'+esc(b.originName||b.origin||'源')+'」获取详情…（点开时才取，列表不预载）</p>'+
+'<div class="bk-head"><span class="bk-cover">'+esc((b.name||'?').slice(0,2))+'</span><div class="bk-info">'+
+'<div class="skel skel-line" style="width:72%;height:15px;margin-bottom:8px"></div>'+
+'<div class="skel skel-line" style="width:52%;margin-bottom:8px"></div>'+
+'<div class="skel skel-line" style="width:38%"></div></div></div>'+
+'<div class="skel skel-line" style="width:100%;height:56px;margin-top:14px"></div></div>';
+rdFoot().innerHTML='<span class="muted" style="font-size:12px">详情获取后可取目录阅读。</span>';
 var src=b.origin||'',bu=b.bookUrl||'';
-getJSON('/api/book/toc?sourceUrl='+encodeURIComponent(src)+'&bookUrl='+encodeURIComponent(bu)).then(function(d){
-var box=$('rd-toc');if(!box)return;
-if(!d||d.status==='absent'){box.innerHTML='<p class="action-hint">引擎未就绪，目录读取失败。</p>';return;}
+getJSON('/api/book/info?sourceUrl='+encodeURIComponent(src)+'&bookUrl='+encodeURIComponent(bu)).then(function(d){
+if(RD.pane!=='book')return;
+var info=(d&&d.ok&&d.info)||null;
+if(!info){rdDetailFail(b,'该源没返回详情（可能规则失效或超时）');return;}
+var ms=Math.max(0,Date.now()-t0);
+var m={name:info.name||b.name,author:info.author||b.author,kind:info.kind||b.kind,wordCount:info.wordCount||b.wordCount,lastChapter:info.lastChapter||'',intro:info.intro||b.intro||''};
+RD.book=Object.assign({},b,m);
+rdApply();
+rdScroll().innerHTML='<div class="rd-body">'+
+'<p class="rd-fetch ok"><span class="st-dot ok"></span>详情已获取（耗时 '+(ms/1000).toFixed(1)+'s · 来自「'+esc(b.originName||b.origin||'源')+'」）</p>'+
+'<div class="bk-head"><span class="bk-cover">'+esc((m.name||'?').slice(0,2))+'</span><div class="bk-info"><h1>'+esc(m.name||'(无题)')+'</h1>'+
+'<p class="bk-author">'+esc([m.author,m.kind,m.wordCount].filter(Boolean).join(' · '))+(m.lastChapter?'<br>最新：'+esc(m.lastChapter):'')+'</p>'+
+'<button class="bk-origin" data-rd="swap" aria-label="换源（当前 '+esc(b.originName||b.origin||'')+'）">来源：'+esc(b.originName||b.origin||'—')+'</button></div></div>'+
+(m.intro?'<p class="bk-intro">'+esc(m.intro)+'</p>':'')+
+'<div class="rd-sec-head"><h2>目录</h2><span class="muted" style="font-size:12px">点击时才取</span></div>'+
+'<div class="bk-toc" id="rd-toc"><button class="btn btn-primary" data-rd="loadtoc">'+I('docs')+'开始阅读 · 取目录</button></div></div>';
+rdFoot().innerHTML='<span class="muted" style="font-size:12px">点章节先读，再决定入不入素材库。</span>';
+}).catch(function(err){
+if(RD.pane!=='book')return;
+rdDetailFail(b,err.message||'服务未响应');
+});
+}
+function rdRenderLocalDetail(b){
+var id=rdLocalId(b);
+rdScroll().innerHTML='<div class="rd-body"><p class="rd-fetch" role="status"><span class="st-dot ok src-pulse"></span>正在读取本地书元数据…</p>'+
+'<div class="skel skel-line" style="width:70%;height:15px;margin-bottom:8px"></div><div class="skel skel-line" style="width:45%"></div></div>';
+rdFoot().innerHTML='<span class="muted" style="font-size:12px">本地书只读取你磁盘上的原文件。</span>';
+getJSON('/api/localbook/info?id='+encodeURIComponent(id)).then(function(d){
+if(RD.pane!=='book')return;
+if(!d||d.ok===false||!d.book){rdDetailFail(b,(d&&d.error)||'本地书不存在');return;}
+var bk=d.book||{};
+var un=d.unstructured||bk.structure==='fixed';
+var bits=['本地文件',un?'未识别章节结构':(d.chapters||0)+' 章',bk.charset||'',lbWan(bk.chars||0),'规则 '+(bk.rule_name||bk.rule||'—')].filter(Boolean);
+RD.book=Object.assign({},b,{name:bk.title||b.name,author:bk.author||b.author,localRule:bk.rule||''});
+rdScroll().innerHTML='<div class="rd-body">'+
+(d.file_ok===false?'<p class="rd-fetch err" role="alert">'+I('warning')+'<span>原文件已不可读（可能被移动或删除）：'+esc(bk.path||'')+'。放回原位后点「重试」。</span></p>':'')+
+'<div class="bk-head"><span class="bk-cover" style="background:'+esc(lbCoverStyle(String(bk.id||id)))+'">'+esc(String(bk.title||'?').slice(0,2))+'</span><div class="bk-info"><h1>'+esc(bk.title||'(无题)')+'</h1>'+
+'<p class="bk-author">'+esc(bits.join(' · '))+(bk.author?'<br>作者：'+esc(bk.author):'')+'</p>'+
+'<p class="lb-path-line" title="'+esc(bk.path||'')+'">'+esc(bk.path||'')+'</p></div></div>'+
+(un?'<p class="action-hint">这本书没识别出章节结构（正文按定长切块）。可换一条规则重解析，或继续按块阅读。</p>':'')+
+'<div class="rd-sec-head"><h2>目录</h2><span class="lb-rule-wrap"><select class="input rd-rule" id="rd-rule" aria-label="章节规则">'+
+['cn-novel-standard','cn-classic','plain-split'].map(function(r){return '<option value="'+r+'"'+(r===(bk.rule||'')?' selected':'')+'>'+r+'</option>';}).join('')+
+'</select><button class="btn btn-sm" data-rd="reparse">换规则重解析</button></span></div>'+
+'<div class="bk-toc" id="rd-toc"><button class="btn btn-primary" data-rd="loadtoc">'+I('docs')+'开始阅读 · 取目录</button></div></div>';
+rdFoot().innerHTML='<span class="muted" style="font-size:12px">点章节先读；入素材库只记摘录，全文留在你的文件里。</span>';
+}).catch(function(err){
+if(RD.pane!=='book')return;
+rdDetailFail(b,err.message||'服务未响应');
+});
+}
+function rdDetailFail(b,msg){
+rdApply();
+rdScroll().innerHTML='<div class="rd-body">'+
+'<p class="rd-fetch err" role="alert">'+I('warning')+'<span>详情获取失败：'+esc(msg)+'。可以重试，或换一个源。</span></p>'+
+'<div class="n-act"><button class="btn" data-rd="retryinfo">'+I('refresh')+'重试获取</button></div>'+
+'<div class="bk-head" style="margin-top:14px"><span class="bk-cover">'+esc((b.name||'?').slice(0,2))+'</span><div class="bk-info"><h1>'+esc(b.name||'(无题)')+'</h1>'+
+'<p class="bk-author">'+esc([b.author,b.kind,b.wordCount].filter(Boolean).join(' · '))+'</p>'+
+'<button class="bk-origin" data-rd="swap" aria-label="换源">换源试试</button></div></div>'+
+'<div class="rd-sec-head"><h2>目录</h2><span class="muted" style="font-size:12px">详情未取到，目录暂不可用</span></div></div>';
+rdFoot().innerHTML='';
+}
+function rdLoadToc(){
+var b=RD.book||{},src=b.origin||'',bu=b.bookUrl||'';
+var box=$('rd-toc');if(box)box.innerHTML='<p class="action-hint">正在取目录…</p>';
+var local=rdIsLocal(b);
+var req=local?getJSON('/api/localbook/toc?id='+encodeURIComponent(rdLocalId(b))):getJSON('/api/book/toc?sourceUrl='+encodeURIComponent(src)+'&bookUrl='+encodeURIComponent(bu));
+req.then(function(d){
+var bx=$('rd-toc');if(!bx||RD.pane!=='book')return;
+if(!d||d.status==='absent'){bx.innerHTML='<p class="action-hint">引擎未就绪，目录读取失败。<button class="btn btn-sm" data-rd="loadtoc" style="margin-left:8px">重试</button></p>';return;}
 var ch=(d.chapters||[]).slice(0,200);
-if(!ch.length){box.innerHTML='<p class="action-hint">这本书没解析出目录。</p>';return;}
+if(!ch.length){bx.innerHTML='<p class="action-hint">这本书没解析出目录。</p>';return;}
 RD.chapters=ch;
-box.innerHTML=ch.map(function(c,i){return '<button data-rd="chapter" data-n="'+(i+1)+'"><span class="n">'+(i+1)+'</span><span>'+esc(c.title||'(无题)')+'</span></button>';}).join('');
-}).catch(function(err){var box=$('rd-toc');if(box)box.innerHTML='<p class="action-hint">目录读取失败：'+esc(err.message)+'</p>';});
+bx.innerHTML=ch.map(function(c,i){return '<button data-rd="chapter" data-n="'+(i+1)+'"><span class="n">'+(i+1)+'</span><span>'+esc(c.title||'(无题)')+'</span></button>';}).join('');
+}).catch(function(err){var bx=$('rd-toc');if(bx)bx.innerHTML='<p class="action-hint">目录读取失败：'+esc(err.message)+' <button class="btn btn-sm" data-rd="loadtoc" style="margin-left:8px">重试</button></p>';});
 }
 async function rdRenderChapter(n){
 try{
 var b=RD.book||{},src=b.origin||'',bu=b.bookUrl||'';
 var ch=(RD.chapters||[])[n-1];
 if(!ch||!ch.url){toast('缺章节地址，请回目录重选',ER);return;}
-var d=await getJSON('/api/book/chapter?sourceUrl='+encodeURIComponent(src)+'&bookUrl='+encodeURIComponent(bu)+'&chapterUrl='+encodeURIComponent(ch.url));
+var d,local=rdIsLocal(b);
+if(local){
+var realN=+(String(ch.url).split('#')[1]||n);
+d=await getJSON('/api/localbook/chapter?id='+encodeURIComponent(rdLocalId(b))+'&n='+realN);
+if(!d||d.ok===false){toast('取章失败：'+((d&&d.error)||'原文件不可读'),ER);return;}
+}else{
+d=await getJSON('/api/book/chapter?sourceUrl='+encodeURIComponent(src)+'&bookUrl='+encodeURIComponent(bu)+'&chapterUrl='+encodeURIComponent(ch.url));
 if(!d||d.status==='absent'){toast('引擎未就绪，取章失败',ER);return;}
+}
 RD.n=n;RD.title=(ch&&ch.title)||d.title||('第 '+n+' 章');
 rdApply();
 rdScroll().innerHTML='<article class="rd-article"><p class="ch-kicker">'+esc((b.name||'')+' · 第 '+n+' 章')+'</p>'+
@@ -92,7 +174,10 @@ rdFoot().innerHTML='<button class="btn" data-rd="prev"'+(n<=1?' disabled':'')+'>
 function rdRenderWeb(){
 rdApply();
 if(RD.phase==='loading'){
-rdScroll().innerHTML='<div class="rd-article" role="status" aria-label="正在读取网页">'+[14,26,13,15,15,15,15].map(function(h,i){return '<div class="skel skel-line" style="height:'+h+'px;width:'+[38,82,28,100,96,100,62][i]+'%;margin-bottom:12px"></div>';}).join('')+'</div>';
+rdScroll().innerHTML='<div class="rd-article" role="status" aria-label="正在读取网页">'+
+'<div class="rd-web-steps"><span class="w-step doing"><i></i>请求页面</span><span class="w-step"><i></i>抽取正文</span><span class="w-step"><i></i>渲染阅读</span></div>'+
+[14,26,13,15,15,15,15].map(function(h,i){return '<div class="skel skel-line" style="height:'+h+'px;width:'+[38,82,28,100,96,100,62][i]+'%;margin-bottom:12px"></div>';}).join('')+'</div>';
+setTimeout(function(){var s=document.querySelector('.rd-web-steps');if(s){s.children[0].className='w-step done';s.children[1].className='w-step doing';}},900);
 rdFoot().innerHTML='';
 return;
 }
@@ -129,6 +214,8 @@ if(!RD.pane||$('reader-pane').hidden)return;
 var t=e.target.closest('[data-rd]');if(!t)return;
 var act=t.getAttribute('data-rd');
 if(act==='close'){rdClose();return;}
+if(act==='loadtoc'){rdLoadToc();return;}
+if(act==='retryinfo'){rdRenderBookDetail();return;}
 if(act==='fs'){RD.fs=Math.min(1.4,Math.max(.8,Math.round((RD.fs+ +t.getAttribute('data-d')*.1)*10)/10));rdApply();return;}
 if(act==='mode'){RD.mode=t.getAttribute('data-v');rdApply();return;}
 if(act==='focus'){RD.focus=!RD.focus;rdApply();return;}
@@ -138,11 +225,29 @@ if(act==='next'){rdRenderChapter(RD.n+1);return;}
 if(act==='range'){RD.range=t.getAttribute('data-v');rdRenderChapter(RD.n);return;}
 if(act==='ingest'){
 var range={one:1,l5:5,l10:10}[RD.range]||1;
-var list=(RD.chapters||[]).slice(RD.n-1,RD.n-1+range).map(function(c,i){return {url:c.url,index:RD.n+i,title:c.title};});
+var win=(RD.chapters||[]).slice(RD.n-1,RD.n-1+range);
 var b=RD.book||{};
+if(rdIsLocal(b)){
+var nums=win.map(function(c){return +(String(c.url).split('#')[1]||0);}).filter(function(x){return x>=1;});
+if(!nums.length){toast('缺章节号，请回目录重选',ER);return;}
+postJSON('/api/materials/from-local-chapters',{confirm:true,id:rdLocalId(b),chapters:nums,book:{name:b.name||''}})
+.then(function(d){queued(d.job_id);rdClose();})
+.catch(function(err){toast('提交失败：'+err.message,ER);});
+return;
+}
+var list=win.map(function(c,i){return {url:c.url,index:RD.n+i,title:c.title};});
 postJSON('/api/materials/from-chapters',{confirm:true,sourceUrl:b.origin||'',bookUrl:b.bookUrl||'',book:{name:b.name||'',author:b.author||''},chapters:list,digest:false})
 .then(function(d){queued(d.job_id);rdClose();})
 .catch(function(err){toast('提交失败：'+err.message,ER);});
+return;
+}
+if(act==='reparse'){
+var lb=RD.book||{};
+var sel=$('rd-rule');var rule=sel?sel.value:'';
+postJSON('/api/localbook/reparse',{id:rdLocalId(lb),rule:rule,confirm:true}).then(function(d){
+var bk=(d&&d.book)||{};
+toast('已按 '+(bk.rule_name||rule)+' 重解析 · '+(bk.structure==='fixed'?'未识别章节结构':(bk.chapters||0)+' 章'),OK);
+RD.chapters=null;rdRenderLocalDetail(RD.book);}).catch(function(err){toast('重解析失败：'+err.message,ER);});
 return;
 }
 if(act==='swap'){

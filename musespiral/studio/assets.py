@@ -1,9 +1,13 @@
 """Studio 静态资源与元信息（R2 自 studio.py 搬迁；M1 前端多文件化加产物静态面）。
 
   - /asset 静态路由数据面：_asset_response（图片白名单 + root 边界）
+  - /media/<rel> 静态面（B3 2026-11-26）：_media_static_response（双域
+    白名单只读——文章工作区 + 素材仓 materials/ 子树；视频预览必需）
   - /assets/* 产物静态面：_studio_asset_response（M1 前端多文件化——JS/CSS
     白名单 + studio assets root 边界 + ETag/304，见 _ASSET_TYPES 注）
   - 预览图片 src 重写：_asset_url/_rewrite_local_images（iframe 专用）
+    + 视频版 _media_url/_rewrite_local_videos（B3：:::video 块 src/poster
+    → /media/<rel>）
   - /api/meta 数据面：_meta_payload（root/version/ai_configured，凭证不进响应）
   - ui.html 读取：_read_ui_html（importlib.resources，未打包时 None）
 """
@@ -90,6 +94,116 @@ def _asset_response(
     except OSError:
         raise _HttpError(404, f"图片读取失败: {rel}") from None
     return 200, ctype, body
+
+
+# ── B3 多媒体静态面 /media/<rel>（2026-11-26，三线扩展设计 §3.4）────────
+# 双域只读：①文章工作区（ctx.root）——视频文章引用的 assets/xxx.mp4、
+# 编辑器插入的 media/xxx.png（预览 iframe 与素材卡消费）；②素材仓
+# （~/.musespiral/materials/ 子树，精确前缀 materials/）——本地视频
+# <id>.mp4 与首帧封面 <id>.poster.jpg（素材库抽屉 <video>、卡片缩略消费）。
+# 为什么不像 /asset 只挂 query：视频/封面引用形态是「路径即身份」（前端
+# src=/media/… 直拼），与 /assets/* 产物面同款 server 层旁路。安全三门
+# 与 /asset 同纪律：rel 必须相对路径且 resolve 后落在允许域内（../、
+# 绝对路径、NUL 一律 400）；后缀白名单 mp4/webm/mov/jpg/jpeg/png/webp/gif
+# （svg 恒拒——同 _STATIC_TYPES 判例）；必须命中真实文件（404）。
+# materials/ 前缀域额外锁死在 home/materials 子树内——home 下的
+# credentials.json/ai.json 等敏感文件即便伪造媒体后缀也出不了
+# 「materials/ 子树 + 白名单」双门。
+_MEDIA_TYPES: dict[str, str] = {
+    "mp4": "video/mp4",
+    "webm": "video/webm",
+    "mov": "video/quicktime",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "webp": "image/webp",
+    "gif": "image/gif",
+}
+# 素材仓前缀域的第二基根判据：以 materials/ 开头的 rel 才尝试 home 基根
+_MAT_PREFIX = "materials/"
+
+
+def _media_static_response(ctx: _StudioContext, rel: str) -> tuple[int, str, Path]:
+    """GET /media/<rel>：媒体文件（双域白名单只读——见 _MEDIA_TYPES 注）。
+
+    返回 (200, Content-Type, 文件 Path)——**字节流由 server 层分块写出**
+    （视频 GB 级不能整读进内存；图片顺带同路径，行为一致）。越界/非法
+    400、白名单外/缺失 404（_HttpError，表现层统一 JSON 化）。"""
+    raw = rel.strip()
+    if not raw:
+        raise _HttpError(400, "路径不能为空（需媒体相对路径）")
+    if "\x00" in raw or Path(raw).is_absolute():
+        raise _HttpError(400, "只接受相对路径（禁止绝对路径）")
+    suffix = Path(raw).suffix.lower().lstrip(".")
+    ctype = _MEDIA_TYPES.get(suffix)
+    if ctype is None:
+        raise _HttpError(
+            404,
+            f"不是可服务的媒体类型（{'/'.join(_MEDIA_TYPES)}；svg 恒拒）: .{suffix}",
+        )
+    from .. import config  # 函数体内导入（导入期解耦）
+
+    # 域一：文章工作区（_resolve_file 自带 400 越界 / 404 不存在）
+    try:
+        return 200, ctype, _resolve_file(ctx.root, raw)
+    except _HttpError as err:
+        if not (err.code == 404 and raw.startswith(_MAT_PREFIX)):
+            raise
+    # 域二：素材仓子树（rel 以 materials/ 开头才尝试；越界/缺失同款 400/404）
+    mats = (config.home_dir() / "materials").resolve()
+    try:
+        target = (config.home_dir() / raw).resolve()
+    except (OSError, ValueError):
+        raise _HttpError(400, f"路径非法: {raw}") from None
+    if not target.is_relative_to(mats):
+        raise _HttpError(400, f"路径越界（必须仍在素材仓 materials/ 内）: {raw}")
+    if not target.is_file():
+        raise _HttpError(404, f"文件不存在: {raw}")
+    return 200, ctype, target
+
+
+# 视频块（:::video 容器，renderer 产物）的本地 src/poster 预览重写——
+# _asset_url 的视频版：白名单换 _MEDIA_TYPES、URL 形态换 /media/<rel>
+def _media_url(root: Path, article_path: Path, src: str) -> str | None:
+    """视频/封面 src → /media/<root 内相对路径>；外链/绝对/白名单外 None。"""
+    raw = src.strip()
+    if not raw:
+        return None
+    parsed = urlparse(raw)
+    if parsed.scheme or parsed.netloc or raw.startswith("//"):
+        return None
+    if Path(raw).is_absolute():
+        return None
+    try:
+        target = (article_path.parent / raw).resolve()
+    except (OSError, ValueError):
+        return None
+    if not target.is_relative_to(root) or not target.is_file():
+        return None
+    if target.suffix.lower().lstrip(".") not in _MEDIA_TYPES:
+        return None
+    # safe="/"：路径分隔符保持字面（%2F 形态浏览器会按需再编码，可读性差），
+    # 仅 CJK/空格等真不安全字符走百分号编码
+    return "/media/" + quote(_rel(root, target), safe="/")
+
+
+_VIDEO_TAG_RE = re.compile(r"<video\b[^>]*>", re.IGNORECASE)
+_VIDEO_ATTR_RE = re.compile(r'\b(src|poster)="([^"]*)"', re.IGNORECASE)
+
+
+def _rewrite_local_videos(html: str, root: Path, article_path: Path) -> str:
+    """iframe 预览专用：视频块 src/poster 重写为 /media/<rel>（img 走既有
+    _rewrite_local_images 的 /asset——两族互补，发布上传仍用原始相对路径）。"""
+    def _tag_repl(match: re.Match[str]) -> str:
+        def _attr_sub(am: re.Match[str]) -> str:
+            url = _media_url(root, article_path, am.group(2))
+            if url is None:
+                return am.group(0)
+            return f'{am.group(1)}="{url}"'
+
+        return _VIDEO_ATTR_RE.sub(_attr_sub, match.group(0))
+
+    return _VIDEO_TAG_RE.sub(_tag_repl, html)
 
 
 # M1 前端多文件化（2026-11-18，正典《musespiral-前端多文件化设计》§四）：studio

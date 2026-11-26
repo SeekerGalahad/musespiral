@@ -155,6 +155,22 @@ class Renderer:
             return f'<pre style="{self.styles["code_block"]}">{highlighted}</pre>'
         if btype == "image":
             return f'<img src="{block["src"]}" alt="{block.get("alt", "")}" style="{self.styles["image"]}" />'
+        if btype == "video":
+            # B3 :::video 块（2026-11-26）：<figure class="md-video"> 内嵌播放器。
+            # class 留给 studio 预览（WeChat 会剥 class，样式不依赖它）；src/
+            # poster 属性值经 html_escape——frontmatter/正文来源不可信，原样
+            # 插值会把 "x" onload=… 之类注入进预览 iframe 同源文档。
+            src = html_escape(str(block.get("src") or ""))
+            poster = str(block.get("poster") or "").strip()
+            attrs = f' src="{src}"'
+            if poster:
+                attrs += f' poster="{html_escape(poster)}"'
+            caption = str(block.get("caption") or "").strip()
+            return (
+                '<figure class="md-video"><video controls' + attrs + "></video>"
+                + (f"<figcaption>{html_escape(caption)}</figcaption>" if caption else "")
+                + "</figure>"
+            )
         if btype == "table":
             return f'<table style="{self.styles["table"]}">{block["html"]}</table>'
         if btype == "hr":

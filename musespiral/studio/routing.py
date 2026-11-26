@@ -30,6 +30,12 @@ from .booksource_actions import (  # R0 书源功能（契约 §3.9）：四读�
 )
 from .health import _health_payload, _healthz_payload  # W1-B1：+ /api/healthz 五键探针
 from .ingest_actions import _ingest_status_payload  # B 采集扩展：采集面状态（只读）
+from .localbook_actions import (  # B1 本地书籍（2026-11-26，契约 §3.27）：四读面
+    _localbook_chapter_payload,
+    _localbook_info_payload,
+    _localbook_list_payload,
+    _localbook_toc_payload,
+)
 from .media_actions import _media_preview_response  # G1 文生图：预览字节流（A-2）
 from .payload import (
     _annotations_payload,
@@ -46,6 +52,7 @@ from .payload import (
     _jobs_payload,
     _material_collections_payload,
     _material_detail_payload,
+    _materials_render_payload,
     _material_file_response,
     _material_iterations_diff_payload,
     _material_iterations_payload,
@@ -165,6 +172,7 @@ _GET_ROUTES = _RouteSet(
             "/api/discover/star",  # 档A M0：收藏星标 triage.starred（GET 读集合+最近记录）
             "/api/materials",  # 第二十期 F56：素材查询+评分现算（发现页收编后端，M2；UI 归 M3）
             "/api/materials/detail",  # M3：素材详情（血统引用状态）+ 删除连坐预览
+            "/api/materials/render",  # 素材查看器批（2026-11-26）：md→HTML 沙箱渲染数据面
             "/api/materials/file",  # 第二十一期 F60：素材文件字节流（三道门；与 /asset 同构不同域）
             "/api/materials/tags",  # 第二十一期 F63：标签频次表（全库现算 count 降序）
             "/api/materials/collections",  # 第二十一期 F62：手工集合清单（GET/POST 双态路径）
@@ -209,6 +217,15 @@ _GET_ROUTES = _RouteSet(
             "/api/book/original",
             # 2026-11-24 源中枢重设计批：阅读面板「未入库先读章」（零落盘）
             "/api/book/chapter",
+            # B1 本地书籍（2026-11-26，契约 §3.27，正典=《musespiral-三线扩展设计
+            # -本地TXT书籍-视觉编辑2-多媒体-2026-11-26》§1.2）：书架清单 / 详情 /
+            # 目录（bookengine 同形）/ 单章正文（引用型现取、cap 200k）。四读面
+            # 全走精确路由（id/n 是 query 参数不是路径段——本地书 id 恒定 12 位
+            # 十六进制，无动态段必要）。GET 51→55。
+            "/api/localbook/list",
+            "/api/localbook/info",
+            "/api/localbook/toc",
+            "/api/localbook/chapter",
             # §3.16 新增（G-T5 TTS 朗读 2026-11-19，调研吸收 §六）：朗读产物
             # MP3 字节流（内嵌 <audio src> 直指，仅 .mp3 + 魔数复核）
             "/api/tts/file",
@@ -266,6 +283,8 @@ def _get_response(
         return 200, _JSON_CTYPE, _json_bytes(_material_search_payload(ctx, query))
     if path == "/api/materials/detail":
         return 200, _JSON_CTYPE, _json_bytes(_material_detail_payload(ctx, query))
+    if path == "/api/materials/render":  # 素材查看器批（2026-11-26）
+        return 200, _JSON_CTYPE, _json_bytes(_materials_render_payload(ctx, query))
     if path == "/api/materials/file":
         return _material_file_response(ctx, query)
     if path == "/api/materials/tags":
@@ -327,6 +346,15 @@ def _get_response(
         return 200, _JSON_CTYPE, _json_bytes(_book_original_payload(ctx, query))
     if path == "/api/book/chapter":
         return 200, _JSON_CTYPE, _json_bytes(_book_chapter_payload(ctx, query))
+    # B1 本地书籍（契约 §3.27）：四读面（书架/详情/目录/单章正文）
+    if path == "/api/localbook/list":
+        return 200, _JSON_CTYPE, _json_bytes(_localbook_list_payload(ctx, query))
+    if path == "/api/localbook/info":
+        return 200, _JSON_CTYPE, _json_bytes(_localbook_info_payload(ctx, query))
+    if path == "/api/localbook/toc":
+        return 200, _JSON_CTYPE, _json_bytes(_localbook_toc_payload(ctx, query))
+    if path == "/api/localbook/chapter":
+        return 200, _JSON_CTYPE, _json_bytes(_localbook_chapter_payload(ctx, query))
     # G-T5 TTS 朗读（契约 §3.16）：MP3 字节流（三道门在 tts_actions）
     if path == "/api/tts/file":
         return _tts_file_response(ctx, query)

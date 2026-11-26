@@ -48,23 +48,74 @@ def _write_cache(token: str, expires_at: float) -> None:
     )
 
 
+def _wechat_source_address() -> str | None:
+    """微信 API 走物理网卡直连（PolessVPN TUN 出口 IP 不在公众号白名单——
+    2026-11-26 闭环测试发现 40164）。枚举 en* 物理网卡取 IPv4（默认路由走
+    utun 时 route get 不会指向物理口——直接扫 ifconfig）；缺失回退 None。"""
+    import subprocess
+
+    try:
+        r = subprocess.run(["ifconfig"], capture_output=True, text=True, timeout=3)
+        current_iface = None
+        for line in (r.stdout or "").splitlines():
+            if line and not line.startswith("\t") and not line.startswith(" "):
+                # 新网卡行（如 en1: flags=...）
+                name = line.split(":")[0].strip()
+                current_iface = name
+            elif current_iface and current_iface.startswith("en") and "inet " in line:
+                ip = line.split("inet ")[1].split(" ")[0]
+                if ip and not ip.startswith("127."):
+                    return current_iface  # 返回接口名（en1）——curl --interface 用
+    except (subprocess.SubprocessError, OSError):
+        pass
+    return None
+
+
 def _fetch_token(appid: str, secret: str) -> tuple[str, float]:
-    """Call stable_token and return (token, expires_at_epoch)."""
+    """Call stable_token and return (token, expires_at_epoch).
+
+    网络路径：优先绑定物理网卡源地址直连（PolessVPN TUN 出口 IP 不在
+    公众号白名单——40164 实测 2026-11-26）；直连失败回退默认路由。
+    """
     url = f"{config.WECHAT_API_BASE}/cgi-bin/stable_token"
-    resp = requests.post(
-        url,
-        json={
-            "grant_type": "client_credential",
-            "appid": appid,
-            "secret": secret,
-            "force_refresh": False,
-        },
-        timeout=15,
-    )
-    data = resp.json()
-    token = data.get("access_token")
-    if not token:
-        raise TokenError(f"获取 access_token 失败: {data}")
+    body = {
+        "grant_type": "client_credential",
+        "appid": appid,
+        "secret": secret,
+        "force_refresh": False,
+    }
+
+    def _post(addr: str | None) -> dict:
+        if addr:
+            # macOS TUN 全局劫持：bind 源 IP 不够，须 curl --interface 绕 IFSCOPE
+            import subprocess
+
+            r = subprocess.run(
+                ["curl", "-s", "-m", "15", "-X", "POST",
+                 "-H", "Content-Type: application/json",
+                 "-d", json.dumps(body), "--interface", addr, url],
+                capture_output=True, text=True, timeout=20,
+            )
+            if r.returncode == 0 and r.stdout.strip():
+                return json.loads(r.stdout)
+            raise RuntimeError(f"curl direct fail: {r.stderr[:80]}")
+        resp = requests.post(url, json=body, timeout=15)
+        return resp.json()
+
+    _src = _wechat_source_address()
+    data: dict = {}
+    last_err: Exception | None = None
+    for addr in ([_src] if _src else []) + [None]:
+        try:
+            data = _post(addr)
+            if data.get("access_token"):
+                break  # 成功（直连或默认均可）
+            last_err = TokenError(f"获取 access_token 失败: {data}")
+        except Exception as exc:
+            last_err = exc
+    if not data.get("access_token"):
+        raise last_err or TokenError(f"获取 access_token 失败: {data}")
+    token = data["access_token"]
     expires_at = time.time() + data.get("expires_in", _TOKEN_EXPIRY_SECONDS)
     return token, expires_at
 

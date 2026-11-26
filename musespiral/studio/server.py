@@ -3,7 +3,9 @@
   - _make_handler：closure 持有 _StudioContext 的 BaseHTTPRequestHandler
     （方法表仅 GET/POST，其余 405；错误统一 JSON，不吐 HTML traceback）
   - GET / 与 GET /assets/* 为 server 层特判（静态文件非 API 面；后者 ETag
-    304 需读 If-None-Match 请求头），其余 GET 走 _GET_ROUTES 分派
+    304 需读 If-None-Match 请求头），GET /media/<rel> 同为 server 层只读
+    旁路（B3 多媒体：视频/封面字节流，双域白名单门在 assets 层），其余
+    GET 走 _GET_ROUTES 分派
   - 静态文本面（js/css/html）按 Accept-Encoding 协商 gzip（问题 12，见 assets._maybe_gzip）
   - make_server：ThreadingHTTPServer 装配（只绑 127.0.0.1，port=0 系统分配）
 公开入口 make_server 由包 __init__ re-export（签名不变）。
@@ -14,10 +16,15 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from .actions import _ACTION_ROUTES
-from .assets import _maybe_gzip, _read_ui_html, _studio_asset_response
+from .assets import (
+    _maybe_gzip,
+    _media_static_response,
+    _read_ui_html,
+    _studio_asset_response,
+)
 from .plugin_actions import (  # 三态裁决动态 POST（AI-1 批）+ 节点重生成（AI-3 批）
     resolve_adjudicate_post,
     run_adjudicate,
@@ -111,6 +118,21 @@ def _make_handler(ctx: _StudioContext) -> type[BaseHTTPRequestHandler]:
                             ctype, body, self.headers.get("Accept-Encoding"), extra
                         )
                     self._send(status, ctype, body, extra)
+                    return
+                if path.startswith("/media/") and len(path) > len("/media/"):
+                    # B3 多媒体（2026-11-26）：/media/<rel> 只读旁路——视频预览
+                    # （抽屉 <video>、文章 iframe 的 :::video 块）与素材封面消费
+                    # 面。与 /assets/* 同为 server 层特判（非 API 面、不进
+                    # _GET_ROUTES 契约锁）；此处 percent-解码（文章目录可含
+                    # CJK 文件名），三道门（双域边界/白名单/存在性）在
+                    # assets._media_static_response；字节流分块写出（视频 GB 级
+                    # 不整读进内存）。
+                    if method != "GET":
+                        raise _HttpError(405, "方法不允许（仅 GET/POST）")
+                    status, ctype, src = _media_static_response(
+                        ctx, unquote(path[len("/media/") :])
+                    )
+                    self._send_stream(status, ctype, src)
                     return
                 # 三态裁决（AI-1 批 2026-11-21，契约 §3.19 修订 3）+ 节点重
                 # 生成（AI-3 批 2026-11-21）：动态段 POST（/api/pipelines/
@@ -243,6 +265,29 @@ def _make_handler(ctx: _StudioContext) -> type[BaseHTTPRequestHandler]:
                 return
             try:
                 self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # 客户端提前断开不影响服务端
+
+        # B3 /media/ 专用：分块流式写文件（视频 GB 级不整读进内存；客户端
+        # 提前断开/取消 seek 会反复断连——BrokenPipe 静默同 _send 判例）。
+        def _send_stream(self, code: int, ctype: str, src: Path) -> None:
+            try:
+                size = src.stat().st_size
+            except OSError:
+                raise _HttpError(404, f"媒体读取失败: {src.name}") from None
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(size))
+            self.end_headers()
+            if self.command == "HEAD":
+                return
+            try:
+                with src.open("rb") as fh:
+                    while True:
+                        chunk = fh.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
             except (BrokenPipeError, ConnectionResetError):
                 pass  # 客户端提前断开不影响服务端
 

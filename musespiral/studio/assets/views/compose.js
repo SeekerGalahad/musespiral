@@ -93,8 +93,8 @@ catch(err){toast('移除失败：'+err.message,ER);}
 var CMTAB='disc',cmMtQ='',cmMine=null,cmMineFail='';
 function cmMineRows(added){
 var L=(cmMine||[]).filter(function(m){
-if(!(m.payload||{}).text)return false;
-if(cmMtQ){var hay=(String(m.title||'')+' '+String(m.payload.text||'')).toLowerCase();if(hay.indexOf(cmMtQ.toLowerCase())<0)return false;}
+if(!(m.payload||{}).text&&String((m.origin||{}).uri||'').indexOf('localbook:')!==0)return false;
+if(cmMtQ){var _pl=m.payload||{},hay=(String(m.title||'')+' '+String((m.origin||{}).title||'')+' '+String(_pl.text||'')).toLowerCase();if(hay.indexOf(cmMtQ.toLowerCase())<0)return false;}
 return true;
 }).slice(0,20);
 return L.length?L.map(function(m){
@@ -112,7 +112,18 @@ var added={};
 return added;
 }
 function cmMineLoad(){
-getJSON('/api/materials?limit=200').then(function(d){cmMine=Array.isArray(d.items)?d.items:[];cmMineFail='';renderCmPool();}).catch(function(err){cmMine=[];cmMineFail=err.message||'服务未响应';renderCmPool();});
+Promise.all([
+getJSON('/api/materials?limit=200'),
+getJSON('/api/sources').then(function(ss){
+var ss2=(ss.list||ss.sources||ss.items||[]).filter(function(s){return s.enabled!==false;});
+var dirs=ss2.filter(function(s){return s.type==='dir'||s.type==='localbook';});
+return Promise.all(dirs.map(function(s){return getJSON('/api/materials?source='+encodeURIComponent(s.id)+'&limit=100').catch(function(){return {items:[]};});}));
+}).then(function(ds){return {items:ds.reduce(function(a,d){return a.concat((d&&d.items)||[]);},[])};}).catch(function(){return {items:[]};})
+]).then(function(ds){
+var seen={},rows=[];
+(ds[0].items||[]).concat(ds[1].items||[]).forEach(function(m){if(m&&m.id&&!seen[m.id]){seen[m.id]=1;rows.push(m);}});
+cmMine=rows;cmMineFail='';renderCmPool();
+}).catch(function(err){cmMine=[];cmMineFail=err.message||'服务未响应';renderCmPool();});
 }
 function renderCmPool(){
 var added=cmAddedMap(),cand;

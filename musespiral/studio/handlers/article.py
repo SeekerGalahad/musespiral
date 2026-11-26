@@ -1,4 +1,4 @@
-"""article 域动作：/api/article/* + /api/editor/* + /api/annotations/* + /api/visual/* + /api/action/{quality_loop,title_ab}（13 条）。
+"""article 域动作：/api/article/* + /api/editor/* + /api/annotations/* + /api/visual/* + /api/action/{quality_loop,title_ab}（14 条）。
 
 R-2 按域登记（行为零变更）：执行体在前批已下沉的既有模块——edit_actions
 （R7 保存/批注增删/按批注 AI 改写）、editor_actions（E-3 微操作 + G-T1
@@ -16,9 +16,10 @@ from ..edit_actions import (  # R7：编辑保存/批注增删/按批注 AI 改�
     _action_annotation_delete,
     _action_save,
 )
-from ..editor_actions import (  # E-3 编辑器 AI 微操作（§3.11）+ G-T1 Ghost Text 续写
+from ..editor_actions import (  # E-3 编辑器 AI 微操作（§3.11）+ G-T1 Ghost Text 续写 + B3 插入媒体
     _action_editor_ai,
     _action_editor_ghost,
+    _action_insert_media,
 )
 from ..quality_actions import (  # P1 双件（契约 §3.26）：质量循环 job + 标题 A/B
     _action_quality_loop,
@@ -47,6 +48,8 @@ ROUTES: dict[str, Callable[[_StudioContext, dict[str, Any]], dict[str, Any]]] = 
     "/api/visual/save": _action_visual_save,  # Phase C F71/F72：设计稿落盘（版本池先行）
     "/api/visual/export": _action_visual_export,  # Phase C F71-F73：导出 job visual_export
     "/api/visual/preset": _action_visual_preset,  # Phase C F74：预设保存（纯 JSON）
+    # B3 2026-11-26：编辑器插入媒体（素材文件 → 文章 media/，durable 副本）
+    "/api/action/insert_media": _action_insert_media,
     "/api/action/quality_loop": _action_quality_loop,  # P1-A 2026-11-23：质量循环（check→AI 修复→再 check，job）
     "/api/action/title_ab": _action_title_ab,  # P1-B 2026-11-23：标题 A/B 三风格（generate 同步 / apply 写回）
 }

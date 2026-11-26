@@ -33,6 +33,8 @@ from ..core.visual.canvas import (
     ELEMENT_WHITELIST,
     REGISTRY,
     SEMANTIC_COLOR_SLOTS,
+    Background,
+    BLEND_MODES,
     CanvasDoc,
     layout_document,
     relayout_vertical,
@@ -56,7 +58,9 @@ DESIGN_SUFFIX = ".design"
 DESIGN_JSON = "design.json"
 PRESETS_SUBDIR = "visual_presets.d"
 
-KINDS: tuple[str, ...] = ("cover", "social", "infographic")
+# B2：kind=article（图文长页/章节分隔——新六模板中两枚；CLI Choice 与
+# load/save 枚举执法都经本表单一事实源扩散）
+KINDS: tuple[str, ...] = ("cover", "social", "infographic", "article")
 _ROUTE_BROWSER = "browser"
 _ROUTE_PILLOW = "pillow"
 
@@ -79,7 +83,89 @@ _SLOT_FALLBACK = {
 }
 
 # 设计稿 SVG 文件命名（kind → 固定名；social 走 social-<n> 递增）
-_SVG_NAME = {"cover": "cover.svg", "infographic": "infographic.svg"}
+_SVG_NAME = {"cover": "cover.svg", "infographic": "infographic.svg", "article": "article.svg"}
+
+
+# ── B2 v2 层：背景/图层状态（design.json v2 的 background + elements）────
+
+
+def _apply_background(doc: CanvasDoc, meta: Any, bg_raw: object) -> None:
+    """把设计稿 background（dict|None）落到 doc 上并过双门：
+
+    - Background.from_dict 全套字段校验（含 http 拒——光栅不触网在存储面复验）；
+    - 模板 meta.backgrounds 允许集执法（模板只许声明过的背景种类）。
+    None/缺省 → 不动 doc（保留模板 build 的槽色底——v1 语义）。"""
+    if bg_raw is None:
+        return
+    bg = Background.from_dict(bg_raw)
+    if bg.kind not in meta.backgrounds:
+        raise ValueError(
+            f"模板 {meta.id!r} 不允许背景种类 {bg.kind!r}"
+            f"（允许: {'/'.join(meta.backgrounds)}）"
+        )
+    doc.background = bg
+
+
+_LAYER_KEYS = ("i", "z", "opacity", "locked", "visible", "blend", "dx", "dy", "fill")
+# 图层行 fill（文字元素客户端改色）：hex 形态执法（与 model._HEX_COLOR 同口径，
+# 局部复写不 import 私有名——服务层自有正则）
+_LAYER_HEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
+
+
+def _check_layers(elements: object, *, where: str = "elements") -> list[dict[str, Any]]:
+    """design.json v2 elements（图层状态表）执法：[{i,z,opacity,locked,visible,
+    blend,dx?,dy?,fill?}]——i=doc 元素序（前端 data-o），z 为绘制层级，fill 为
+    文字元素客户端改色（hex）；违例可读 ValueError（400 面）。返回归一化列表
+    （缺省键补默认——i/z/dx/dy=0、opacity=1、locked=False、visible=True、
+    blend=normal、fill 不落键）。"""
+    if elements is None:
+        return []
+    if not isinstance(elements, list):
+        raise ValueError(f"设计稿 {where} 应为数组（图层状态表）")
+    out: list[dict[str, Any]] = []
+    for n, raw in enumerate(elements):
+        if not isinstance(raw, dict):
+            raise ValueError(f"设计稿 {where}[{n}] 应为对象，得到 {type(raw).__name__}")
+        unknown = [k for k in raw if k not in _LAYER_KEYS]
+        if unknown:
+            raise ValueError(
+                f"设计稿 {where}[{n}] 未知键 {unknown}"
+                f"（可选: {'/'.join(_LAYER_KEYS)}）"
+            )
+        row: dict[str, Any] = {}
+        for key in ("i", "z", "dx", "dy"):
+            v = raw.get(key, 0)
+            if isinstance(v, bool) or not isinstance(v, int):
+                raise ValueError(f"设计稿 {where}[{n}].{key}: 应为整数，得到 {v!r}")
+            if key == "i" and v < 0:  # 元素序无负值；z/dx/dy 负值合法（层级/位移）
+                raise ValueError(f"设计稿 {where}[{n}].i: 应为非负整数，得到 {v!r}")
+            row[key] = v
+        op = raw.get("opacity", 1.0)
+        if isinstance(op, bool) or not isinstance(op, (int, float)) or not 0.0 <= op <= 1.0:
+            raise ValueError(f"设计稿 {where}[{n}].opacity: 应在 0..1，得到 {op!r}")
+        row["opacity"] = float(op)
+        for key in ("locked", "visible"):
+            v = raw.get(key, key != "locked")
+            if not isinstance(v, bool):
+                raise ValueError(f"设计稿 {where}[{n}].{key}: 应为布尔，得到 {v!r}")
+            row[key] = v
+        blend = raw.get("blend", "normal")
+        if blend not in BLEND_MODES:
+            raise ValueError(
+                f"设计稿 {where}[{n}].blend: 非法混合模式 {blend!r}"
+                f"（可选: {'/'.join(BLEND_MODES)}）"
+            )
+        row["blend"] = blend
+        fill = raw.get("fill")
+        if fill is not None:
+            if not isinstance(fill, str) or not _LAYER_HEX.match(fill):
+                raise ValueError(
+                    f"设计稿 {where}[{n}].fill: 应为 hex 色（#rgb/#rrggbb/#rrggbbaa），"
+                    f"得到 {fill!r}"
+                )
+            row["fill"] = fill
+        out.append(row)
+    return out
 
 
 # ── 路径 ─────────────────────────────────────────────────────
@@ -129,15 +215,18 @@ def render(
     preset_params: dict[str, Any] | None = None,
     params_overrides: dict[str, Any] | None = None,
     article_path: str | Path | None = None,
+    background: dict[str, Any] | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    """{template, params, spec} → (SVG 字符串, 合并后最终 params)。
+    """{template, params, spec, background?} → (SVG 字符串, 合并后最终 params)。
 
     - article_path 给出时补齐封面模板缺省键（title/hook 自动取材——F71 步 1
       同一口径 title_and_hook，不复制取材逻辑）；
     - schema 违例（含色槽非法）抛可读 ValueError（由 API 转 400，
       F71-T3/F72-T2）；未知模板/规格抛可读 ValueError；
     - spec 每次重建 doc（build 按 spec 比例计算坐标）——**非拉伸**，文本
-      layout 在此重排（layout_document 对新 doc 全新测量，F72-T1）。
+      layout 在此重排（layout_document 对新 doc 全新测量，F72-T1）；
+    - B2：background 给出时经 _apply_background 落 doc（Background 全字段
+      校验 + 模板允许集执法）；None=模板槽色底（v1 语义不变）。
     """
     template = str(template or "").strip()
     if template not in REGISTRY:
@@ -161,6 +250,7 @@ def render(
         params=merged_in, overrides=params_overrides,
     )
     doc = meta.build(merged, theme_colors(theme), spec)
+    _apply_background(doc, meta, background)
     layout_document(doc)  # 新 doc 全新测量（非伸缩）
     relayout_vertical(doc)  # D-1 垂直重排：多行 text 下推后续同列元素
     svg = render_svg(doc)
@@ -169,6 +259,37 @@ def render(
 
 def _fill_article_defaults(params: dict[str, Any], meta: Any, article: Path) -> None:
     """封面/社媒模板缺省键自动取材（显式值不动；取材同 cover.title_and_hook）。"""
+    if meta.kind == "article":
+        # V4 修复（2026-11-26 视觉编辑审查批）：article-long 图文长页——
+        # title/subtitle/paragraphs 自动取材（正文 md 前几段、剥 HTML 标签
+        # /代码块/图片语法——模板槽是纯文本面，原始 markdown 会裸显示）
+        from ..core.content.parser import parse_article as _pa
+
+        _a = _pa(article)
+        _body = str(_a.raw_body or "")
+        # 剥图片/HTML 行内标签/代码块（视觉模板是文字排版面，不是 md 渲染面）
+        _body = _body.replace("```", "")
+        import re as _re
+
+        _body = _re.sub(r"!\[[^\]]*\]\([^)]*\)", "", _body)  # 图片
+        _body = _re.sub(r"</?[a-zA-Z][^>]*>", "", _body)  # HTML 标签
+        _body = _re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", _body)  # 链接→纯文字
+        _body = _re.sub(r":::video\{[^}]*\}", "", _body)  # V4 视频容器块
+        _body = _re.sub(r"<!--b:[^>]*-->", "", _body)  # 块标记注释
+        _body = _re.sub(r"^---$", "", _body, flags=_re.M)  # 分隔线
+        _paras = [s.strip() for s in _body.split("\n\n") if s.strip() and not s.strip().startswith("#")]
+        _paras = [s for s in _paras if len(s.strip()) > 4][:8]  # 取有效段
+        if not params.get("title"):
+            params["title"] = str(_a.metadata.get("title") or Path(article).stem)
+        if not params.get("subtitle") and _paras:
+            # 首段取前 60 字做副题
+            params["subtitle"] = _paras[0][:60] + ("…" if len(_paras[0]) > 60 else "")
+            _paras = _paras[1:]
+        if not params.get("paragraphs"):
+            params["paragraphs"] = "\n\n".join(_paras[:8])
+        if not params.get("footer"):
+            params["footer"] = "musespiral · 生成于 " + __import__("datetime").date.today().isoformat()
+        return
     if meta.kind not in ("cover", "social"):
         return
     title = params.get("title")
@@ -185,7 +306,9 @@ def _fill_article_defaults(params: dict[str, Any], meta: Any, article: Path) -> 
 def switch_spec(
     article_path: str | Path, *, new_spec: str, theme: str = "lapis"
 ) -> tuple[str, dict[str, Any]]:
-    """F72-T1 多尺寸切换：读 design.json params 按新 spec 重建（非拉伸重渲）。"""
+    """F72-T1 多尺寸切换：读 design.json params 按新 spec 重建（非拉伸重渲）。
+
+    B2：v2 稿的 background 随切（同稿同底——切规格丢背景属回归）。"""
     design = load_design(article_path)
     if design is None:
         raise ValueError("无设计稿，先存稿（缺少 design.json）")
@@ -196,6 +319,7 @@ def switch_spec(
         spec=new_spec,
         theme=theme,
         preset_params=_preset_params(design.get("preset_id")),
+        background=design.get("background"),
     )
 
 
@@ -206,7 +330,11 @@ def load_design(article_path: str | Path) -> dict[str, Any] | None:
     """读 design.json（缺文件 → None；坏结构 → 可读 ValueError）。
 
     载入时若有对应 SVG 文件，**重过白名单复验**（F72-T5：手改 design 目录
-    夹带 `<script>` 时抛可读错误——API 侧呈 200+{ok:false}，前端拿不到 svg）。
+    夹带 ``<script>`` 时抛可读错误——API 侧呈 200+{ok:false}，前端拿不到 svg）。
+
+    B2 v1→v2 读兼容：v1 老稿（无 version 键）**缺省补默认值**——version=1、
+    background=None（模板槽色底）、elements=[]（图层默认态）；v2 稿的
+    background/elements 原样透出（elements 经 _check_layers 归一执法）。
     """
     path = design_json_path(article_path)
     if not path.exists():
@@ -231,6 +359,18 @@ def load_design(article_path: str | Path) -> dict[str, Any] | None:
     overrides = raw.get("params_overrides")
     if overrides is not None and not isinstance(overrides, dict):
         raise ValueError("设计稿 params_overrides 应为对象或 null")
+    # B2：v1 补默认 / v2 执法归一（读侧恒有键——消费端零分叉）
+    if "version" not in raw or raw["version"] == 1:
+        raw["version"] = 1
+        raw["background"] = None
+        raw["elements"] = []
+    else:
+        if raw.get("version") != 2:
+            raise ValueError(f"设计稿 version 非法: {raw.get('version')!r}（可选: 1/2）")
+        bg = raw.get("background")
+        if bg is not None:
+            raw["background"] = Background.from_dict(bg).to_dict()  # 全字段执法+归一
+        raw["elements"] = _check_layers(raw.get("elements"))
     svg_path = _svg_path_for(article_path, kind, raw.get("svg"))
     if svg_path is not None and svg_path.exists():
         verify_svg(svg_path.read_text(encoding="utf-8"))
@@ -248,35 +388,45 @@ def save_design(
     preset_id: str | None = None,
     svg: str | None = None,
     theme: str = "lapis",
+    background: dict[str, Any] | None = None,
+    elements: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """设计稿落盘（design.json + 可再生 SVG）；版本池先行 + 原子写（§1.1）。
+    """设计稿落盘（design.json v2 + 可再生 SVG）；版本池先行 + 原子写（§1.1）。
 
     - kind/template/spec 枚举外抛 ValueError（400 面）；params schema 违例
       同（含色槽非法 → 槽清单）；
     - spec 缺省取模板首个适用规格；params_overrides 原样存（§1.1 读序）；
     - svg 显式给出时先过白名单复验再落盘（否则按 params 重新生成）；
+    - B2：v2 落盘形态 ``{version:2, background, elements:[{i,z,opacity,
+      locked,visible,blend,dx,dy}], params, spec, …}``——background/elements
+      提交期执法（Background 校验+模板允许集；_check_layers 归一），缺省存
+      None/[]（等价 v1 语义）；读侧 load_design 对 v1 老稿补默认兼容；
     - 返回 {dir, files, updated_at}（dir=绝对路径，调用方自行转 root 相对）。
     """
-    meta, spec, merged = _validate_save_request(
+    meta, spec, merged, bg_norm, layers = _validate_save_request(
         article_path, kind=kind, template=template, spec=spec, params=params,
         params_overrides=params_overrides, preset_id=preset_id,
+        background=background, elements=elements,
     )
-    svg_text = svg if svg is not None else _build_svg(meta, merged, spec, theme)
+    svg_text = svg if svg is not None else _build_svg(meta, merged, spec, theme, background=bg_norm)
     if svg is not None:
         verify_svg(svg)
     out_dir = Path(article_path).parent / f"{Path(article_path).stem}{DESIGN_SUFFIX}"
     return _write_design(
         out_dir, kind=kind, meta=meta, spec=spec, params=merged,
         params_overrides=params_overrides, preset_id=preset_id, svg_text=svg_text,
+        background=bg_norm, elements=layers,
     )
 
 
 def _validate_save_request(
     article_path: str | Path, *, kind: str, template: str, spec: str | None,
     params: dict[str, Any] | None, params_overrides: dict[str, Any] | None,
-    preset_id: str | None,
-) -> tuple[Any, str, dict[str, Any]]:
-    """save 的提交期校验（kind/template/spec/kind 匹配 + schema）→ (meta, spec, merged)。"""
+    preset_id: str | None, background: dict[str, Any] | None = None,
+    elements: list[dict[str, Any]] | None = None,
+) -> tuple[Any, str, dict[str, Any], dict[str, Any] | None, list[dict[str, Any]]]:
+    """save 的提交期校验（kind/template/spec/kind 匹配 + schema + B2 背景/图层）
+    → (meta, spec, merged, 归一 background, 归一 elements)。"""
     resolved_kind = str(kind or "").strip()
     if resolved_kind not in KINDS:
         raise ValueError(f"kind 非法: {kind!r}（可选: {'/'.join(KINDS)}）")
@@ -291,7 +441,7 @@ def _validate_save_request(
     if resolved_spec not in SPECS:
         raise ValueError(f"未知规格: {spec!r}（可选: {'/'.join(SPECS)}）")
     if resolved_spec not in meta.specs:
-        raise ValueError(f"规格 {spec!r} 不适用模板 {meta.id!r}（适用: {'/'.join(meta.specs)}）")
+        raise ValueError(f"规格 {resolved_spec!r} 不适用模板 {meta.id!r}（适用: {'/'.join(meta.specs)}）")
     preset = _load_preset_file(preset_id) if preset_id else None
     preset_params = (preset or {}).get("params") if preset else None
     # 先校验（违例零落盘——F71-T3）
@@ -299,11 +449,25 @@ def _validate_save_request(
         REGISTRY, meta.id, preset_params=preset_params,
         params=dict(params or {}), overrides=dict(params_overrides or {}),
     )
-    return meta, resolved_spec, merged
+    # B2：背景/图层提交期执法（模板允许集 + 全字段校验）
+    if background is not None:
+        bg = Background.from_dict(background)
+        if bg.kind not in meta.backgrounds:
+            raise ValueError(
+                f"模板 {meta.id!r} 不允许背景种类 {bg.kind!r}"
+                f"（允许: {'/'.join(meta.backgrounds)}）"
+            )
+        bg_norm: dict[str, Any] | None = bg.to_dict()
+    else:
+        bg_norm = None
+    layers = _check_layers(elements)
+    return meta, resolved_spec, merged, bg_norm, layers
 
 
-def _build_svg(meta: Any, merged: dict[str, Any], spec: str, theme: str) -> str:
+def _build_svg(meta: Any, merged: dict[str, Any], spec: str, theme: str,
+               *, background: dict[str, Any] | None = None) -> str:
     doc = meta.build(merged, theme_colors(theme), spec)
+    _apply_background(doc, meta, background)
     layout_document(doc)
     relayout_vertical(doc)  # D-1 垂直重排
     return render_svg(doc)
@@ -312,14 +476,19 @@ def _build_svg(meta: Any, merged: dict[str, Any], spec: str, theme: str) -> str:
 def _write_design(
     out_dir: Path, *, kind: str, meta: Any, spec: str, params: dict[str, Any],
     params_overrides: dict[str, Any] | None, preset_id: str | None, svg_text: str,
+    background: dict[str, Any] | None = None, elements: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """落盘 design.json + SVG：版本池先行 + 原子写（§1.1 / §四 Q4）。"""
+    """落盘 design.json（v2）+ SVG：版本池先行 + 原子写（§1.1 / §四 Q4）。"""
     out_dir.mkdir(parents=True, exist_ok=True)
     svg_name = _next_svg_name(out_dir, kind)
     design = {
+        "version": 2,
         "kind": kind, "template": meta.id, "params": params,
         "params_overrides": dict(params_overrides or {}), "preset_id": preset_id,
         "spec": spec, "svg": svg_name, "updated_at": _now_iso(),
+        # B2 v2 键：背景层 + 图层状态表（v1 语义=background None/elements []）
+        "background": background,
+        "elements": elements or [],
     }
     json_path = out_dir / DESIGN_JSON
     if json_path.exists():  # 版本池先行（F43 helper，通用文件可用）
@@ -351,14 +520,20 @@ def _svg_path_for(article_path: str | Path, kind: str, recorded: Any) -> Path | 
 # ── SVG 白名单复验（F72-T5 载入门；API 透出前同门）───────────
 
 
-# SVG 标签白名单 = 根 svg + 元素白名单 + tspan（text 序列化的行结构产物）
-_SVG_TAGS: tuple[str, ...] = ELEMENT_WHITELIST + ("svg", "tspan")
+# SVG 标签白名单 = 根 svg + 元素白名单 + tspan（text 行结构）+ B2 背景结构五件
+# （defs/linearGradient/radialGradient/stop/pattern）+ clipPath（image_slot 蒙版）。
+# 全部只可能由 svg.render_svg 产出——白名单扩容即「新增合法产物形态」，
+# 手改夹带的其余任何标签（script/foreignObject/…）仍拒（F72-T5 语义不变）。
+_SVG_TAGS: tuple[str, ...] = ELEMENT_WHITELIST + (
+    "svg", "tspan", "defs", "linearGradient", "radialGradient", "stop", "pattern", "clipPath",
+)
 
-# 承载 URL 的属性面：href / xlink:href / style / fill / stroke
+# 承载 URL 的属性面：href / xlink:href / style / fill / stroke / clip-path
 # —— style 里的 url()/@import 与 fill/stroke 的 url(#id) 都是浏览器会去取的
 # 引用面（光栅不触网红线在载入侧同样成立：设计稿 SVG 会被 GET
 # /api/visual/design 原样透出给前端并 inline 注入 → style url() 会发外域请求）。
-_URL_ATTRS: tuple[str, ...] = ("href", "style", "fill", "stroke")
+# B2：clip-path（image_slot 蒙版引用面 url(#dvmask)）同入执法。
+_URL_ATTRS: tuple[str, ...] = ("href", "style", "fill", "stroke", "clip-path")
 _XLINK_HREF = "{http://www.w3.org/1999/xlink}href"
 # CSS 引用形态：url( ... )（可含引号与空白）与 @import（可带 url() 或裸串）
 _CSS_URL_RE = re.compile(r"url\s*\(\s*['\"]?([^'\")\s]+)", re.IGNORECASE)
@@ -515,12 +690,15 @@ def save_preset(
 def export_file_name(article_path: str | Path, kind: str, *, platform: str | None = None,
                      n: int | None = None) -> str:
     """导出产物名——沿用既有约定族：cover.png/cover.<platform>.png（cover_service
-    既有无需复制）、<stem>.social-<n>.png、<stem>.infographic.png。"""
+    既有无需复制）、<stem>.social-<n>.png、<stem>.infographic.png、
+    <stem>.article.png（B2 kind=article）。"""
     article = Path(article_path)
     if kind == "cover":
         return cover_filename(platform)
     if kind == "social":
         return f"{article.stem}.social-{int(n or 1)}.png"
+    if kind == "article":
+        return f"{article.stem}.article.png"
     return f"{article.stem}.infographic.png"
 
 
@@ -566,6 +744,7 @@ def export_design(
         raise ValueError("无设计稿，先存稿（缺少 design.json）")
     meta = REGISTRY[design["template"]]
     doc = meta.build(design["params"], theme_colors(theme), design["spec"])
+    _apply_background(doc, meta, design.get("background"))  # B2：随稿背景
     layout_document(doc)
     relayout_vertical(doc)  # D-1 垂直重排
 
@@ -608,6 +787,7 @@ def export_social_batch(
     results: list[dict[str, Any]] = []
     for spec in chosen:
         doc = meta.build(design["params"], theme_colors(theme), spec)
+        _apply_background(doc, meta, design.get("background"))  # B2：随稿背景
         layout_document(doc)
         relayout_vertical(doc)  # D-1 垂直重排
         n = _next_social_n(article.parent, article, "social")
@@ -639,6 +819,7 @@ def generate_cover_from_design(
                 f"平台规格 {spec!r} 不适用模板 {meta.id!r}（适用: {'/'.join(meta.specs)}）"
             )
     doc = meta.build(design["params"], theme_colors(theme), spec)
+    _apply_background(doc, meta, design.get("background"))  # B2：随稿背景
     layout_document(doc)
     relayout_vertical(doc)  # D-1 垂直重排
     out = article.parent / cover_filename(platform)

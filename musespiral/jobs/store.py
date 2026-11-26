@@ -68,7 +68,11 @@ JOBS_FILE = "jobs.jsonl"
 #   →再 check 多轮长动作（每轮一次 chat_policed(task=rewrite)）；修复稿
 #   <stem>.quality_fix.md 预览（原文零触碰）；result={rounds,fixes_applied,
 #   final_result,output?}（19→20）
-KINDS: frozenset[str] = frozenset({"adapt", "pack", "publish", "batch_adapt", "status", "annotate_rewrite", "fetch", "sync_stats", "compose_generate", "ingest", "clip", "visual_export", "agent_run", "topic_radar", "pipeline", "book_search", "book_fetch", "tts_generate", "plugin_pipeline", "quality_loop"})
+# localbook_fetch：B1 本地书籍选章素材化（2026-11-26，契约 §3.27）——逐章
+#   现读现切（引用型，正文不落库）→ 每章一条 text 素材（payload 只放摘录，
+#   全文留在用户磁盘）；幂等同章 skip；result={chapters_total,added_n,
+#   skipped_n,skipped,failed,materials} 计数无正文（20→21）
+KINDS: frozenset[str] = frozenset({"adapt", "pack", "publish", "batch_adapt", "status", "annotate_rewrite", "fetch", "sync_stats", "compose_generate", "ingest", "clip", "visual_export", "agent_run", "topic_radar", "pipeline", "book_search", "book_fetch", "tts_generate", "plugin_pipeline", "quality_loop", "localbook_fetch"})
 STATUSES: frozenset[str] = frozenset({"queued", "running", "done", "failed"})
 
 # 模块级锁：jobs.jsonl 的读改写全串行（跨 runner/CLI 实例共享——同进程内

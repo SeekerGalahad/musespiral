@@ -260,12 +260,37 @@ u=String(u).replace(/[?#].*$/,'').replace(/^\.\//,'');
 try{u=decodeURIComponent(u);}catch(e2){}
 return img?'/asset?path='+encodeURIComponent(dir+u):'#';}
 function mdInl(s,dir){return s.replace(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g,function(m,a,u){return '<img alt="'+a+'" src="'+safeSrc(u,dir,true)+'">';}).replace(/\[([^\]]+)\]\(([^)\s]+)[^)]*\)/g,function(m,t,u){return '<a href="'+safeSrc(u,dir,false)+'">'+t+'</a>';}).replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/`([^`\n]+)`/g,'<code>$1</code>');}
+// B3 视频块（2026-11-26）：:::video{src="…" poster="…"} 容器 → <figure class="md-video">
+// 内嵌播放器。src/poster 走 /media/（服务端 assets._rewrite_local_videos 同域：
+// 预览 iframe 与这里都指静态路由）；外链 http(s)/data 原样保留。属性解析与服务端
+// parser._VIDEO_ATTR_RE 同形（带引号值可含空格、裸值止于空白/}）。
 var BANCHOR=/^<!--b:[A-Za-z0-9_-]+-->[ \t]*$/;
+var MVID_OPEN=/^:::video[ \t]*\{(.*)\}[ \t]*$/,MVID_ATTR=/([a-zA-Z_][\w-]*)\s*=\s*(?:"([^"]*)"|([^\s"}]+))/g;
+function vidAttr(raw){
+var o={},m;
+MVID_ATTR.lastIndex=0;
+while((m=MVID_ATTR.exec(raw)))o[m[1]]=m[2]!==undefined?m[2]:m[3];
+return o;}
+function vidSrc(u,dir){
+u=String(u==null?'':u).trim();
+if(!u)return '';
+if(/^(https?:|data:)/i.test(u))return u;
+u=u.replace(/[?#].*$/,'').replace(/^\.\//,'');
+try{u=decodeURIComponent(u);}catch(e2){}
+return '/media/'+encodeURI(dir+u);}
 function mdToHtml(md,dir){
 var ls=String(md).replace(/\r/g,'').split('\n'),o=[],p=[],i=0;
 function fl(){if(p.length){o.push('<p>'+mdInl(p.join('<br>'),dir)+'</p>');p=[];}}
 while(i<ls.length){var L=ls[i];
 if(BANCHOR.test(L)){i++;continue;}
+var vm=MVID_OPEN.exec(L);
+if(vm){
+fl();var attrs=vidAttr(vm[1]),cap=[],j=i+1;
+while(j<ls.length&&!/^:::[ \t]*$/.test(ls[j]))cap.push(ls[j++].replace(/^\s+|\s+$/g,''));
+if(j<ls.length){i=j+1;}else{i=ls.length;}  // 未闭合：到文末（服务端同「不吞正文」）
+var src=vidSrc(attrs.src,dir),po=attrs.poster?vidSrc(attrs.poster,dir):'',ct=cap.filter(function(x){return x;}).join(' ');
+o.push('<figure class="md-video"><video controls'+(src?' src="'+esc(src)+'"':'')+(po?' poster="'+esc(po)+'"':'')+'></video>'+(ct?'<figcaption>'+esc(ct)+'</figcaption>':'')+'</figure>');
+continue;}
 if(/^```/.test(L)){fl();var b=[];i++;while(i<ls.length&&!/^```/.test(ls[i]))b.push(ls[i++]);o.push('<pre><code>'+esc(b.join('\n'))+'</code></pre>');i++;continue;}
 var h=L.match(/^(#{1,4})\s+(.*)$/);
 if(h){fl();o.push('<h'+h[1].length+'>'+mdInl(esc(h[2]),dir)+'</h'+h[1].length+'>');i++;continue;}
@@ -865,11 +890,15 @@ CM=m;
 $('clip-title').textContent=m==='clip'?'剪藏 URL':(m==='crawl'?'手动爬取':'登记视频');
 $('clip-ok').textContent=m==='clip'?'抓取预览':(m==='crawl'?'抓取入待决区':'登记');
 $('clip-sub').hidden=$('clip-note').hidden=m!=='video';
+// B3：视频登记双入口——URL（F61 零出网）或本地文件路径（读盘落仓+元数据探测）；
+// 占位符随模式切换（剪藏/爬取仍是纯 URL 门）
+$('clip-url').placeholder=m==='video'?'视频 URL（http/https）或本地路径（/… 或 ~/…，mp4/webm/mov）':'URL（http(s) 开头；SSRF/robots 门生效）';
 $('clip-url').value='';$('clip-sub').value='';$('clip-note').value='';$('clip-err').textContent='';
 openDlg('clip-form','#clip-url');
 }
 function clipSubmit0(){
 var u=$('clip-url').value.trim();
+if(CM==='video'&&(/^~\//.test(u)||/^\//.test(u)))return u;  // B3：本地路径形态走 register-local
 if(!/^https:\/\/|^http:\/\//i.test(u)){$('clip-err').textContent='URL 须 http(s):// 开头';return;}
 return u;
 }
@@ -882,7 +911,15 @@ var u=clipSubmit0();
 if(!u)return;
 this.disabled=true;$('clip-err').textContent='';
 try{
-if(CM==='video'){
+if(CM==='video'&&/^~?\//.test(u)){
+// B3：本地视频文件登记（读盘→硬链接/复制落仓→ffprobe 时长+ffmpeg 首帧——
+// 缺席如实置空）；文件不存在 404、格式/路径门 400 均可读
+var dl=await postJSON('/api/materials/register-local',{path:u,title:$('clip-sub').value.trim(),note:$('clip-note').value.trim(),confirm:true});
+closeDlg('clip-form');
+toast(dl.dedup?'已登记过（幂等命中）':'本地视频已登记'+(dl.material&&((dl.material.payload||{}).meta||{}).poster?'（含首帧封面）':''),dl.dedup?WN:OK);
+await loadMaterials();renderCollRail();viewRepaint('material');
+}
+else if(CM==='video'){
 var d=await postJSON('/api/materials/register',{url:u,title:$('clip-sub').value.trim(),note:$('clip-note').value.trim(),confirm:true});
 closeDlg('clip-form');
 	toast(d.dedup?'已登记过（幂等命中）':'视频已登记',d.dedup?WN:OK);
@@ -1390,6 +1427,32 @@ var addr=document.getElementById('server-addr');
 if(addr){addr.textContent=location.host||'本地文件';}
 }
 mountChrome();
+// ── 本地书展示工具（B1 2026-11-26，归 core：books 书架与 reader 本地书详情
+// 两视图共消费——跨视图门 V1「无状态工具函数归 core」的判例）──────────────
+function lbEncClass(charset){
+// 编码徽章配色：UTF-8 竹绿 / GB 系琥珀 / Big5 青黛 / 其余灰——只是视觉分组，
+// 徽章文字恒为探测出的真实 charset（不美化、不省略 gb18030 的族名）
+var c=String(charset||'').toLowerCase();
+if(!c)return '';
+if(c.indexOf('utf')===0)return 'jade';
+if(c.indexOf('gb')===0)return 'amber';
+if(c.indexOf('big5')===0)return 'indigo';
+return '';
+}
+function lbWan(chars){
+// 字数「万」进位（中文书籍习惯）：≥1 万显示 X.X 万字，否则原数
+var n=Number(chars)||0;
+return n>=10000?(n/10000).toFixed(1)+' 万字':(n?n.toLocaleString()+' 字':'');
+}
+// 封面渐变色块（设计 §1.4「封面=自动生成文字封面」）：按 id 稳定取色——
+// 同一本书每次打开同一配色（随机色会让书架每次刷新都换相貌，认不出书）
+var LB_GRAD=['linear-gradient(135deg,#3b5bdb,#8b5cf6)','linear-gradient(135deg,#2f9e6e,#0d9488)','linear-gradient(135deg,#d97706,#c9452c)','linear-gradient(135deg,#c9452c,#e07a4f)','linear-gradient(135deg,#5b3bbd,#3b5bdb)'];
+function lbCoverStyle(id){
+var h=0,i;var s=String(id||'');
+for(i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%1000;
+return LB_GRAD[h%LB_GRAD.length];
+}
+
 // @view:sources
 // 源中枢（2026-11-24 重设计批）：把「源」讲成流水线输入端——位置条 + 源卡片
 // （读什么→得什么 / 本机或外网）+ 还能接什么目录 + 统一搜索 + 阅读面板。
@@ -1733,6 +1796,35 @@ var srcWaitTimer=null,srcWaitT0=0;
 function srcWaitStop(){if(srcWaitTimer){clearInterval(srcWaitTimer);srcWaitTimer=null;}}
 function srcWaitTick(){var w=$('src-wait');if(w)w.textContent='已等待 '+Math.max(0,Math.round((Date.now()-srcWaitT0)/1000))+'s';}
 function srcWaitStart(){if(!srcWaitTimer){srcWaitT0=Date.now();srcWaitTimer=setInterval(srcWaitTick,5000);}}
+// 去重分页批（2026-11-25）：跨源同名同作者归并（后端 dedupe_search_items）后，
+// 一本书一张卡 + 「N 个源可供」展开变体——替代早期按源名分组的渲染（17 源各出
+// 一卡的噪声）。分批显示：每批 SRC_PAGE_SIZE 本，「显示更多」翻页（不重绘全量）。
+var SRC_PAGE_SIZE=30;
+function srcBookCard(b,idx,expanded){
+var sc=b.sourceCount||((b.variants&&b.variants.length)||1);
+var cover='<span class="rg-cover" style="background:var(--indigo)">'+esc((b.name||'?').slice(0,2))+'</span>';
+var body='<span class="rg-body"><span class="rg-title">'+esc(b.name||'(无题)')+'</span><span class="rg-meta">'+esc([b.author,b.wordCount,b.lastChapter].filter(Boolean).join(' · '))+'</span></span>';
+var h='<div class="src-book">';
+h+='<button class="rg-row" data-srcbook="'+idx+'">'+cover+body+'<span class="rg-go">阅读'+I('arrow-right')+'</span></button>';
+if(sc>1){
+h+='<button class="src-vars-btn" data-srcvars="'+idx+'" aria-expanded="'+(expanded?'true':'false')+'">'+I('globe')+sc+' 个源可供'+I('arrow-right')+'</button>';
+if(expanded){
+h+='<div class="src-vars">'+(b.variants||[]).map(function(v,vi){
+return '<button class="src-var-row" data-srcvar="'+idx+':'+vi+'"><span class="src-var-name">'+esc(v.originName||v.origin||'源')+'</span><span class="rg-go">阅读'+I('arrow-right')+'</span></button>';
+}).join('')+'</div>';
+}
+}
+return h+'</div>';
+}
+function srcRenderBooks(books,shown,expanded){
+var list=books||[];
+var n=Math.min(shown,list.length);
+var h='<div>'+list.slice(0,n).map(function(b,i){return srcBookCard(b,i,!!(expanded&&expanded[i]));}).join('')+'</div>';
+if(list.length>n){
+h+='<div class="src-more"><button class="btn" data-srcmore="1">显示更多（还有 '+(list.length-n)+' 本）</button></div>';
+}
+return h;
+}
 function srcSearchRender(){
 var q=state.srcQ.trim(),box=$('src-results');
 if(!q){srcWaitStop();box.hidden=true;$('src-overview').hidden=false;$('src-q-clear').hidden=true;$('src-q-kbd').textContent='/';renderSrcEngine();return;} // 清空即回落引擎常态灯（P1-3 联动的另一半）
@@ -1740,17 +1832,28 @@ box.hidden=false;$('src-overview').hidden=true;$('src-q-clear').hidden=false;$('
 var R=state.srcResults,loading=state.srcSearching;
 var head='<div class="results-head"><h2>“'+esc(q)+'”</h2>'+(R&&!loading?'<span class="results-sum">'+[R.url?'网页 1':'',R.books?'书籍 '+R.books.length:'',R.mats?'素材 '+R.mats.length:''].filter(Boolean).join(' · ')+'</span>':'')+
 '<button class="btn btn-ghost btn-sm" data-srcclear="1">'+I('close')+'返回源总览</button></div>';
-if(loading||!R){srcWaitStart();box.innerHTML=head+'<div role="status" aria-label="正在搜索"><p class="muted" id="src-wait" style="font-size:12px;margin:0 0 10px">已等待 0s</p>'+[0,1,2].map(function(){return '<div class="skel skel-line w90" style="margin-bottom:12px"></div>';}).join('')+'</div>';return;}
-srcWaitStop();
+if(!R||(loading&&!R.searching)){srcWaitStart();box.innerHTML=head+'<div role="status" aria-label="正在搜索"><p class="muted" id="src-wait" style="font-size:12px;margin:0 0 10px">已等待 0s</p>'+[0,1,2].map(function(){return '<div class="skel skel-line w90" style="margin-bottom:12px"></div>';}).join('')+'</div>';return;}
+srcWaitStop(); // 渐进态自带进度行（源计数+已找到 N 本），外部计时停
 if(srcIsSymbolOnly(q)){box.innerHTML=head+srcNotice('','search','这个关键词没法搜','「'+esc(q)+'」里只有符号。试试书名、作者名，或直接粘贴网址。','');return;}
 var h=head;
 if(R.url){h+='<section class="rgroup"><h3 class="rg-h">'+I('globe')+'网页 <span class="cnt">1</span><span class="rg-src">读完再决定存不存</span></h3><button class="rg-row" data-srcweb="'+esc(R.url)+'">'+
 '<span class="rg-glyph">'+I('globe')+'</span><span class="rg-body"><span class="rg-title">'+esc(R.urlHost)+'</span><span class="rg-meta">'+esc(R.urlPath)+'</span></span><span class="rg-go">打开阅读'+I('arrow-right')+'</span></button></section>';}
-h+='<section class="rgroup"><h3 class="rg-h">'+I('file')+'书籍 <span class="cnt">'+(R.booksFail?'✕':(R.books?R.books.length:0))+'</span><span class="rg-src">'+(R.engineOff?'bookengine 未启动':'bookengine · 引擎在线')+'</span></h3>';
+var shownN=R.books?Math.min(state.srcShown||SRC_PAGE_SIZE,R.books.length):0;
+// 计数三态诚实：失败=✕ / 有去重数=「去重 N · 命中 M」（M>N 才带命中）/ 未知=条数
+var cntTxt=R.booksFail?'✕':(R.unique!=null?('去重 '+R.unique+(R.total!=null&&R.total>R.unique?' · 命中 '+R.total:'')):(R.books?R.books.length:0));
+h+='<section class="rgroup"><h3 class="rg-h">'+I('file')+'书籍 <span class="cnt">'+cntTxt+'</span><span class="rg-src">'+(R.engineOff?'bookengine 未启动':'bookengine · 引擎在线')+(R.books&&R.books.length>shownN?' · 已显示 '+shownN:'')+'</span></h3>';
+// 渐进进行态：进度行（已返回 N 源 · 已找到 M 本 · 模式 · 停止）——阅读 app 式
+// 「看着一个个源把结果送回来」，45s 引擎 deadline 兜底不必等全量。
+if(R.searching){
+var total=R.srcsTotal||2554,pct=Math.min(96,Math.round((R.searched||0)/total*100));
+h+='<div class="src-prog"><div class="src-prog-line"><span><span class="st-dot ok src-pulse"></span>正在搜索 · <b>'+(R.searched||0)+'</b> / '+total.toLocaleString()+' 个源已返回</span><span>已找到 <b>'+(R.books?R.books.length:0)+'</b> 本</span></div>'+
+'<div class="src-prog-bar"><i style="width:'+pct+'%"></i></div>'+
+'<div class="src-prog-foot"><span class="muted">'+(R.mode==='serial'?'串行观察模式 · 逐源慢搜':'并行模式 · 45 秒后带回已收集的部分结果')+'</span><button class="btn btn-sm" data-srcstop="1">停止搜索</button></div></div>';
+}
 if(R.booksFail){h+='<p class="rg-note is-warn">'+I('warning')+'<span>引擎读取失败：'+esc(R.booksFail)+'。这不是「没有找到」——引擎侧出了问题，重试一次或稍后再试。</span></p><div style="padding:6px 8px 4px"><button class="btn btn-sm" data-srcretry="1">'+I('refresh')+'重试搜索</button></div>';}
 else if(R.engineOff){h+='<p class="rg-note is-warn">'+I('warning')+'<span>书籍搜索暂不可用：bookengine 未启动。上面的素材和网页结果不受影响。</span></p>';}
-else if(!R.books||!R.books.length){h+='<p class="rg-note"><span class="st-dot"></span><span>书籍里没找到「'+esc(q)+'」。试试更短的书名，或只输作者名。</span></p>';}
-else{h+='<div>'+R.books.map(function(b,idx){return '<button class="rg-row" data-srcbook="'+idx+'"><span class="rg-cover" style="background:var(--indigo)">'+esc((b.name||'?').slice(0,2))+'</span><span class="rg-body"><span class="rg-title">'+esc(b.name)+'</span><span class="rg-meta">'+esc([b.author,b.originName||b.origin].filter(Boolean).join(' · '))+'</span></span><span class="rg-go">阅读'+I('arrow-right')+'</span></button>';}).join('')+'</div>';}
+else if(!R.books||!R.books.length){h+='<p class="rg-note"><span class="st-dot"></span><span>'+(R.stopped?'已停止搜索，尚无源返回结果。':'书籍里没找到「'+esc(q)+'」。试试更短的书名，或只输作者名。')+'</span></p>';}
+else{h+=srcRenderBooks(R.books,state.srcShown||SRC_PAGE_SIZE,state.srcExpanded)+(R.stopped?'<p class="rg-note"><span class="st-dot warn"></span><span>已停止——上面是停止前已收集的部分。</span></p>':'');}
 h+='</section>';
 h+='<section class="rgroup"><h3 class="rg-h">'+I('docs')+'素材 <span class="cnt">'+(R.matsFail?'✕':(R.mats?R.mats.length:0))+'</span><span class="rg-src">来自素材库</span></h3>';
 if(R.matsFail)h+='<p class="rg-note is-warn">'+I('warning')+'<span>素材库读取失败：'+esc(R.matsFail)+'。这不是「没有匹配」——素材服务没响应。</span></p><div style="padding:6px 8px 4px"><button class="btn btn-sm" data-srcretry="1">'+I('refresh')+'重试搜索</button></div>';
@@ -1762,9 +1865,11 @@ box.innerHTML=h;
 async function srcDoSearch(){
 var q=state.srcQ.trim();if(!q)return;
 var tok=++state.srcTok;
+state.srcStop=false;
 state.srcSearching=true;srcSearchRender();
 srcWaitT0=Date.now(); // P1-2：起跑重置计时（防抖 380ms 不计入搜索时长）
-var R={url:null,urlHost:'',urlPath:'',books:[],mats:[],engineOff:false,booksFail:'',matsFail:''};
+state.srcShown=SRC_PAGE_SIZE;state.srcExpanded={};
+var R={url:null,urlHost:'',urlPath:'',books:[],mats:[],engineOff:false,booksFail:'',matsFail:'',searching:false,searched:0,srcsTotal:0,mode:state.srcMode||'parallel',stopped:false,total:null,unique:null};
 if(srcIsUrl(q)){
 var full=/^https?:\/\//i.test(q)?q:('https'+':'+'//'+q);
 try{var u=new (URL)(full);R.url=full;R.urlHost=u.host;R.urlPath=u.pathname+u.search;}catch(e){}
@@ -1773,20 +1878,35 @@ try{var u=new (URL)(full);R.url=full;R.urlHost=u.host;R.urlPath=u.pathname+u.sea
 // matsFail 与「素材里没有匹配」在渲染层严格分开
 try{var md=await getJSON('/api/materials?q='+encodeURIComponent(q)+'&limit=20');R.mats=(md.list||[]).slice(0,20);}
 catch(err){R.matsFail=err.message||'服务未响应';}
-// 书籍搜索（异步 job）
+// 书籍搜索（异步 job · 渐进轮询——阅读 app 式「源逐个返回」，partial result
+// 在 running 期间逐批写回，见 run_search_stream；停止=前端旗标，引擎 45s 自然收）
 if(!R.url&&!srcIsSymbolOnly(q)){
 try{
 var eng=await getJSON('/api/booksource/engine');
 if(!(eng&&eng.ok)){R.engineOff=true;} // mock 体验模式可用——与真引擎同走搜索链
 else{
-var sub=await postJSON('/api/book/search',{key:q,confirm:true});
-var job=await waitForJob(sub.job_id);
-// P0-2：waitForJob 返回 failed 必须显形（对齐 books 视图 bkSearch 的失败
-// 样板）——此前直接取 job.result.items 把「引擎读取失败」伪装成「书籍 0」
-if(job&&job.status==='failed')R.booksFail=(job.error||'引擎读取失败');
-else R.books=(job&&job.result&&job.result.items)||[];
+R.srcsTotal=eng.sources_loaded||2554;
+var sub=await postJSON('/api/book/search',{key:q,mode:R.mode,confirm:true});
+R.searching=true;state.srcResults=R;srcSearchRender(); // 立即进入渐进态（进度行可见）
+while(tok===state.srcTok){
+var job=await getJSON(`/api/jobs/${sub.job_id}`);
+if(tok!==state.srcTok)return;
+var r=(job&&job.result)||{};
+if(r&&r.items){R.books=r.items;R.searched=r.searched||R.searched;R.total=r.total;R.unique=r.unique;}
+if(job&&job.status==='running'){
+state.srcResults=R;srcSearchRender();
+if(state.srcStop){R.stopped=true;R.searching=false;break;}
+await new Promise(function(res){setTimeout(res,800);});
+continue;
 }
-}catch(err){R.booksFail=err.message||'引擎读取失败';}
+R.searching=false;
+// P0-2：job failed 必须显形（对齐 books 视图 bkSearch 的失败样板）
+if(job&&job.status==='failed')R.booksFail=(job.error||'引擎读取失败');
+break;
+}
+if(state.srcStop){R.stopped=true;R.searching=false;state.srcStop=false;}
+}
+}catch(err){R.booksFail=err.message||'引擎读取失败';R.searching=false;}
 }
 if(tok!==state.srcTok)return;
 state.srcResults=R;state.srcSearching=false;srcSearchRender();
@@ -1800,6 +1920,17 @@ try{await ensureView('reader');VAPI.reader.openWeb(url);}catch(err){toast('阅�
 async function srcOpenReaderBook(idx){
 var b=state.srcResults&&state.srcResults.books&&state.srcResults.books[idx];
 if(!b){toast('书籍结果已失效，请重新搜索',ER);return;}
+try{await ensureView('reader');VAPI.reader.openBook(b);}catch(err){toast('阅读面板装载失败：'+err.message,ER);}
+}
+
+// 变体源阅读：复用组元数据（名称/作者）+ 覆盖 source/bookUrl 三件套（详情与
+// 取章都按所选源走——本地学习可见不同源规则差异）
+async function srcOpenReaderVariant(gi,vi){
+var g=state.srcResults&&state.srcResults.books&&state.srcResults.books[gi];
+var v=g&&g.variants&&g.variants[vi];
+if(!g||!v){toast('书源变体已失效，请重新展开',ER);return;}
+var b=Object.assign({},g,{origin:v.origin,originName:v.originName,bookUrl:v.bookUrl});
+delete b.variants;
 try{await ensureView('reader');VAPI.reader.openBook(b);}catch(err){toast('阅读面板装载失败：'+err.message,ER);}
 }
 
@@ -1889,11 +2020,32 @@ state.srcQ=this.value;clearTimeout(srcDeb);
 if(!state.srcQ.trim()){state.srcResults=null;state.srcSearching=false;srcSearchRender();return;}
 srcDeb=setTimeout(srcDoSearch,380);
 });
+// 渐进搜索批（2026-11-25）：模式 segmented（并行/串行，localStorage 记忆）+
+// 搜索按钮直发 + 停止旗标（data-srcstop）
+(function(){
+var mp=$('src-mode-parallel'),ms=$('src-mode-serial');
+function setMode(m){
+state.srcMode=m;try{localStorage.setItem('musespiral-src-mode',m);}catch(e){}
+if(mp)mp.classList.toggle('on',m==='parallel');
+if(ms)ms.classList.toggle('on',m==='serial');
+}
+try{state.srcMode=localStorage.getItem('musespiral-src-mode')||'parallel';}catch(e){state.srcMode='parallel';}
+setMode(state.srcMode);
+if(mp)mp.addEventListener('click',function(){setMode('parallel');});
+if(ms)ms.addEventListener('click',function(){setMode('serial');});
+var go=$('src-go-btn');if(go)go.addEventListener('click',function(){clearTimeout(srcDeb);srcDoSearch();});
+})();
 $('src-q-clear').addEventListener('click',function(){state.srcQ='';$('src-q').value='';state.srcResults=null;srcSearchRender();$('src-q').focus();});
 $('src-results').addEventListener('click',function(e){
 var rt=e.target.closest('[data-srcretry]');if(rt){srcDoSearch();return;} // P0-2：引擎/素材失败的重试入口
+var sp=e.target.closest('[data-srcstop]');if(sp){state.srcStop=true;sp.disabled=true;sp.textContent='正在停止…';return;} // 渐进搜索停止（引擎 45s 自然收）
 var c=e.target.closest('[data-srcclear]');if(c){state.srcQ='';$('src-q').value='';state.srcResults=null;srcSearchRender();return;}
 var w=e.target.closest('[data-srcweb]');if(w){srcOpenReaderWeb(w.getAttribute('data-srcweb'));return;}
+// 去重分页批：显示更多 / 变体展开 / 变体选中（三者都在书籍卡容器内，先于书卡判定）
+var bk=e.target.closest('[data-srcvartoggle]'),vb;
+var mb=e.target.closest('[data-srcmore]');if(mb){state.srcShown=(state.srcShown||SRC_PAGE_SIZE)+SRC_PAGE_SIZE;srcSearchRender();return;}
+var vv=e.target.closest('[data-srcvars]');if(vv){var vi=vv.getAttribute('data-srcvars');state.srcExpanded=state.srcExpanded||{};state.srcExpanded[vi]=!state.srcExpanded[vi];srcSearchRender();return;}
+var vr=e.target.closest('[data-srcvar]');if(vr){vb=vr.getAttribute('data-srcvar').split(':');srcOpenReaderVariant(+vb[0],+vb[1]);return;}
 var b=e.target.closest('[data-srcbook]');if(b){srcOpenReaderBook(b.getAttribute('data-srcbook'));return;}
 });
 document.addEventListener('keydown',function(e){
@@ -1916,10 +2068,16 @@ function rdScroll(){return $('rd-scroll');}
 function rdFoot(){return $('rd-foot');}
 function rdOpen(kind,data){
 var p=$('reader-pane');RD.opener=document.activeElement;
+// 阅读面板是 fixed 定位的浮层，但 DOM 挂在 #view-reader 里——该 section 的
+// [hidden] 由 showView 管（VIEWS 不含 reader），不解除则 [hidden]{display:none
+// !important} 把面板连同整棵子树吃掉（实测：面板 hidden=false 仍不可见）。
+// 打开即解除祖先 hidden，关闭时复原（见 rdClose）——面板不占路由视图位。
+var host=$('view-reader');if(host)host.hidden=false;
 if(RD.pane===null){RD.mode=document.documentElement.getAttribute('data-theme')==='dark'?'night':'paper';}
 RD.pane=kind;RD.book=(data&&data.book)||null;RD.url=(data&&data.url)||'';RD.n=(data&&data.n)||1;RD.range='one';
 p.hidden=false;$('rd-scrim').hidden=false;
 p.setAttribute('aria-label',kind==='book'?'书籍阅读':'网页阅读');
+var bk=$('rd-back');if(bk)bk.hidden=(kind!=='book'); // 渐进搜索批：书模式显式「← 返回列表」（列表原样保留）
 if(kind==='web'){
 RD.phase='loading';rdRenderWeb();
 var tok=(RD.webTok||0)+1;RD.webTok=tok;
@@ -1947,13 +2105,18 @@ void p.offsetWidth;p.classList.add('open'); // 强制回流后加类，过渡不
 function rdClose(now){
 var p=$('reader-pane');RD.pane=null;RD.webTok=(RD.webTok||0)+1;
 p.classList.remove('open');$('rd-scrim').hidden=true;
-if(now){p.hidden=true;rdScroll().innerHTML='';rdFoot().innerHTML='';return;}
-setTimeout(function(){if(!RD.pane){p.hidden=true;rdScroll().innerHTML='';rdFoot().innerHTML='';}},260);
+// 面板关闭后复原祖先 #view-reader 的 hidden（rdOpen 打开时解除）——浮层不常驻
+// 占位，避免影响 showView 的视图显隐语义
+var host=$('view-reader'),hideHost=function(){if(host)host.hidden=true;};
+if(now){p.hidden=true;hideHost();rdScroll().innerHTML='';rdFoot().innerHTML='';return;}
+setTimeout(function(){if(!RD.pane){p.hidden=true;hideHost();rdScroll().innerHTML='';rdFoot().innerHTML='';}},260);
 var o=RD.opener;if(o&&o.focus&&document.contains(o)&&o.offsetParent!==null)o.focus();
 }
 function rdTop(){
 var title=RD.pane==='book'?((RD.book&&RD.book.name)||'书籍'):'网页阅读';
-return '<div class="rd-head"><button class="btn btn-ghost btn-icon" data-rd="close" aria-label="关闭阅读面板"><span data-icon="close"></span></button>'+
+// 「← 返回列表」：书模式显式返回（搜索结果列表原样保留——渐进搜索重设计批）
+var backBtn=RD.pane==='book'?'<button class="btn btn-ghost btn-sm" data-rd="close" aria-label="返回列表"><span data-icon="arrow-left"></span>返回列表</button>':'';
+return '<div class="rd-head">'+backBtn+'<button class="btn btn-ghost btn-icon" data-rd="close" aria-label="关闭阅读面板"><span data-icon="close"></span></button>'+
 '<b class="rd-title">'+esc(title)+'</b><div class="rd-tools">'+
 '<div class="seg" role="group" aria-label="正文字号"><button data-rd="fs" data-d="-1" aria-label="缩小正文">A−</button><button data-rd="fs" data-d="1" aria-label="放大正文">A＋</button></div>'+
 '<div class="seg" role="group" aria-label="底色"><button data-rd="mode" data-v="paper" aria-pressed="'+(RD.mode==='paper')+'">纸张</button><button data-rd="mode" data-v="night" aria-pressed="'+(RD.mode==='night')+'">夜间</button></div>'+
@@ -1964,26 +2127,107 @@ var p=$('reader-pane');p.dataset.mode=RD.mode;p.classList.toggle('focus',RD.focu
 p.style.setProperty('--read-scale',RD.fs);
 rdScroll().classList.toggle('plain',RD.mode==='paper'&&RD.pane==='book');
 }
+// B1 本地书（2026-11-26）：origin 前缀 `localbook:` 是分派锚——详情/目录/取章
+// 三处请求按它分流到 /api/localbook/*，网络书路径一字不动（设计 §1.4「阅读面板
+// 零重构复用」：面板 DOM/交互/样式全复用，只换数据面）。
+function rdIsLocal(b){return String((b||{}).origin||'').indexOf('localbook:')===0;}
+function rdLocalId(b){var s=String((b||{}).origin||'');return s.indexOf('localbook:')===0?s.slice('localbook:'.length):'';}
 function rdRenderBookDetail(){
+// 详情懒加载（渐进搜索重设计批 2026-11-25）：点书卡才取详情——骨架 +
+// 「正在获取」提示 → GET /api/book/info 填充 → 成败有话；目录同样按需
+// （「开始阅读 · 取目录」按钮触发，不再进面板即拉）。
 var b=RD.book||{};
 rdApply();
-rdScroll().innerHTML='<div class="rd-body"><div class="bk-head">'+
-'<span class="bk-cover">'+esc((b.name||'?').slice(0,2))+'</span><div class="bk-info"><h1>'+esc(b.name||'(无题)')+'</h1>'+
-'<p class="bk-author">'+esc([b.author,b.kind,b.wordCount].filter(Boolean).join(' · '))+'</p>'+
-'<button class="bk-origin" data-rd="swap" aria-label="换源（当前 '+esc(b.originName||b.origin||'')+'）">来源：'+esc(b.originName||b.origin||'—')+'</button></div></div>'+
-(b.intro?'<p class="bk-intro">'+esc(b.intro)+'</p>':'')+
-'<div class="rd-sec-head"><h2>目录</h2><span class="muted" style="font-size:12px">由 bookengine 解析</span></div><div class="bk-toc" id="rd-toc"><p class="action-hint">正在取目录…</p></div></div>';
-rdFoot().innerHTML='<span class="muted" style="font-size:12px">点章节先读，再决定入不入素材库。</span>';
-// 目录：GET /api/book/toc（同步代理，absent 200）
+if(rdIsLocal(b)){rdRenderLocalDetail(b);return;}
+var t0=Date.now();
+rdScroll().innerHTML='<div class="rd-body">'+
+'<p class="rd-fetch" role="status"><span class="st-dot ok src-pulse"></span>正在从「'+esc(b.originName||b.origin||'源')+'」获取详情…（点开时才取，列表不预载）</p>'+
+'<div class="bk-head"><span class="bk-cover">'+esc((b.name||'?').slice(0,2))+'</span><div class="bk-info">'+
+'<div class="skel skel-line" style="width:72%;height:15px;margin-bottom:8px"></div>'+
+'<div class="skel skel-line" style="width:52%;margin-bottom:8px"></div>'+
+'<div class="skel skel-line" style="width:38%"></div></div></div>'+
+'<div class="skel skel-line" style="width:100%;height:56px;margin-top:14px"></div></div>';
+rdFoot().innerHTML='<span class="muted" style="font-size:12px">详情获取后可取目录阅读。</span>';
 var src=b.origin||'',bu=b.bookUrl||'';
-getJSON('/api/book/toc?sourceUrl='+encodeURIComponent(src)+'&bookUrl='+encodeURIComponent(bu)).then(function(d){
-var box=$('rd-toc');if(!box)return;
-if(!d||d.status==='absent'){box.innerHTML='<p class="action-hint">引擎未就绪，目录读取失败。</p>';return;}
+getJSON('/api/book/info?sourceUrl='+encodeURIComponent(src)+'&bookUrl='+encodeURIComponent(bu)).then(function(d){
+if(RD.pane!=='book')return;
+var info=(d&&d.ok&&d.info)||null;
+if(!info){rdDetailFail(b,'该源没返回详情（可能规则失效或超时）');return;}
+var ms=Math.max(0,Date.now()-t0);
+var m={name:info.name||b.name,author:info.author||b.author,kind:info.kind||b.kind,wordCount:info.wordCount||b.wordCount,lastChapter:info.lastChapter||'',intro:info.intro||b.intro||''};
+RD.book=Object.assign({},b,m); // 合并详情（后续取章用）
+rdApply();
+rdScroll().innerHTML='<div class="rd-body">'+
+'<p class="rd-fetch ok"><span class="st-dot ok"></span>详情已获取（耗时 '+(ms/1000).toFixed(1)+'s · 来自「'+esc(b.originName||b.origin||'源')+'」）</p>'+
+'<div class="bk-head"><span class="bk-cover">'+esc((m.name||'?').slice(0,2))+'</span><div class="bk-info"><h1>'+esc(m.name||'(无题)')+'</h1>'+
+'<p class="bk-author">'+esc([m.author,m.kind,m.wordCount].filter(Boolean).join(' · '))+(m.lastChapter?'<br>最新：'+esc(m.lastChapter):'')+'</p>'+
+'<button class="bk-origin" data-rd="swap" aria-label="换源（当前 '+esc(b.originName||b.origin||'')+'）">来源：'+esc(b.originName||b.origin||'—')+'</button></div></div>'+
+(m.intro?'<p class="bk-intro">'+esc(m.intro)+'</p>':'')+
+'<div class="rd-sec-head"><h2>目录</h2><span class="muted" style="font-size:12px">点击时才取</span></div>'+
+'<div class="bk-toc" id="rd-toc"><button class="btn btn-primary" data-rd="loadtoc">'+I('docs')+'开始阅读 · 取目录</button></div></div>';
+rdFoot().innerHTML='<span class="muted" style="font-size:12px">点章节先读，再决定入不入素材库。</span>';
+}).catch(function(err){
+if(RD.pane!=='book')return;
+rdDetailFail(b,err.message||'服务未响应');
+});
+}
+function rdRenderLocalDetail(b){
+// 本地书详情（B1）：info 面只有 meta（路径/编码/章节数/规则/文件状态），
+// 如实陈列——不伪造 intro/wordCount（设计 §五的诚实性纪律）；文件 vanished
+// 时直接说明并保留「重试」，不冒充「没有这本书」。
+var id=rdLocalId(b);
+rdScroll().innerHTML='<div class="rd-body"><p class="rd-fetch" role="status"><span class="st-dot ok src-pulse"></span>正在读取本地书元数据…</p>'+
+'<div class="skel skel-line" style="width:70%;height:15px;margin-bottom:8px"></div><div class="skel skel-line" style="width:45%"></div></div>';
+rdFoot().innerHTML='<span class="muted" style="font-size:12px">本地书只读取你磁盘上的原文件。</span>';
+getJSON('/api/localbook/info?id='+encodeURIComponent(id)).then(function(d){
+if(RD.pane!=='book')return;
+if(!d||d.ok===false||!d.book){rdDetailFail(b,(d&&d.error)||'本地书不存在');return;}
+var bk=d.book||{};
+var un=d.unstructured||bk.structure==='fixed';
+var bits=['本地文件',un?'未识别章节结构':(d.chapters||0)+' 章',bk.charset||'',lbWan(bk.chars||0),'规则 '+(bk.rule_name||bk.rule||'—')].filter(Boolean);
+RD.book=Object.assign({},b,{name:bk.title||b.name,author:bk.author||b.author,localRule:bk.rule||''});
+rdScroll().innerHTML='<div class="rd-body">'+
+(d.file_ok===false?'<p class="rd-fetch err" role="alert">'+I('warning')+'<span>原文件已不可读（可能被移动或删除）：'+esc(bk.path||'')+'。放回原位后点「重试」。</span></p>':'')+
+'<div class="bk-head"><span class="bk-cover" style="background:'+esc(lbCoverStyle(String(bk.id||id)))+'">'+esc(String(bk.title||'?').slice(0,2))+'</span><div class="bk-info"><h1>'+esc(bk.title||'(无题)')+'</h1>'+
+'<p class="bk-author">'+esc(bits.join(' · '))+(bk.author?'<br>作者：'+esc(bk.author):'')+'</p>'+
+'<p class="lb-path-line" title="'+esc(bk.path||'')+'">'+esc(bk.path||'')+'</p></div></div>'+
+(un?'<p class="action-hint">这本书没识别出章节结构（正文按定长切块）。可换一条规则重解析，或继续按块阅读。</p>':'')+
+'<div class="rd-sec-head"><h2>目录</h2><span class="lb-rule-wrap"><select class="input rd-rule" id="rd-rule" aria-label="章节规则">'+
+['cn-novel-standard','cn-classic','plain-split'].map(function(r){return '<option value="'+r+'"'+(r===(bk.rule||'')?' selected':'')+'>'+r+'</option>';}).join('')+
+'</select><button class="btn btn-sm" data-rd="reparse">换规则重解析</button></span></div>'+
+'<div class="bk-toc" id="rd-toc"><button class="btn btn-primary" data-rd="loadtoc">'+I('docs')+'开始阅读 · 取目录</button></div></div>';
+rdFoot().innerHTML='<span class="muted" style="font-size:12px">点章节先读；入素材库只记摘录，全文留在你的文件里。</span>';
+}).catch(function(err){
+if(RD.pane!=='book')return;
+rdDetailFail(b,err.message||'服务未响应');
+});
+}
+function rdDetailFail(b,msg){
+rdApply();
+rdScroll().innerHTML='<div class="rd-body">'+
+'<p class="rd-fetch err" role="alert">'+I('warning')+'<span>详情获取失败：'+esc(msg)+'。可以重试，或换一个源。</span></p>'+
+'<div class="n-act"><button class="btn" data-rd="retryinfo">'+I('refresh')+'重试获取</button></div>'+
+'<div class="bk-head" style="margin-top:14px"><span class="bk-cover">'+esc((b.name||'?').slice(0,2))+'</span><div class="bk-info"><h1>'+esc(b.name||'(无题)')+'</h1>'+
+'<p class="bk-author">'+esc([b.author,b.kind,b.wordCount].filter(Boolean).join(' · '))+'</p>'+
+'<button class="bk-origin" data-rd="swap" aria-label="换源">换源试试</button></div></div>'+
+'<div class="rd-sec-head"><h2>目录</h2><span class="muted" style="font-size:12px">详情未取到，目录暂不可用</span></div></div>';
+rdFoot().innerHTML='';
+}
+function rdLoadToc(){
+// 目录按需（渐进搜索重设计批）：点「开始阅读 · 取目录」才拉
+// B1：本地书走 /api/localbook/toc（同形 {title,index,url}，url=localbook:<id>#<n>）
+var b=RD.book||{},src=b.origin||'',bu=b.bookUrl||'';
+var box=$('rd-toc');if(box)box.innerHTML='<p class="action-hint">正在取目录…</p>';
+var local=rdIsLocal(b);
+var req=local?getJSON('/api/localbook/toc?id='+encodeURIComponent(rdLocalId(b))):getJSON('/api/book/toc?sourceUrl='+encodeURIComponent(src)+'&bookUrl='+encodeURIComponent(bu));
+req.then(function(d){
+var bx=$('rd-toc');if(!bx||RD.pane!=='book')return;
+if(!d||d.status==='absent'){bx.innerHTML='<p class="action-hint">引擎未就绪，目录读取失败。<button class="btn btn-sm" data-rd="loadtoc" style="margin-left:8px">重试</button></p>';return;}
 var ch=(d.chapters||[]).slice(0,200);
-if(!ch.length){box.innerHTML='<p class="action-hint">这本书没解析出目录。</p>';return;}
+if(!ch.length){bx.innerHTML='<p class="action-hint">这本书没解析出目录。</p>';return;}
 RD.chapters=ch;  // 供 rdRenderChapter/选章入库取真实 chapterUrl
-box.innerHTML=ch.map(function(c,i){return '<button data-rd="chapter" data-n="'+(i+1)+'"><span class="n">'+(i+1)+'</span><span>'+esc(c.title||'(无题)')+'</span></button>';}).join('');
-}).catch(function(err){var box=$('rd-toc');if(box)box.innerHTML='<p class="action-hint">目录读取失败：'+esc(err.message)+'</p>';});
+bx.innerHTML=ch.map(function(c,i){return '<button data-rd="chapter" data-n="'+(i+1)+'"><span class="n">'+(i+1)+'</span><span>'+esc(c.title||'(无题)')+'</span></button>';}).join('');
+}).catch(function(err){var bx=$('rd-toc');if(bx)bx.innerHTML='<p class="action-hint">目录读取失败：'+esc(err.message)+' <button class="btn btn-sm" data-rd="loadtoc" style="margin-left:8px">重试</button></p>';});
 }
 async function rdRenderChapter(n){
 try{
@@ -1991,8 +2235,17 @@ var b=RD.book||{},src=b.origin||'',bu=b.bookUrl||'';
 // chapterUrl 必须来自目录条目（RD.chapters 由 rdRenderBookDetail 的 toc 回调存）
 var ch=(RD.chapters||[])[n-1];
 if(!ch||!ch.url){toast('缺章节地址，请回目录重选',ER);return;}
-var d=await getJSON('/api/book/chapter?sourceUrl='+encodeURIComponent(src)+'&bookUrl='+encodeURIComponent(bu)+'&chapterUrl='+encodeURIComponent(ch.url));
+// B1：本地书按 url 里的 #<n> 取章（真实章号，不是目录位次——剔除空章后两者会
+// 错开；见 core/localbook/toc.py 的 index/url 分工）
+var d,local=rdIsLocal(b);
+if(local){
+var realN=+(String(ch.url).split('#')[1]||n);
+d=await getJSON('/api/localbook/chapter?id='+encodeURIComponent(rdLocalId(b))+'&n='+realN);
+if(!d||d.ok===false){toast('取章失败：'+((d&&d.error)||'原文件不可读'),ER);return;}
+}else{
+d=await getJSON('/api/book/chapter?sourceUrl='+encodeURIComponent(src)+'&bookUrl='+encodeURIComponent(bu)+'&chapterUrl='+encodeURIComponent(ch.url));
 if(!d||d.status==='absent'){toast('引擎未就绪，取章失败',ER);return;}
+}
 RD.n=n;RD.title=(ch&&ch.title)||d.title||('第 '+n+' 章');
 rdApply();
 rdScroll().innerHTML='<article class="rd-article"><p class="ch-kicker">'+esc((b.name||'')+' · 第 '+n+' 章')+'</p>'+
@@ -2008,7 +2261,11 @@ rdFoot().innerHTML='<button class="btn" data-rd="prev"'+(n<=1?' disabled':'')+'>
 function rdRenderWeb(){
 rdApply();
 if(RD.phase==='loading'){
-rdScroll().innerHTML='<div class="rd-article" role="status" aria-label="正在读取网页">'+[14,26,13,15,15,15,15].map(function(h,i){return '<div class="skel skel-line" style="height:'+h+'px;width:'+[38,82,28,100,96,100,62][i]+'%;margin-bottom:12px"></div>';}).join('')+'</div>';
+// 渐进重设计批：三步骤条（请求页面→抽取正文→渲染阅读）——抓取过程可见
+rdScroll().innerHTML='<div class="rd-article" role="status" aria-label="正在读取网页">'+
+'<div class="rd-web-steps"><span class="w-step doing"><i></i>请求页面</span><span class="w-step"><i></i>抽取正文</span><span class="w-step"><i></i>渲染阅读</span></div>'+
+[14,26,13,15,15,15,15].map(function(h,i){return '<div class="skel skel-line" style="height:'+h+'px;width:'+[38,82,28,100,96,100,62][i]+'%;margin-bottom:12px"></div>';}).join('')+'</div>';
+setTimeout(function(){var s=document.querySelector('.rd-web-steps');if(s){s.children[0].className='w-step done';s.children[1].className='w-step doing';}},900);
 rdFoot().innerHTML='';
 return;
 }
@@ -2050,6 +2307,8 @@ if(!RD.pane||$('reader-pane').hidden)return; // 面板未开时不处理（防�
 var t=e.target.closest('[data-rd]');if(!t)return;
 var act=t.getAttribute('data-rd');
 if(act==='close'){rdClose();return;}
+if(act==='loadtoc'){rdLoadToc();return;} // 目录按需（渐进搜索重设计批）
+if(act==='retryinfo'){rdRenderBookDetail();return;} // 详情懒加载重试
 if(act==='fs'){RD.fs=Math.min(1.4,Math.max(.8,Math.round((RD.fs+ +t.getAttribute('data-d')*.1)*10)/10));rdApply();return;}
 if(act==='mode'){RD.mode=t.getAttribute('data-v');rdApply();return;}
 if(act==='focus'){RD.focus=!RD.focus;rdApply();return;}
@@ -2059,11 +2318,32 @@ if(act==='next'){rdRenderChapter(RD.n+1);return;}
 if(act==='range'){RD.range=t.getAttribute('data-v');rdRenderChapter(RD.n);return;}
 if(act==='ingest'){
 var range={one:1,l5:5,l10:10}[RD.range]||1;
-var list=(RD.chapters||[]).slice(RD.n-1,RD.n-1+range).map(function(c,i){return {url:c.url,index:RD.n+i,title:c.title};});
+var win=(RD.chapters||[]).slice(RD.n-1,RD.n-1+range);
 var b=RD.book||{};
+// B1：本地书走 /api/materials/from-local-chapters（章号数组；job=localbook_fetch
+// ——只记摘录，全文留在用户文件；同章重采同 id 幂等 skip）
+if(rdIsLocal(b)){
+var nums=win.map(function(c){return +(String(c.url).split('#')[1]||0);}).filter(function(x){return x>=1;});
+if(!nums.length){toast('缺章节号，请回目录重选',ER);return;}
+postJSON('/api/materials/from-local-chapters',{confirm:true,id:rdLocalId(b),chapters:nums,book:{name:b.name||''}})
+.then(function(d){queued(d.job_id);rdClose();})
+.catch(function(err){toast('提交失败：'+err.message,ER);});
+return;
+}
+var list=win.map(function(c,i){return {url:c.url,index:RD.n+i,title:c.title};});
 postJSON('/api/materials/from-chapters',{confirm:true,sourceUrl:b.origin||'',bookUrl:b.bookUrl||'',book:{name:b.name||'',author:b.author||''},chapters:list,digest:false})
 .then(function(d){queued(d.job_id);rdClose();})
 .catch(function(err){toast('提交失败：'+err.message,ER);});
+return;
+}
+if(act==='reparse'){
+// 本地书换规则重解析（设计 §1.3 文本处理插件入口）：写 meta → 重取详情与目录
+var lb=RD.book||{};
+var sel=$('rd-rule');var rule=sel?sel.value:'';
+postJSON('/api/localbook/reparse',{id:rdLocalId(lb),rule:rule,confirm:true}).then(function(d){
+var bk=(d&&d.book)||{};
+toast('已按 '+(bk.rule_name||rule)+' 重解析 · '+(bk.structure==='fixed'?'未识别章节结构':(bk.chapters||0)+' 章'),OK);
+RD.chapters=null;rdRenderLocalDetail(RD.book);}).catch(function(err){toast('重解析失败：'+err.message,ER);});
 return;
 }
 if(act==='swap'){
@@ -2104,6 +2384,10 @@ function matPreview(m){
 var p=m.payload||{},o=m.origin||{},t=p.text||(o&&o.title)||'';
 return String(t).replace(/\s+/g,' ').slice(0,120);
 }
+// B3 多媒体（2026-11-26）：秒 → mm:ss / h:mm:ss 徽章文案（素材卡/抽屉共用；
+// <60s 显示 0:xx 与视频站习惯一致）。core 不放——两消费点都在 material 块。
+function fmtDur(s){s=Math.round(+s||0);if(s<=0)return'';var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),x=s%60;
+return (h?h+':'+(m<10?'0':'')+m:m)+':'+(x<10?'0':'')+x;}
 // fillMatType/matQS/loadMaterials/loadDiscover/loadColls/loadTags 真身已迁 core 段
 // 跨视图共享块（消费点=core 路由+sources/compose/insight 多块；A 类专项 2026-11-20）
 function hbytes(n){n=+n||0;if(n<1024)return n+' B';if(n<1048576)return(n/1024).toFixed(1)+' KB';return(n/1048576).toFixed(1)+' MB';}
@@ -2119,6 +2403,9 @@ return '<details class="mat-row"'+(state.mdens==='full'?' open':'')+' data-mid="
 '<button class="btn btn-ghost btn-icon dstar'+(tri.starred?' on':'')+'" data-mstar="'+esc(m.id)+'" title="'+st+'" aria-label="'+st+'">'+I('star')+'</button>'+
 (m.type==='image'?'<img class="mat-thumb" loading="lazy" data-mlight="'+esc(m.id)+'" src="'+esc('/api/materials/file?id='+encodeURIComponent(m.id)+'&variant=thumb')+'" alt="" tabindex="0" role="button" aria-label="查看大图" onerror="this.style.visibility=\'hidden\';this.nextElementSibling.style.display=\'inline-flex\'">':'')+
 (m.type==='image'?'<span class="mty-ico mat-thumb-fb" title="'+esc(MTY[m.type]||m.type)+'" style="display:none">'+I('image')+'</span>':'')+
+// B3：video 卡缩略——本地登记视频带首帧 poster（/media/ 素材仓域）；URL 登记视频无 poster 时回退类型图标（如实无帧不装图）
+(m.type==='video'&&meta.poster?'<img class="mat-thumb" loading="lazy" src="'+esc('/media/'+meta.poster)+'" alt="" onerror="this.style.visibility=\'hidden\';this.nextElementSibling.style.display=\'inline-flex\'">':'')+
+(m.type==='video'&&meta.poster?'<span class="mty-ico mat-thumb-fb" title="视频" style="display:none">'+I('video')+'</span>':'')+
 '<span class="mty-ico" title="'+esc(MTY[m.type]||m.type)+'">'+I(MTYI[m.type]||'tag')+'</span>'+
 '<span class="mat-row-main"><span class="mat-row-title" data-mdrow="'+esc(m.id)+'">'+(tri.read?'':'<i class="unread-dot" title="未读"></i>')+hl(m.title||o.title||o.uri||m.id)+(m.drafted?' <span class="badge pass">已入队</span>'+Z:'')+(tri.enabled?'':' <span class="badge archived">已禁用</span>'+Z)+
 // R3.5 T3：「未提炼」琥珀徽（distilled=false 降级标记；AI-GENERATED=来源，两个维度可并存）
@@ -2128,7 +2415,7 @@ return '<details class="mat-row"'+(state.mdens==='full'?' open':'')+' data-mid="
 (bk?'<a class="bk-line" href="#books?search='+encodeURIComponent(bk.name||'')+'" title="书籍视图：'+esc(bk.name||'')+(bk.chapter_index?' 第 '+bk.chapter_index+' 章':'')+'">《'+esc(String(bk.name||'').slice(0,20))+'》'+(bk.chapter_index?'第 '+bk.chapter_index+' 章':'')+'</a>':'')+
 (s==null?'':'<span class="dc-bar '+lv+'" title="评分 '+s+'"><i style="width:'+t+'%"></i>'+Z)+
 licBadge(m)+
-'<span class="tag">'+esc(MTY[m.type]||m.type)+(meta.line?' · '+esc(meta.line):'')+(m.grade?' · '+esc(m.grade)+' 级':'')+(meta.platform?' · '+esc(meta.platform):'')+(meta.duration_text?' · '+esc(meta.duration_text):'')+Z+
+'<span class="tag">'+esc(MTY[m.type]||m.type)+(meta.line?' · '+esc(meta.line):'')+(m.grade?' · '+esc(m.grade)+' 级':'')+(meta.platform?' · '+esc(meta.platform):'')+(meta.duration_text?' · '+esc(meta.duration_text):(meta.duration?' · ⏱ '+fmtDur(meta.duration):''))+Z+
 '</span></span></span>'+
 '<button class="btn btn-ghost btn-icon mat-more" data-mmore="'+esc(m.id)+'" title="更多操作（右键同）" aria-label="更多操作">⋯</button>'+
 '<button class="btn" data-mread="'+esc(m.id)+'">'+(tri.read?'已读':'未读')+'</button>'+
@@ -2432,21 +2719,33 @@ if(!state.mdrawer)return;
 if(!d)d=state.mdrawerData;
 if(!d){var m0=matById(state.mdrawer);if(!m0)return;d={material:m0,cascade:[]};}
 state.mdrawerData=d;
-var m=d.material||{},casc=d.cascade||[];
+// detail 响应是扁平素材行（references/collections 就地状态）——兼容
+// {material,cascade} 包形态（旧/测试双形态宽容读，D12 回归教训）
+var m=d.material||((d.id&&d.type)?d:{}),casc=d.cascade||[];
 var o=m.origin||{},tri=m.triage||{},p=m.payload||{},meta=p.meta||{},h='',i,b=m.score_breakdown||{};
 if(b.depth!=null)for(i=0;i<4;i++)h+='<div class="pbar"><span class="pbar-name">'+DD[i][0]+'</span><span class="pbar-track"><span class="pbar-fill" style="width:'+(b[DD[i][1]]||0)/DD[i][2]*100+'%"></span></span><span class="pbar-n">'+(b[DD[i][1]]||0)+'/'+DD[i][2]+'</span></div>';
 var prev=p.text||meta.summary||o.uri||'（无正文预览）';
 // F-A（2026-11-18）：媒体本体按 type 分流——image 顶部原图（file full 非 thumb）+灯箱入口；
-// video 播放条（local_path 走 file；外链 payload.url／o.uri）+新窗口；余类型维持 pre 正文。
+// video 本地登记（payload.local_path）走 /media/ 静态面（B3：内嵌 <video> 可播可 seek，
+// poster 首帧同域引用）；URL 登记视频外链（p.url／o.uri）新窗口；余类型维持 pre 正文。
 var media='',full='/api/materials/file?id='+encodeURIComponent(m.id)+'&variant=full';
+// 素材查看器批（2026-11-26）：text/crawled → 分型查看器（md 沙箱渲染+大小
+// 门控+localbook 现取）；image/video 保留既有内嵌（F-A/B3 已好）。
+var isLocalbook=String(o.uri||'').indexOf('localbook:')===0;
+var txtView=(m.type==='text'||m.type==='crawled')&&(p.text||p.local_path||isLocalbook); // kb 引用型正文在 local_path（现读）
 if(m.type==='image')media='<img class="drawer-media" src="'+esc(full)+'"><button class="btn" data-mlight="'+esc(m.id)+'">灯箱查看</button>';
-else if(m.type==='video'){var vu=p.local_path?full:(p.url||o.uri);media='<video class="drawer-media" controls preload="metadata" src="'+esc(vu)+'"></video><a class="btn" href="'+esc(vu)+'" target="_blank" rel="noopener">新窗口打开</a>';}
+else if(m.type==='video'&&p.local_path){
+var vp=meta.poster?('/media/'+meta.poster):'';
+media='<video class="drawer-media" controls preload="metadata"'+(vp?' poster="'+esc(vp)+'"':'')+' src="'+esc('/media/'+p.local_path)+'"></video>'+
+(meta.duration?'<p class="drawer-meta"><span class="tag">⏱ '+fmtDur(meta.duration)+(meta.bytes?' · '+hbytes(meta.bytes):'')+'</span></p>':'')+
+'<a class="btn" href="'+esc('/media/'+p.local_path)+'" target="_blank" rel="noopener">新窗口打开</a>';}
+else if(m.type==='video'){var vu=p.url||o.uri;media='<video class="drawer-media" controls preload="metadata" src="'+esc(vu)+'"></video><a class="btn" href="'+esc(vu)+'" target="_blank" rel="noopener">新窗口打开</a>';}
 $('mat-drawer-title').innerHTML=(tri.starred?'★ ':'')+esc(m.title||o.uri||m.id);
 $('mat-drawer-body').innerHTML=
 // P2 打磨历史 tab（iterations.js 独立产物驱动；壳零新增，骨架全 JS 渲染）
 '<div class="chips" style="margin:0 0 var(--space-sm)"><button class="chip" data-miit="0">内容</button><button class="chip" id="mi-t1" data-miit="1">打磨历史</button></div>'+
 '<div id="mi-view">'+
-(media||'<pre class="drawer-preview">'+esc(prev)+'</pre>')+
+(media||(txtView?'<div id="mat-txt-view">'+matTextSkeleton(m,p,isLocalbook)+'</div>':'<pre class="drawer-preview">'+esc(prev)+'</pre>'))+
 h+
 '<p class="drawer-meta">'+licBadge(m)+'<span class="tag">'+esc(MTY[m.type]||m.type)+Z+'<span class="src-badge">'+esc(o.source_id||'—')+'</span> · '+esc(String(m.fetched_at||'').replace('T',' '))+'</p>'+
 // R3.5 T3：抽屉来源行（book 元数据——书名深链回 #books）
@@ -2461,6 +2760,7 @@ tsugBox(m)+
 '<div id="mi-body" hidden></div>'+
 '<div class="action-row mat-acts">'+(m.type==='text'?'<button class="btn" data-mdraft="'+esc(o.uri)+'"'+(m.drafted?' disabled':'')+'>生成骨架</button>':'')+((meta.url||p.url)?'<a class="btn" href="'+esc(meta.url||p.url)+'" target="_blank" rel="noopener">查看原文</a>':'')+'<button class="btn" data-mcolladd="'+esc(m.id)+'">+ 集合</button><button class="btn" data-mcm="'+esc(m.id)+'">加入创作</button><button class="btn" data-mstar="'+esc(m.id)+'">'+(tri.starred?'取消收藏':'收藏')+'</button><button class="btn" data-mread="'+esc(m.id)+'">'+(tri.read?'已读':'未读')+'</button><button class="btn" data-moff="'+esc(m.id)+'">'+(tri.enabled?'禁用':'启用')+'</button><button class="btn" data-mai="'+esc(m.id)+'">AI 摘要</button><button class="btn mat-del" data-mdel="'+esc(m.id)+'">删除</button></div>'+
 '';
+if(txtView)matPaintText(m,p,isLocalbook); // 素材查看器批：骨架渲染后填充四型视图
 if(window.__mdpubMatIter)__mdpubMatIter.repaint(state.mdrawer);
 if(window.__mdpubMatLineage)__mdpubMatLineage.repaint(state.mdrawer); // N-4 血统 tab（chip/容器由 lineage.js 自注入）
 }
@@ -2640,6 +2940,94 @@ $('ctx').addEventListener('click',function(e){
 var t=e.target.closest('[data-ctg]');
 if(t){ctxHide();var kv=t.getAttribute('data-ctg').split('|');collTg(kv[0],kv[1]);}
 });
+
+// ── 素材查看器（2026-11-26 批）──────────────────────────────────────
+// 文本：≤3 万字直接出（md 启发→沙箱 iframe 渲染 / 原文 pre 切换）；
+// >3 万截断+「加载全部」；localbook：excerpt 起步+「读取本章全文」现取
+// （render API 内现取章节，§五不复制红线不破）。image/video 保留 F-A/B3。
+var MAT_TXT_CAP=30000;
+function matLooksMd(s){return /^#{1,3}\s|\*\*|^>\s|```|^\|/m.test(s||'');}
+function matTextSkeleton(m,p,isLocalbook){
+var chars=p.chars||String(p.text||'').length||(isLocalbook?(p.excerpt||'').length:0);
+var big=chars>MAT_TXT_CAP;
+var lb=isLocalbook&&!p.text;
+return '<p class="action-hint" id="mat-txt-loading">'+(lb?'正在准备本章内容…':(big?'正在渲染（截取前 3 万字，共 '+chars.toLocaleString()+' 字）…':'正在渲染 '+chars.toLocaleString()+' 字…'))+'</p>';
+}
+function matPaintText(m,p,isLocalbook){
+var host=document.getElementById('mat-txt-view');
+if(!host)return;
+var chars=p.chars||String(p.text||'').length||(isLocalbook?(p.excerpt||'').length:0);
+var big=chars>MAT_TXT_CAP,lb=isLocalbook&&!p.text;
+var isMd=matLooksMd(p.text||'')||matLooksMd(p.excerpt||'')||!p.text; // 引用型正文在文件（现读必渲染）
+var chips='<div class="chips" style="margin:0 0 8px">'+
+(lb?'':'<span class="chip">'+(chars?chars.toLocaleString()+' 字':'—')+'</span>')+
+(big?'<span class="chip" style="color:var(--amber);border-color:rgba(217,119,6,.4)">已截取前 3 万字</span>':'')+
+(lb?'<span class="chip">本地书 · 现取</span>':'')+
+(isMd?'<button class="chip" id="mat-txt-md">渲染视图</button><button class="chip" id="mat-txt-raw">原文</button>':'')+
+'</div>';
+if(lb){
+host.innerHTML=chips+'<pre class="drawer-preview">'+esc(p.excerpt||'（本章摘录为空）')+'</pre>'+
+'<div style="text-align:center;padding:10px 0"><button class="btn btn-primary" id="mat-lb-full" data-id="'+esc(m.id)+'">读取本章全文（现取'+(chars?' '+chars.toLocaleString()+' 字':'')+'）</button><p class="action-hint" style="margin-top:4px">本地书正文永远读磁盘原文件，按需现取不复制</p></div>';
+matBindLbFull(m);
+return;
+}
+host.innerHTML=chips+'<div id="mat-txt-mdv" class="mat-mdframe"><p class="action-hint">渲染中…</p></div><pre class="drawer-preview" id="mat-txt-pre"'+(isMd?' hidden':'')+'>'+esc(String(p.text||'').slice(0,big?MAT_TXT_CAP:undefined))+((big)?'\n\n（……已截取，点下方加载全部……）':'')+'</pre>'+
+(big?'<div style="text-align:center;padding:9px 0 3px"><button class="btn btn-primary" id="mat-txt-all">加载全部（共 '+chars.toLocaleString()+' 字）</button></div>':'');
+if(isMd){matLoadRender(m,false);matBindView();}
+matBindAll(m,big);
+}
+function matBindLbFull(m){
+var b=document.getElementById('mat-lb-full');
+if(!b)return;
+b.addEventListener('click',function(){
+b.disabled=true;b.textContent='正在读取本章…';
+getJSON('/api/materials/render?id='+encodeURIComponent(m.id)).then(function(d){
+if(!d||d.ok===false){b.textContent='读取失败：'+esc((d||{}).error||'服务未响应');b.disabled=false;return;}
+var host=document.getElementById('mat-txt-view');
+var n=(d.chars||0).toLocaleString();
+host.innerHTML='<div class="chips" style="margin:0 0 8px"><span class="chip">'+n+' 字</span>'+(d.truncated?'<span class="chip" style="color:var(--amber)">已截取</span>':'')+'</div>'+
+'<div class="mat-mdframe" id="mat-txt-mdv"></div>';
+var f=document.getElementById('mat-txt-mdv');
+if(f)f.innerHTML='<iframe sandbox style="width:100%;height:360px;border:0;display:block" srcdoc="'+esc(d.html)+'"></iframe>';
+}).catch(function(err){b.textContent='读取失败：'+esc(err.message);b.disabled=false;});
+});
+}
+function matLoadRender(m,isFull){
+var v=document.getElementById('mat-txt-mdv');
+if(!v)return;
+v.innerHTML='<p class="action-hint">渲染中…</p>';
+getJSON('/api/materials/render?id='+encodeURIComponent(m.id)+(isFull?'&full=1':'')).then(function(d){
+if(!d||d.ok===false){v.innerHTML='<p class="action-hint">渲染失败：'+esc((d||{}).error||'服务未响应')+'</p>';return;}
+v.innerHTML='<iframe sandbox style="width:100%;height:360px;border:0;display:block" srcdoc="'+esc(d.html)+'"></iframe>';
+}).catch(function(err){v.innerHTML='<p class="action-hint">渲染失败：'+esc(err.message)+'</p>';});
+}
+function matBindView(){
+var md=document.getElementById('mat-txt-md'),pre=document.getElementById('mat-txt-pre'),mdv=document.getElementById('mat-txt-mdv');
+if(!md||!pre||!mdv)return;
+md.addEventListener('click',function(){md.classList.add('is-active');document.getElementById('mat-txt-raw').classList.remove('is-active');mdv.hidden=false;pre.hidden=true;});
+document.getElementById('mat-txt-raw').addEventListener('click',function(){
+this.classList.add('is-active');md.classList.remove('is-active');mdv.hidden=true;pre.hidden=false;
+// 引用型素材（kb/localbook）payload 无 text——原文视图经 file 端点现读
+if(!pre.textContent.trim()||pre.textContent.indexOf('已截取')>=0){
+var mid=(state.mdrawerData&&state.mdrawerData.id)||(state.mdrawerData&&state.mdrawerData.material&&state.mdrawerData.material.id)||'';
+getJSON('/api/materials/render?id='+encodeURIComponent(mid)+'&full=1').then(function(d){
+if(d&&d.html){pre.textContent='（正文见渲染视图；原文长度 '+(d.chars||0).toLocaleString()+' 字）\n'+(d.plain||'');}
+}).catch(function(){});
+}
+});
+}
+function matBindAll(m,big){
+var b=document.getElementById('mat-txt-all');
+if(!b)return;
+b.addEventListener('click',function(){
+b.disabled=true;b.textContent='加载中…';
+var pre=document.getElementById('mat-txt-pre');
+if(pre){var p=(state.mdrawerData&&state.mdrawerData.material&&state.mdrawerData.material.payload)||{};pre.textContent=String(p.text||'');pre.hidden=pre.hidden;}
+matLoadRender(m,true);
+b.textContent='已加载全部';
+});
+}
+
 // @material-media
 // 素材媒体·AI 面板子文件（UIX-3 三拆；经 matPart 媒体段按需拉取——首触才载）：
 // AI 综合 syn 族（多选→步级面板→采纳）/ 文生图 gen 族 / 上传 tray 族 / 灯箱 LB 族；
@@ -2872,7 +3260,13 @@ var BK={bookUrl:'',sourceUrl:'',name:'',info:null,toc:[],gs:[],sel:{},filter:'',
 // T1：AI 提炼 switch 默认开；localStorage musespiral-book-digest 记忆上次选择
 function bkDigestInit(){try{BK.digest=localStorage.getItem('musespiral-book-digest')!=='0'}catch(e){BK.digest=true}
 var b=$('bk-digest');if(b){b.checked=BK.digest;$('bk-digest-off').hidden=BK.digest;}}
-function bkSub(m){$('bk-search').hidden=m!=='search';$('bk-detail').hidden=m!=='detail';$('bk-subs').hidden=m!=='subs';}
+// 四子态（B1 2026-11-26）：search（网络搜索）/ local（本地书架）/ subs（订阅管理）
+// / detail（网络书详情）。tabs 行恒在 view-head 下，选中态随子态走（detail 归 search）。
+function bkSub(m){
+$('bk-search').hidden=m!=='search';$('bk-detail').hidden=m!=='detail';$('bk-subs').hidden=m!=='subs';
+var lc=$('bk-local');if(lc)lc.hidden=m!=='local';
+var on=m==='local'?'local':m==='subs'?'subs':'search';
+QA('#bk-tabs [data-bktab]').forEach(function(t){t.classList.toggle('is-active',t.getAttribute('data-bktab')===on);});}
 function bkMode(m,kw){bkSub(m);if(m==='search'){bkLamp();if(kw)$('bk-search-box').value=kw;}}
 // 引擎三态灰灯（2026-11-23 用户反馈批）：未建设/体验模式/可搜——「未建设不是
 // 故障」，须把「为什么 + 现在能干什么 + 想试怎么办」讲清楚（旧版只有一句「未就绪」，
@@ -3212,10 +3606,96 @@ imClose();bkLamp();
 }catch(err){toast('导入失败：'+err.message,ER);}
 finally{btn.disabled=false;if(IM.st==='importing')IM.st='previewing';}}
 /*__IM_END__*/
+// ── B1 本地书架（2026-11-26）────────────────────────────────────────
+// 设计正典=《musespiral-三线扩展设计-本地TXT书籍-视觉编辑2-多媒体-2026-11-26》
+// §1.4：书籍视图三 tab 之「本地书架」；点书卡**不在本视图渲染详情**——直接开
+// 阅读面板（reader 视图），origin=`localbook:<id>` 由面板按前缀分派到
+// /api/localbook/{info,toc,chapter}（零重构复用）。书架自身三件事：导入
+// （路径输入，与 dir 源同风格——本地单用户工具，不依赖文件选择器）、
+// 网格渲染（封面渐变/章节数/字数/编码徽章/未识别标注）、点卡开面板 + 下架。
+var LBK={books:[],fail:'',loading:false};
+function lbkCard(b){
+// 未识别章节结构如实标注（设计 §1.2 的诚实性承诺）——不写「0 章」冒充空书
+var un=b.structure==='fixed';
+var chap=un?'未识别章节结构':((b.chapters||0)+' 章');
+var meta='<span>'+esc(chap)+'</span>'+(b.chars?'<span>'+esc(lbWan(b.chars))+'</span>':'')+
+'<span class="badge lb-enc '+lbEncClass(b.charset)+'">'+esc(b.charset||'?')+'</span>';
+return '<div class="card lb-card" role="button" tabindex="0" data-lbid="'+esc(b.id)+'" aria-label="打开本地书 '+esc(b.title||'')+'">'+
+'<div class="lb-cover" style="background:'+esc(lbCoverStyle(b.id))+'">'+esc(String(b.title||'?').slice(0,2))+'</div>'+
+'<div class="lb-title" title="'+esc(b.path||'')+'">'+esc(b.title||'(无题)')+'</div>'+
+'<div class="lb-meta">'+meta+'</div>'+
+'<button class="btn btn-ghost lb-del" type="button" data-lbdel="'+esc(b.id)+'" aria-label="下架 '+esc(b.title||'')+'" title="下架（不删你的文件）">下架</button></div>';
+}
+function lbkPaint(){
+var host=$('bk-local');if(!host)return;
+if(LBK.loading){host.innerHTML='<div class="skel"><div class="skel-line w90"></div><div class="skel-line w70"></div></div>';return;}
+if(LBK.fail){host.innerHTML=loadFailHTML('本地书架',LBK.fail,'lbkLoad');return;}
+var h='<div class="action-row lb-bar"><input class="input lb-path" id="lb-path" placeholder="TXT 文件绝对路径（如 /Users/你/books/星河彼岸.txt）" aria-label="要导入的 TXT 路径">'+
+'<button class="btn btn-primary" id="lb-add" type="button">＋ 导入 TXT</button>'+
+'<span class="action-hint">只读你磁盘上的文件，不入库复制</span></div>';
+if(!LBK.books.length){
+h+='<div class="empty"><div class="empty-icon" data-icon="docs"></div><div class="empty-title">书架还空着</div>'+
+'<div class="empty-text">把一本 .txt 的完整路径填到上面，点「导入 TXT」。书不会入库复制——书架只记下文件位置、编码与章节偏移，正文永远读你磁盘上的原文件。</div></div>';
+}else{
+h+='<div class="card-grid lb-grid">'+LBK.books.map(lbkCard).join('')+'</div>';
+}
+host.innerHTML=h;
+mountChrome();
+var add=$('lb-add');if(add)add.addEventListener('click',function(){lbkAdd(this);});
+var inp=$('lb-path');if(inp)inp.addEventListener('keydown',function(e){
+if(e.isComposing||e.keyCode===229||e.key!=='Enter')return;
+lbkAdd($('lb-add'));});
+var grid=host.querySelector('.lb-grid');
+if(grid)grid.addEventListener('click',function(e){
+if(e.target.closest('[data-lbdel]'))return; // 下架按钮走 bindBooks 的委托
+var c=e.target.closest('[data-lbid]');if(!c)return;
+lbkOpen(c.getAttribute('data-lbid'));});
+if(grid)grid.addEventListener('keydown',function(e){
+if(e.key!=='Enter'&&e.key!==' ')return;
+var c=e.target.closest('[data-lbid]');if(!c||e.target.closest('[data-lbdel]'))return;
+e.preventDefault();lbkOpen(c.getAttribute('data-lbid'));});
+}
+function lbkLoad(){
+LBK.loading=!LBK.books.length;LBK.fail='';lbkPaint();
+getJSON('/api/localbook/list').then(function(d){
+LBK.books=Array.isArray(d.books)?d.books:[];LBK.fail='';LBK.loading=false;lbkPaint();
+}).catch(function(err){LBK.loading=false;LBK.fail=err.message||'服务未响应';lbkPaint();});
+}
+async function lbkAdd(btn){
+var inp=$('lb-path'),path=inp?inp.value.trim():'';
+if(!path)return toast('先填 TXT 的完整路径',WN);
+if(btn)btn.disabled=true;
+try{
+var d=await postJSON('/api/localbook/add',{path:path,confirm:true});
+var b=(d&&d.book)||{};
+toast('已导入《'+(b.title||'')+'》· '+(b.structure==='fixed'?'未识别章节结构':(b.chapters||0)+' 章')+' · '+(b.charset||''),OK);
+if(inp)inp.value='';
+LBK.books=[];lbkLoad();
+}catch(err){toast('导入失败：'+err.message,ER);}
+finally{if(btn)btn.disabled=false;}
+}
+async function lbkRemove(id,title){
+var ok=await askConfirm({title:'下架这本书？',message:'《'+(title||'')+'》会从书架移除（章节偏移与元数据一并删除）。你磁盘上的 TXT 文件不受任何影响；已入素材库的章节素材也保留。',confirmText:'下架'});
+if(!ok)return;
+try{await postJSON('/api/localbook/remove',{id:id,confirm:true});
+toast('已下架',OK);LBK.books=[];lbkLoad();}
+catch(err){toast('下架失败：'+err.message,ER);}
+}
+async function lbkOpen(id){
+var b=LBK.books.filter(function(x){return x.id===id;})[0]||{};
+try{
+await ensureView('reader');
+// origin=localbook:<id>：阅读面板按前缀分派到 localbook 端点（零重构复用）
+VAPI.reader.openBook({origin:'localbook:'+id,originName:'本地: '+(b.title||'TXT'),
+name:b.title||'',author:b.author||'',bookUrl:''});
+}catch(err){toast('阅读面板装载失败：'+err.message,ER);}
+}
 // 路由入口（原 renderRoute books 分支整体迁入——A 类专项：分支归视图）
 // R4 #books 三子态（hash 驱动）：默认搜索（占位）/ 详情 ?book=&source= / 订阅 ?tab=subs
 VAPI.books={enter:function(route){
-if(route.params.get('tab')==='subs')bkMode('subs');
+var tab=route.params.get('tab');
+if(tab==='subs')bkMode('subs');
+else if(tab==='local'){bkMode('local');lbkLoad();}
 else if(route.params.get('book')&&route.params.get('source'))bkOpen(route.params.get('book'),route.params.get('source'),route.params.get('name')||'');
 else bkMode('search',route.params.get('search'));
 }};
@@ -3223,6 +3703,20 @@ function bindBooks(){
 bindBookSubs();
 // ── R4 #books + R3.5 提炼触点绑定 ──
 bkDigestInit();
+// B1 本地书架：三 tab 点击即改 hash——hash 是唯一状态源（后退/深链天然可用，
+// 视图内不另存 tab 变量）
+$('bk-tabs').addEventListener('click',function(e){
+var t=e.target.closest('[data-bktab]');if(!t)return;
+var v=t.getAttribute('data-bktab');
+location.hash=v==='search'?'#books':('#books?tab='+v);});
+// 下架入口委托在 #bk-local（网格随 innerHTML 重建，逐卡绑定会被冲掉）
+$('bk-local').addEventListener('click',function(e){
+var d=e.target.closest('[data-lbdel]');if(!d)return;
+e.stopPropagation();
+var id=d.getAttribute('data-lbdel');
+var b=LBK.books.filter(function(x){return x.id===id;})[0]||{};
+lbkRemove(id,b.title||'');
+});
 $('bk-subs-btn').addEventListener('click',function(){location.hash='#books?tab=subs';});
 $('bk-subs-back').addEventListener('click',function(){location.hash='#books';});
 // FEAT-5 空态引导：搜索态占位引导卡的可行动按钮（现在就能做的事，而非等待 R4 批）
@@ -3475,8 +3969,10 @@ catch(err){toast('移除失败：'+err.message,ER);}
 var CMTAB='disc',cmMtQ='',cmMine=null,cmMineFail='';
 function cmMineRows(added){
 var L=(cmMine||[]).filter(function(m){
-if(!(m.payload||{}).text)return false;
-if(cmMtQ){var hay=(String(m.title||'')+' '+String(m.payload.text||'')).toLowerCase();if(hay.indexOf(cmMtQ.toLowerCase())<0)return false;}
+// D4' 修复（2026-11-26）：localbook 素材正文不入 payload（红线），经
+// uri localbook: 前缀放行——生成侧 prompt.py 同步现取（双端同一判据）
+if(!(m.payload||{}).text&&String((m.origin||{}).uri||'').indexOf('localbook:')!==0)return false;
+if(cmMtQ){var _pl=m.payload||{},hay=(String(m.title||'')+' '+String((m.origin||{}).title||'')+' '+String(_pl.text||'')).toLowerCase();if(hay.indexOf(cmMtQ.toLowerCase())<0)return false;} // D15：API 的 title 在 origin.title
 return true;
 }).slice(0,20);
 return L.length?L.map(function(m){
@@ -3495,7 +3991,21 @@ return added;
 }
 function cmMineLoad(){
 // P0-3：失败≠「暂无带正文的素材」——catch 显形，cmMineFail 由渲染层出卡
-getJSON('/api/materials?limit=200').then(function(d){cmMine=Array.isArray(d.items)?d.items:[];cmMineFail='';renderCmPool();}).catch(function(err){cmMine=[];cmMineFail=err.message||'服务未响应';renderCmPool();});
+// D5 修复（2026-11-26）：主路（score 前 200）外并拉 localbook 源（无分沉
+// 底必在 200 截断外）——两路去重合并，避免「我的素材」缺本地书素材
+Promise.all([
+getJSON('/api/materials?limit=200'),
+getJSON('/api/sources').then(function(ss){
+var ss2=(ss.list||ss.sources||ss.items||[]).filter(function(s){return s.enabled!==false;});
+var dirs=ss2.filter(function(s){return s.type==='dir'||s.type==='localbook';});
+// 主路 200 条按 score 降序——无分 dir 素材沉底必被截断，故逐源补拉
+return Promise.all(dirs.map(function(s){return getJSON('/api/materials?source='+encodeURIComponent(s.id)+'&limit=100').catch(function(){return {items:[]};});}));
+}).then(function(ds){return {items:ds.reduce(function(a,d){return a.concat((d&&d.items)||[]);},[])};}).catch(function(){return {items:[]};})
+]).then(function(ds){
+var seen={},rows=[];
+(ds[0].items||[]).concat(ds[1].items||[]).forEach(function(m){if(m&&m.id&&!seen[m.id]){seen[m.id]=1;rows.push(m);}});
+cmMine=rows;cmMineFail='';renderCmPool();
+}).catch(function(err){cmMine=[];cmMineFail=err.message||'服务未响应';renderCmPool();});
 }
 function renderCmPool(){
 var added=cmAddedMap(),cand;
@@ -4082,23 +4592,31 @@ scPaint();
 bindCompose();
 // @endview
 // @view:design
-// Phase C F72 社媒图编辑器（#design 视图；正典 C 档 §二 F72 十步交互流）：
-// SVG 图元=DOM 节点，点选/拖动全走原生指针事件（零命中检测代码，零依赖红线）；
-// 编辑先稿后导出；A 路导出 dataURI 天然离线；AI 不参与。撤销栈=内存快照
-// N=50（⌘Z/⇧⌘Z，刷新即弃——存稿才是持久化边界）。契约实测（visual_actions.py
-// + visual_payload.py + visual_service.py）：render{template,params,spec,article}
-// →{ok,svg,params}；design GET ?article=→404 无稿；save{article,kind,template,
-// params,spec,svg}（svg 显式给→白名单复验落盘，手工位移/层级随 svg 进稿）；
-// export→job（设计稿缺席同步 200+{ok:false}）。xhs-card schema 仅 title/hook/
-// tag/font_size/align/background_slot 六槽（templates.py:197-206）——无几何/行距
-// 槽，行距控件按实测契约不设（发即 400 未知槽）。
-var DV={art:'',kind:'social',tpl:'xhs-card',spec:'xhs-3x4',params:{},svg:'',w:0,h:0,k:1,st:'idle',dirty:false,sel:-1,dpos:{},order:null,undo:[],redo:[],q:0,h:0,drag:null,pendSpec:'',slots:[],slotHexes:{},recent:[],loadedOnce:false,slotFail:''};
+// Phase C F72 社媒图编辑器（#design 视图）→ B2 视觉编辑 2.0 三栏编辑器（2026-11-26）：
+// 左=模板横条+图层列表（拖拽 z 序/眼睛显隐/锁/上下移）｜中=画布｜右=属性面板
+// （文字：内容/颜色+字号对齐 chips；image_slot：素材库选图+fit/mask；背景：五类型
+// +参数+纹样四选）。SVG 图元=DOM 节点，点选/拖动全走原生指针事件（零命中检测
+// 代码，零依赖红线）；编辑先稿后导出；A 路导出 dataURI 天然离线；AI 不参与。
+// 撤销栈=内存快照 N=50（⌘Z/⇧⌘Z，刷新即弃——存稿才是持久化边界）。
+// 契约实测（visual_actions.py + visual_payload.py + visual_service.py）：
+// render{template,params,spec,article,background?}→{ok,svg,params}；design GET
+// ?article=→404 无稿（B2 起回 version/background/elements——v1 老稿服务端补
+// 默认）；save{article,kind,template,params,spec,svg,background,elements}（B2
+// 图层状态表 {i,z,opacity,locked,visible,blend,dx,dy}——位移随 v2 elements 进
+// 稿，修 F72 期「手工位移只活在会话内」的缺口）；export→job（设计稿缺席同步
+// 200+{ok:false}）。模板注册表 4→10（GET /api/visual/templates）。
+var DV={art:'',kind:'social',tpl:'xhs-card',spec:'xhs-3x4',params:{},svg:'',w:0,h:0,k:1,st:'idle',dirty:false,sel:-1,dpos:{},order:null,undo:[],redo:[],q:0,h:0,drag:null,pendSpec:'',slots:[],slotHexes:{},recent:[],loadedOnce:false,slotFail:'',tplFail:'',tpls:[],tmeta:{},bg:null,lprops:{},pick:null};
 var DSPECS=['xhs-3x4','xhs-4x5','square'],DSIZE={'xhs-3x4':[1242,1656],'xhs-4x5':[1242,1553],'square':[1080,1080]};
 var DTXT={'xhs-card':{1:'tag',2:'title',3:'hook'}};
+// B2 背景五类型（与 model.BACKGROUND_KINDS 同序；类型面=服务端执法）
+var DBGTS=['solid','linear','radial','pattern','image'],DBG_LABEL={solid:'纯色',linear:'线性渐变',radial:'径向渐变',pattern:'纹样',image:'图片'};
+var DPATS=['dots','grid','waves','paper'];
+var DFITS=['cover','contain'],DMASKS=['none','rounded','circle','arch'];
+var DBLENDS=['normal','multiply','screen','overlay'];
 function dvSet(st){DV.st=st;dvSync();}
-function dvSnap(){return{p:Object.assign({},DV.params),s:DV.svg,dp:JSON.stringify(DV.dpos),o:DV.order?DV.order.slice():null,spec:DV.spec};}
+function dvSnap(){return{p:Object.assign({},DV.params),s:DV.svg,dp:JSON.stringify(DV.dpos),o:DV.order?DV.order.slice():null,spec:DV.spec,bg:DV.bg?JSON.parse(JSON.stringify(DV.bg)):null,lp:JSON.parse(JSON.stringify(DV.lprops))};}
 function dvCommit(pre){DV.undo.push(pre);if(DV.undo.length>50)DV.undo.shift();DV.redo=[];DV.dirty=true;dvSet('ready');}
-function dvRestore(s){DV.params=Object.assign({},s.p);DV.svg=s.s;DV.dpos=JSON.parse(s.dp);DV.order=s.o?s.o.slice():null;DV.spec=s.spec;DV.sel=-1;dvMount();dvSync();}
+function dvRestore(s){DV.params=Object.assign({},s.p);DV.svg=s.s;DV.dpos=JSON.parse(s.dp);DV.order=s.o?s.o.slice():null;DV.spec=s.spec;DV.bg=s.bg?JSON.parse(JSON.stringify(s.bg)):null;DV.lprops=s.lp?JSON.parse(JSON.stringify(s.lp)):{};DV.sel=-1;dvMount();dvSync();}
 function dvTravel(back){
 if(DV.st!=='ready')return;
 var src=back?DV.undo:DV.redo;
@@ -4108,6 +4626,13 @@ DV.q++;
 dvRestore(src.pop());
 DV.dirty=true;dvSet('ready');
 }
+// B2：svg 序列化器给背景/clipPath 结构节点打 class（dvbg/dvclip）——图层收集
+// 面据此跳过；v1 老 SVG（无 class 背景底 rect）沿用旧位置判跳。
+function dvIsBgNode(n,ord){
+var cls=String(n.getAttribute('class')||'');
+if(cls.indexOf('dvbg')>=0||cls.indexOf('dvclip')>=0)return true;
+return ord===0&&n.tagName==='rect'&&+n.getAttribute('width')===DV.w;
+}
 function dvMount(){
 var stage=$('dv-stage');
 stage.innerHTML=DV.svg;
@@ -4116,7 +4641,7 @@ if(!svgEl){DV.svg='';dvSet('idle');return;}
 DV.w=+svgEl.getAttribute('width')||DV.w;DV.h=+svgEl.getAttribute('height')||DV.h;
 var kids=[],nodes=svgEl.children,i,n;
 for(i=0;i<nodes.length;i++){n=nodes[i];
-if(i===0&&n.tagName==='rect'&&+n.getAttribute('width')===DV.w)continue;
+if(dvIsBgNode(n,i))continue;
 kids.push(n);}
 if(!DV.order||DV.order.length!==kids.length)DV.order=kids.map(function(x,j){return j;});
 else DV.order.forEach(function(oi){svgEl.appendChild(kids[oi]);});
@@ -4124,8 +4649,12 @@ kids.forEach(function(n2,j){
 n2.setAttribute('data-o',j);
 var t=DTXT[DV.tpl]&&DTXT[DV.tpl][j];
 if(t)n2.setAttribute('data-t',t);
-var p=DV.dpos[j];
+var p=DV.dpos[j],lp=DV.lprops[j]||{};
 if(p)n2.setAttribute('transform','translate('+p[0]+','+p[1]+')');
+if(lp.opacity!=null&&lp.opacity!==1)n2.setAttribute('opacity',String(lp.opacity));else n2.removeAttribute('opacity');
+if(lp.blend&&lp.blend!=='normal')n2.setAttribute('style','mix-blend-mode:'+lp.blend);else n2.removeAttribute('style');
+n2.style.display=lp.visible===false?'none':'';
+if(lp.fill&&n2.tagName==='text')n2.setAttribute('fill',lp.fill);
 });
 }
 function dvHandles(){
@@ -4144,6 +4673,7 @@ function dvSelect(i){
 DV.sel=i;
 dvHandles();
 $('dv-fwd').disabled=$('dv-bwd').disabled=i<0;
+dvLayersPaint();dvPropPaint();
 }
 function dvMove(dir){
 if(DV.sel<0||!DV.order)return;
@@ -4159,9 +4689,13 @@ async function dvRenderNow(){
 if(!DV.art)return;
 var n=++DV.q;
 try{
-var r=await postJSON('/api/visual/render',{confirm:true,template:DV.tpl,params:DV.params,spec:DV.spec,article:DV.art});
+var r=await postJSON('/api/visual/render',{confirm:true,template:DV.tpl,params:DV.params,spec:DV.spec,article:DV.art,background:dvBgOut()});
 if(n!==DV.q)return;
 DV.svg=r.svg;
+// V4 补（2026-11-26）：render API 回填 params（article-long 取材后的
+// title/subtitle/paragraphs——服务端 _fill_article_defaults 填的值要让
+// 编辑器知道，否则双击段落编辑时槽空）
+if(r.params)DV.params=Object.assign({},DV.params,r.params);
 dvMount();dvSet('ready');
 }catch(err){
 if(DV.svg)dvMount();
@@ -4181,6 +4715,17 @@ return postJSON('/api/visual/render',{confirm:true,template:'xhs-card',spec:DV.s
 DV.tpl=d.template||'xhs-card';DV.kind=d.kind||'social';DV.spec=d.spec||DV.spec;
 DV.params=Object.assign({},d.params||{});
 DV.svg=d.svg||'';DV.dpos={};DV.order=null;DV.sel=-1;DV.undo=[];DV.redo=[];DV.dirty=false;
+// B2：v2 图层状态回放（elements 按 z 稳定序→DV.order；lprops/dx/dy 就位）
+DV.bg=(d.background&&typeof d.background==='object'&&d.background.kind)?d.background:null;
+DV.lprops={};DV.dpos={};
+(d.elements||[]).forEach(function(rw){
+var i=rw.i;
+DV.lprops[i]={opacity:rw.opacity!=null?rw.opacity:1,locked:!!rw.locked,visible:rw.visible!==false,blend:rw.blend||'normal',fill:rw.fill||''};
+if(rw.dx||rw.dy)DV.dpos[i]=[rw.dx||0,rw.dy||0];
+});
+var zs=(d.elements||[]).slice().sort(function(a,b){return a.z-b.z;}).map(function(rw){return rw.i;});
+if(zs.length)DV.order=zs;
+dvTplsPaint();dvSpecsPaint();
 dvMount();dvSet('ready');
 }catch(err){
 dvSet('idle');
@@ -4201,7 +4746,7 @@ async function dvSave(){
 if(!DV.art)return;
 dvSet('saving');
 try{
-await postJSON('/api/visual/save',{confirm:true,article:DV.art,kind:DV.kind,template:DV.tpl,params:DV.params,spec:DV.spec,svg:DV.svg});
+await postJSON('/api/visual/save',{confirm:true,article:DV.art,kind:DV.kind,template:DV.tpl,params:DV.params,spec:DV.spec,svg:DV.svg,background:dvBgOut(),elements:dvLayersOut()});
 DV.dirty=false;
 dvSet('ready');
 toast('已存稿（版本池先行）',OK);
@@ -4209,6 +4754,29 @@ toast('已存稿（版本池先行）',OK);
 dvSet('ready');
 toast('存稿失败：'+err.message,ER);
 }
+}
+// B2 载荷组装：背景（null=模板槽色底）/图层状态表（order 序=z 序，位移与
+// 透明度/混合/显隐/锁/文字色随行——服务端 _check_layers 执法归一）
+function dvBgOut(){
+if(!DV.bg||!DV.bg.kind)return null;
+// image 背景未选图=「未生效」（出 null 走模板槽色底）——避免半途态把
+// render/save 打成 400（Background kind=image 必须有 image 的服务端执法）。
+if(DV.bg.kind==='image'&&!DV.bg.image)return null;
+var bg={kind:DV.bg.kind,color:DV.bg.color||'#ffffff',angle:+DV.bg.angle||135,pattern:DV.bg.pattern||'dots',image:DV.bg.image||'',overlay_alpha:+DV.bg.overlay_alpha||0};
+if(DV.bg.kind==='linear'||DV.bg.kind==='radial'){
+var st=DV.bg.stops&&DV.bg.stops.length===2?DV.bg.stops:[[0,'#ffffff'],[1,'#dbeafe']];
+bg.stops=[[+st[0][0]||0,st[0][1]],[+st[1][0]||1,st[1][1]]];
+}
+return bg;
+}
+function dvLayersOut(){
+var o=DV.order||[];
+return o.map(function(i,pos){
+var lp=DV.lprops[i]||{},d=DV.dpos[i]||[0,0];
+var row={i:i,z:pos,opacity:lp.opacity!=null?lp.opacity:1,locked:!!lp.locked,visible:lp.visible!==false,blend:lp.blend||'normal',dx:Math.round(d[0]),dy:Math.round(d[1])};
+if(lp.fill)row.fill=lp.fill;
+return row;
+});
 }
 function dvRast(svg,w,h,name){
 return new Promise(function(res,rej){
@@ -4239,11 +4807,11 @@ if(route==='a'){
 var stem=DV.art.replace(/^.*\//,'').replace(/\.md$/i,'');
 for(var i=0;i<specs.length;i++){
 var sp=specs[i],cur=sp===DV.spec;
-var r=cur?{svg:DV.svg}:await postJSON('/api/visual/render',{confirm:true,template:DV.tpl,params:DV.params,spec:sp,article:DV.art});
+var r=cur?{svg:DV.svg}:await postJSON('/api/visual/render',{confirm:true,template:DV.tpl,params:DV.params,spec:sp,article:DV.art,background:dvBgOut()});
 var wh=cur?[DV.w,DV.h]:DSIZE[sp];
 await dvRast(r.svg,wh[0],wh[1],stem+'.'+(cur?'social':sp)+'.png');
 }
-toast('已导出 PNG×'+specs.length,OK);
+toast('已导出 PNG×'+specs.length+'（浏览器下载目录——自动化/无弹窗环境请改用 B 路导出）',OK);
 }else{
 if(DV.dirty)await dvSave();
 for(var j=0;j<specs.length;j++){
@@ -4251,7 +4819,7 @@ if(specs[j]!==DV.spec)await postJSON('/api/visual/save',{confirm:true,article:DV
 var d=await postJSON('/api/visual/export',{confirm:true,article:DV.art,kind:DV.kind});
 var job=await waitForJob(d.job_id),rr=job.result||{};
 if(job.status==='failed'||rr.ok===false)throw new Error(rr.error||job.error||'导出失败');
-toast('已导出：'+(rr.png||'').split('/').pop()+' '+rr.size[0]+'×'+rr.size[1],OK);
+toast('已导出：'+(rr.png||'').split('/').pop()+' '+rr.size[0]+'×'+rr.size[1]+'（在文章旁 .design/ 目录）',OK); // V3：导出路径明示
 }
 }
 }catch(err){toast('导出失败：'+err.message,ER);}
@@ -4259,12 +4827,17 @@ dvSet('ready');
 }
 // F-B（2026-11-18）：色槽 chip 改圆形色点（背景=服务端 slot_hexes、title=槽名）；
 // 槽集随服务端 slots（扩槽自动跟随）；最近 5 槽（localStorage）置顶一行。
+// B2：同趟取模板注册表（dv-tpls 数据面；bg 允许集入 DV.tmeta）。
 async function dvLoadSlots(){
 // P0-3：模板/色槽读取失败显形（localStorage 解析失败维持静默——非服务读取，
 // 与 probeHealth 同类：本机隐私模式下的 Storage 异常无可重试动作）
 try{var d=await getJSON('/api/visual/templates');DV.slotHexes=d.slot_hexes||{};
 DV.slots=((d.items||[])[0]||{}).color_slots||Object.keys(DV.slotHexes);
-DV.slotFail='';}catch(err){DV.slotFail=err.message||'服务未响应';}
+DV.tpls=(d.items||[]);
+DV.tpls.forEach(function(m){DV.tmeta[m.id]=m;});
+DV.slotFail='';DV.tplFail='';
+dvTplsPaint();
+}catch(err){DV.slotFail=err.message||'服务未响应';DV.tplFail=DV.slotFail;}
 try{DV.recent=JSON.parse(localStorage.getItem('musespiral-dv-recent')||'[]');}catch(e){}
 }
 // P0-3：色槽读取失败的重试入口（重载后重绘色点行）
@@ -4283,6 +4856,274 @@ var slots=DV.slots.length?DV.slots:['primary','text','muted','background','accen
 var rec=DV.recent.filter(function(s){return slots.indexOf(s)>=0;});
 $('dv-colors').innerHTML=(rec.length?'<span class="dv-cap">最近</span>'+rec.map(dvSwatch).join(''):'')+slots.map(dvSwatch).join('');
 }
+// ── B2 左栏：模板横条 + 图层列表 ──────────────────────────────
+var DTPL_LABEL={'vermilion-slab':'朱砂厚板','indigo-slab':'靛蓝厚板','xhs-card':'社媒卡','points-three':'三要点','article-long':'图文长页','xhs-cover-pro':'小红书封面','interview-card':'访谈卡','list-three':'三点卡','quote-poster':'金句海报','chapter-divider':'章节分隔'};
+function dvTplsPaint(){
+var host=$('dv-tpls');
+if(DV.tplFail){host.innerHTML=loadFailHTML('模板注册表',DV.tplFail,'dvSlotsRetry');return;}
+if(!DV.tpls.length){host.innerHTML='<p class="dv-hint">模板加载中…</p>';return;}
+host.innerHTML=DV.tpls.map(function(m){
+return '<button class="dv-tpl'+(DV.tpl===m.id?' is-active':'')+'" data-dtpl="'+esc(m.id)+'"><b>'+esc(DTPL_LABEL[m.id]||m.id)+'</b><span>'+esc(m.kind)+'</span></button>';
+}).join('');
+}
+function dvSetTpl(id){
+if(id===DV.tpl)return;
+var m=DV.tmeta[id];
+if(!m)return;
+if(DV.dirty){toast('先存稿再换模板',WN);return;}
+var pre=dvSnap();
+DV.tpl=id;DV.kind=m.kind;DV.params={};DV.bg=null;DV.lprops={};DV.dpos={};DV.order=null;DV.sel=-1;
+DV.spec=(m.specs&&m.specs.indexOf(DV.spec)>=0)?DV.spec:m.specs[0];
+dvTplsPaint();dvSpecsPaint();
+dvCommit(pre);
+dvSelect(-1);dvSet('loading');dvRenderNow();
+}
+// 规格横条按当前模板 meta.specs 重绘（静态源保 xhs 三档——锚面；运行时面）
+function dvSpecsPaint(){
+var m=DV.tmeta[DV.tpl],specs=(m&&m.specs)||DSPECS;
+var LABEL={'xhs-3x4':'3:4','xhs-4x5':'4:5','square':'1:1','wide16x9':'16:9','mp':'mp','article-long':'长图'};
+DSPECS=specs.slice();
+$('dv-specs').innerHTML=specs.map(function(sp){return '<button class="chip'+(DV.spec===sp?' is-active':'')+'" data-dspec="'+esc(sp)+'">'+esc(LABEL[sp]||sp)+'</button>';}).join('');
+}
+function dvLayerName(i,n){
+if(!n)return '图层'+i;
+if(n.tagName==='text'){
+var t=n.getAttribute('data-t');
+if(t)return t;
+var s=(n.textContent||'').trim().slice(0,10);
+return s||'文字';
+}
+if(n.tagName==='image')return '图片';
+return {rect:'矩形',circle:'圆',line:'线',path:'路径',g:'组'}[n.tagName]||n.tagName;
+}
+function dvLayersPaint(){
+var host=$('dv-layers');
+if(!host)return;
+if(!DV.svg){host.innerHTML='<p class="dv-hint">先载入设计稿</p>';return;}
+var o=DV.order||[],rows=[];
+for(var j=o.length-1;j>=0;j--){
+var i=o[j],lp=DV.lprops[i]||{};
+var n=$('dv-stage').querySelector('[data-o="'+i+'"]');
+rows.push('<div class="dv-lrow'+(DV.sel===i?' is-active':'')+(lp.locked?' is-locked':'')+(lp.visible===false?' eyehidden':'')+'" data-lrow="'+i+'" draggable="true">'
++'<span class="dv-lname">'+esc(dvLayerName(i,n))+'</span><span class="dv-lz">z'+j+'</span>'
++'<button class="dv-leye'+(lp.visible===false?' is-off':'')+'" data-dleye="'+i+'" title="'+(lp.visible===false?'显示':'隐藏')+'">'+(lp.visible===false?'⭘':'👁')+'</button>'
++'<button class="dv-lok'+(lp.locked?' is-on':'')+'" data-dlok="'+i+'" title="'+(lp.locked?'解锁':'锁定')+'">'+(lp.locked?'🔒':'⭘')+'</button></div>');
+}
+host.innerHTML=rows.join('')||'<p class="dv-hint">无元素</p>';
+}
+function dvLp(i){var lp=DV.lprops[i];if(!lp){lp={opacity:1,locked:false,visible:true,blend:'normal',fill:''};DV.lprops[i]=lp;}return lp;}
+function dvToggleEye(i){
+var pre=dvSnap(),lp=dvLp(i),n=$('dv-stage').querySelector('[data-o="'+i+'"]');
+lp.visible=lp.visible===false?true:false;
+if(n)n.style.display=lp.visible===false?'none':'';
+dvCommit(pre);dvLayersPaint();
+}
+function dvToggleLock(i){
+var pre=dvSnap(),lp=dvLp(i);
+lp.locked=!lp.locked;
+dvCommit(pre);dvLayersPaint();
+}
+// 拖拽重排：dragstart 记源行，drop 前后插（目标行 paint 序两侧）；paint 序与
+// z 序同源（dvLayersOut 以 DV.order 下标写 z）。
+var dvDragRow=null;
+function dvRowDrop(target,before){
+var o=DV.order||[];
+var src=o.indexOf(dvDragRow),tgt=o.indexOf(target);
+if(src<0||tgt<0||src===tgt)return;
+var pre=dvSnap();
+o.splice(src,1);
+tgt=o.indexOf(target);
+o.splice(before?tgt:tgt+1,0,dvDragRow);
+dvCommit(pre);
+dvMount();dvSelect(dvDragRow);
+}
+// ── B2 右栏：属性面板（选中元素 → 文字/image_slot；背景面板常驻）──────
+function dvSelNode(){return DV.sel<0?null:$('dv-stage').querySelector('[data-o="'+DV.sel+'"]');}
+function dvTextParam(n){
+// 选中 text 元素 → 对应 params 槽（先 data-t，再按内容等值匹配；paragraphs
+// 按段匹配——返回 {key, full, seg}）
+var t=n.getAttribute('data-t');
+if(t&&t in DV.params)return{key:t,full:String(DV.params[t]||''),seg:-1};
+var txt=(n.textContent||'').trim();
+var ks=Object.keys(DV.params);
+for(var a=0;a<ks.length;a++){
+var v=DV.params[ks[a]];
+if(typeof v==='string'&&v===txt)return{key:ks[a],full:v,seg:-1};
+}
+if(DV.params.paragraphs){
+var segs=String(DV.params.paragraphs).split('\n\n');
+for(var b=0;b<segs.length;b++){
+if(segs[b].trim()===txt)return{key:'paragraphs',full:DV.params.paragraphs,seg:b};
+}
+}
+return null;
+}
+function dvImageSlotKey(n){
+// 选中 image 元素 → image_slot 槽键（href 等值匹配；无图时取模板首个 image_slot 槽）
+var href=n.getAttribute('href')||'';
+var m=DV.tmeta[DV.tpl],schema=(m&&m.params_schema)||{};
+var first=null;
+for(var k in schema){
+if(schema[k].type!=='image_slot')continue;
+if(!first)first=k;
+var v=DV.params[k];
+var src=(v&&typeof v==='object')?v.src:v;
+if(src&&src===href)return k;
+}
+return first;
+}
+// 空图片槽发现面：模板 image_slot 槽未选图时（无 image 元素可选）右栏直接
+// 给「选图」入口——hero 占位区点击会被占位文案截走，此处是可靠路径。
+var DSLOT_LABEL={hero_image:'头图',avatar:'头像'};
+function dvEmptyImageSlots(){
+var m=DV.tmeta[DV.tpl],schema=(m&&m.params_schema)||{},out=[];
+for(var k in schema){
+if(schema[k].type!=='image_slot')continue;
+var v=DV.params[k];
+if(!((v&&typeof v==='object')?v.src:v))out.push(k);
+}
+return out;
+}
+function dvPropPaint(){
+var host=$('dv-prop-el'),n=dvSelNode(),empty=dvEmptyImageSlots();
+if(!n&&!empty.length){host.hidden=true;host.innerHTML='';return;}
+var html='';
+if(!n){
+html='<p class="dv-prop-title">空图片槽</p>'+empty.map(function(k){
+return '<div class="dv-prop-row"><label>'+esc(DSLOT_LABEL[k]||k)+'</label><button class="btn" data-dvpick="slot" data-dvslot="'+esc(k)+'">从素材库选图</button></div>';
+}).join('')+'<p class="dv-hint">选图后点画布图片元素可调 fit/蒙版</p>';
+host.innerHTML=html;host.hidden=false;return;
+}
+var i=DV.sel,lp=dvLp(i);
+html+='<p class="dv-prop-title">元素属性 · '+esc(dvLayerName(i,n))+'</p>';
+if(n.tagName==='text'){
+var tp=dvTextParam(n);
+html+='<div class="dv-prop-row"><label>内容</label><input class="input" id="dv-prop-text" data-dvkey="'+esc(tp?tp.key:'')+'" value="'+esc(tp?tp.full:'')+'"'+(tp?'':' disabled')+'></div>';
+if(tp&&tp.key==='paragraphs')html+='<p class="dv-hint">多段正文（空行分段）——编辑的是整个 paragraphs 槽</p>';
+html+='<div class="dv-prop-row"><label>颜色</label><input type="color" id="dv-prop-fill" value="'+esc(lp.fill||'#1f2937')+'"></div>';
+html+='<p class="dv-hint">字号/对齐用下方「排版」chips</p>';
+}else if(n.tagName==='image'){
+var key=dvImageSlotKey(n);
+if(key){
+var v=DV.params[key],cur=(v&&typeof v==='object')?v:{src:'',fit:'cover',mask:'none'};
+html+='<div class="dv-prop-row"><label>图片</label><button class="btn" data-dvpick="slot" data-dvslot="'+esc(key)+'">从素材库选图</button></div>';
+html+='<div class="dv-prop-row"><label>填充</label><div class="chips">'+DFITS.map(function(f){return '<button class="chip'+(cur.fit===f?' is-active':'')+'" data-dvfit="'+esc(key)+'" data-fv="'+f+'">'+(f==='cover'?'铺满':'完整')+'</button>';}).join('')+'</div></div>';
+html+='<div class="dv-prop-row"><label>蒙版</label><div class="chips">'+DMASKS.map(function(mk){return '<button class="chip'+(cur.mask===mk?' is-active':'')+'" data-dvmask="'+esc(key)+'" data-fv="'+mk+'">'+({none:'无',rounded:'圆角',circle:'圆形',arch:'拱形'}[mk])+'</button>';}).join('')+'</div></div>';
+}else html+='<p class="dv-hint">该图片元素不属模板槽位（仅可调层级/透明度）</p>';
+}
+if(empty.length&&n.tagName!=='image'){
+html+='<p class="dv-prop-title">空图片槽</p>'+empty.map(function(k){
+return '<div class="dv-prop-row"><label>'+esc(DSLOT_LABEL[k]||k)+'</label><button class="btn" data-dvpick="slot" data-dvslot="'+esc(k)+'">选图</button></div>';
+}).join('');
+}
+html+='<div class="dv-prop-row"><label>透明</label><input type="range" min="0" max="1" step="0.05" value="'+(lp.opacity!=null?lp.opacity:1)+'" id="dv-prop-op" style="flex:1"></div>';
+html+='<div class="dv-prop-row"><label>混合</label><div class="chips">'+DBLENDS.map(function(bl){return '<button class="chip'+((lp.blend||'normal')===bl?' is-active':'')+'" data-dvblend="'+bl+'">'+bl+'</button>';}).join('')+'</div></div>';
+host.innerHTML=html;
+host.hidden=false;
+}
+function dvBgParamsPaint(){
+var host=$('dv-bg-params'),bg=DV.bg;
+QA('#dv-bgt .chip').forEach(function(c){c.classList.toggle('is-active',bg&&c.getAttribute('data-dbgt')===bg.kind);});
+if(!bg){host.innerHTML='<p class="dv-hint">默认=模板背景色槽（v1 语义）</p>';return;}
+if(bg.kind==='solid'){
+host.innerHTML='<div class="dv-prop-row"><label>颜色</label><input type="color" data-dvbg="color" value="'+esc(bg.color||'#ffffff')+'"></div>';
+}else if(bg.kind==='linear'||bg.kind==='radial'){
+var st=(bg.stops&&bg.stops.length===2)?bg.stops:[[0,'#ffffff'],[1,'#dbeafe']];
+host.innerHTML='<div class="dv-prop-row"><label>起色</label><input type="color" data-dvbg="s0" value="'+esc(st[0][1])+'"></div>'
++'<div class="dv-prop-row"><label>止色</label><input type="color" data-dvbg="s1" value="'+esc(st[1][1])+'"></div>'
++(bg.kind==='linear'?'<div class="dv-prop-row"><label>角度</label><input class="input" type="number" min="0" max="360" data-dvbg="angle" value="'+(+bg.angle||135)+'"></div>':'');
+}else if(bg.kind==='pattern'){
+host.innerHTML='<div class="dv-prop-row"><label>底色</label><input type="color" data-dvbg="color" value="'+esc(bg.color||'#ffffff')+'"></div>'
++'<div class="dv-prop-row"><label>纹样</label><div class="chips dv-pat">'+DPATS.map(function(pt){return '<button class="chip'+((bg.pattern||'dots')===pt?' is-active':'')+'" data-dvpat="'+pt+'" title="'+pt+'">'+({dots:'·点',grid:'▦格',waves:'〜波',paper:'▤纸'}[pt])+'</button>';}).join('')+'</div></div>';
+}else{
+host.innerHTML='<div class="dv-prop-row"><label>图片</label><button class="btn" data-dvpick="bg">从素材库选图</button></div>'
++'<div class="dv-prop-row"><label>蒙纱</label><input type="range" min="0" max="1" step="0.05" value="'+(+bg.overlay_alpha||0)+'" data-dvbg="overlay_alpha" style="flex:1"><span class="dv-lz">'+Math.round(+bg.overlay_alpha||0)+'</span></div>'
++'<div class="dv-prop-row"><label>纱色</label><input type="color" data-dvbg="color" value="'+esc(bg.color||'#000000')+'"></div>';
+}
+}
+function dvSetBgKind(kind){
+var m=DV.tmeta[DV.tpl];
+var allowed=(m&&m.backgrounds)||['solid'];
+if(allowed.indexOf(kind)<0){toast('当前模板不允许'+DBG_LABEL[kind]+'背景',WN);return;}
+var pre=dvSnap();
+if(!DV.bg||!DV.bg.kind||DV.bg.kind!==kind){
+DV.bg=DV.bg||{};
+DV.bg.kind=kind;
+if(kind==='linear'||kind==='radial'){if(!DV.bg.stops||DV.bg.stops.length!==2)DV.bg.stops=[[0,'#ffffff'],[1,'#dbeafe']];}
+if(kind==='image'){DV.bg.color=DV.bg.color||'#000000';DV.bg.overlay_alpha=DV.bg.overlay_alpha==null?0.35:DV.bg.overlay_alpha;}
+}
+dvCommit(pre);
+dvBgParamsPaint();
+dvGo();
+}
+function dvBgParam(name,val){
+if(!DV.bg)return;
+var pre=dvSnap();
+if(name==='s0'||name==='s1'){
+if(!DV.bg.stops||DV.bg.stops.length!==2)DV.bg.stops=[[0,'#ffffff'],[1,'#dbeafe']];
+DV.bg.stops[name==='s0'?0:1]=[+DV.bg.stops[name==='s0'?0:1][0]||0,val];
+}else if(name==='overlay_alpha'||name==='angle'){
+DV.bg[name]=+val||0;
+}else DV.bg[name]=val;
+dvCommit(pre);
+dvGo();
+}
+// ── B2 素材库选图（GET /api/materials?type=image + /api/materials/file；上传
+// 走既有二进制旁路 POST /api/materials/upload——选中即取 full 变体转 dataURI
+// 落槽/落背景，dataURI 经 model 校验（本地引用零外联））
+async function dvPickOpen(mode,slot){
+DV.pick={mode:mode,slot:slot||''};
+$('dv-pick').hidden=false;
+await dvPickLoad();
+}
+async function dvPickLoad(){
+try{
+var d=await getJSON('/api/materials?type=image&limit=60');
+var items=(d.items||[]).filter(function(m){return m.type==='image';});
+$('dv-pick-grid').innerHTML=items.length?items.map(function(m){
+return '<button class="dv-pick-cell" data-dpick="'+esc(m.id)+'"><img loading="lazy" src="/api/materials/file?id='+encodeURIComponent(m.id)+'&variant=thumb" alt=""><span>'+esc(m.title||m.id)+'</span></button>';
+}).join(''):'<p class="dv-hint">暂无图片素材——用左下「上传本机图」或去素材库导入。</p>';
+}catch(err){
+$('dv-pick-grid').innerHTML=loadFailHTML('图片素材',err.message,'dvPickLoad');
+}
+}
+async function dvPickSel(id){
+try{
+var res=await fetch('/api/materials/file?id='+encodeURIComponent(id)+'&variant=full');
+if(!res.ok)throw new Error('HTTP '+res.status);
+var blob=await res.blob();
+var url=await new Promise(function(r2,rj2){var fr=new FileReader();fr.onload=function(){r2(String(fr.result));};fr.onerror=function(){rj2(new Error('读取失败'));};fr.readAsDataURL(blob);});
+dvAssignImage(url);
+}catch(err){toast('取图失败：'+err.message,ER);}
+}
+function dvAssignImage(dataUrl){
+$('dv-pick').hidden=true;
+var pre=dvSnap();
+if(DV.pick.mode==='bg'){
+DV.bg=DV.bg||{};
+DV.bg.kind='image';DV.bg.image=dataUrl;
+DV.bg.color=DV.bg.color||'#000000';
+DV.bg.overlay_alpha=DV.bg.overlay_alpha==null?0.35:DV.bg.overlay_alpha;
+dvBgParamsPaint();
+}else{
+var key=DV.pick.slot;
+var v=DV.params[key],cur=(v&&typeof v==='object')?v:{fit:'cover',mask:'none'};
+DV.params[key]=Object.assign({},cur,{src:dataUrl});
+dvPropPaint();
+}
+dvCommit(pre);
+dvGo();
+}
+async function dvPickUpload(file){
+try{
+var res=await fetch('/api/materials/upload?confirm=1&name='+encodeURIComponent(file.name),{method:'POST',body:file});
+var d={};try{d=await res.json();}catch(e2){}
+if(!res.ok)throw new Error(d.error||'HTTP '+res.status);
+toast('已上传'+(d.dedup?'（幂等命中）':''),OK);
+await dvPickLoad();
+if(d.material&&d.material.id)dvPickSel(d.material.id);
+}catch(err){toast('上传失败：'+err.message,ER);}
+}
 function dvSync(){
 [['dspec',DV,'spec'],['dfs',DV.params,'font_size','M'],['dal',DV.params,'align','left'],['dslot',DV.params,'background_slot','background']].forEach(function(it){
 var cur=it[1][it[2]];
@@ -4297,6 +5138,7 @@ if(DV.undo.length)$('dv-undo').textContent='撤销 '+DV.undo.length+' 步 · ⌘
 $('dv-skel').hidden=DV.st!=='loading';
 $('dv-stage').hidden=!DV.svg;
 $('dv-empty').hidden=!!DV.svg||DV.st==='loading';
+dvLayersPaint();dvTplsPaint();dvSpecsPaint();dvBgParamsPaint();dvPropPaint();
 }
 async function dvFillArts(){
 await loadArticles();
@@ -4304,10 +5146,30 @@ var sel=$('dv-art'),cur=sel.value,opts='<option value="">选择文章…</option
 state.articles.forEach(function(a){opts+='<option value="'+esc(a.path)+'">'+esc(a.title||a.path)+'</option>';});
 sel.innerHTML=opts;
 if(cur)sel.value=cur;
+// V5（2026-11-26 视觉编辑审查批）：datalist 同步（搜索框联想）+ 过滤联动
+var dl=$('dv-art-list');
+if(dl){
+dl.innerHTML=state.articles.map(function(a){return '<option value="'+esc(a.title||a.path)+'">'+esc(a.path)+'</option>';}).join('');
+var flt=$('dv-art-filter');
+if(flt&&!flt._bound){
+flt._bound=1;
+flt.addEventListener('input',function(){
+var q=this.value.trim().toLowerCase();
+var found=state.articles.find(function(a){return String(a.title||a.path).toLowerCase().indexOf(q)>=0;});
+if(found)sel.value=found.path;
+});
+flt.addEventListener('change',function(){
+// 从联想列表选中 → 找匹配项并设 select
+var q=this.value.trim();
+var found=state.articles.find(function(a){return String(a.title||a.path)===q||String(a.path)===q;});
+if(found){sel.value=found.path;dvLoad();}
+});
+}
+}
 }
 async function dvEnter(){
 await dvFillArts();
-await dvLoadSlots();dvColorChips();
+await dvLoadSlots();dvColorChips();dvBgParamsPaint();
 if(DV.loadedOnce)return;
 var path=new URLSearchParams((location.hash||'').split('?')[1]||'').get('article')||state.detailPath||($('dv-art').options[1]||{}).value;
 if(path){$('dv-art').value=path;dvLoad();}
@@ -4327,6 +5189,7 @@ var n=e.target.closest('[data-o]');
 if(!n){dvSelect(-1);return;}
 var i=+n.getAttribute('data-o');
 if(DV.sel!==i)dvSelect(i);
+if((DV.lprops[i]||{}).locked){toast('图层已锁定（图层列表解锁后可编辑）',WN);return;}
 DV.drag={n:n,i:i,sx:e.clientX,sy:e.clientY,moved:false,pre:dvSnap()};
 if(n.setPointerCapture)n.setPointerCapture(e.pointerId);
 e.preventDefault();
@@ -4377,17 +5240,28 @@ DV.params[key]=v;
 dvCommit(pre);
 dvGo();
 });
-// 视图级委托：chip 组（规格/色槽/字号/对齐/导出弹层）+ 弹层遮罩关闭（一次绑定）
+// 视图级委托：chip 组（规格/色槽/字号/对齐/导出弹层）+ B2 新面（模板/背景
+// 类型/纹样/图层眼睛锁/image_slot fit·mask/混合/选图入口）+ 弹层遮罩关闭
 $('view-design').addEventListener('click',function(e){
 var t=e.target;
-if(t.classList.contains('modal-overlay')){t.hidden=true;DV.pendSpec='';return;}
-var b=t.closest('[data-dspec],[data-dslot],[data-dfs],[data-dal],[data-exspec],[data-exroute]');
+if(t.classList.contains('modal-overlay')){t.hidden=true;DV.pendSpec='';DV.pick=null;return;}
+var b=t.closest('[data-dspec],[data-dslot],[data-dfs],[data-dal],[data-exspec],[data-exroute],[data-dtpl],[data-dbgt],[data-dvpat],[data-dleye],[data-dlok],[data-lrow],[data-dvfit],[data-dvmask],[data-dvblend],[data-dvpick]');
 if(!b)return;
 if(b.hasAttribute('data-dspec'))return dvSetSpec(b.getAttribute('data-dspec'));
+if(b.hasAttribute('data-dtpl'))return dvSetTpl(b.getAttribute('data-dtpl'));
 if(b.hasAttribute('data-exspec')||b.hasAttribute('data-exroute')){
 b.parentElement.querySelectorAll('.chip').forEach(function(c){c.classList.toggle('is-active',c===b);});
 return;
 }
+if(b.hasAttribute('data-dbgt'))return dvSetBgKind(b.getAttribute('data-dbgt'));
+if(b.hasAttribute('data-dvpat')){if(DV.bg){var pre=dvSnap();DV.bg.pattern=b.getAttribute('data-dvpat');dvCommit(pre);dvBgParamsPaint();dvGo();}return;}
+if(b.hasAttribute('data-dleye'))return dvToggleEye(+b.getAttribute('data-dleye'));
+if(b.hasAttribute('data-dlok'))return dvToggleLock(+b.getAttribute('data-dlok'));
+if(b.hasAttribute('data-lrow'))return dvSelect(+b.getAttribute('data-lrow'));
+if(b.hasAttribute('data-dvfit')){var fk=b.getAttribute('data-dvfit'),fv=b.getAttribute('data-fv'),fvv=DV.params[fk];DV.params[fk]=Object.assign({},(fvv&&typeof fvv==='object')?fvv:{}, {fit:fv});dvCommit(dvSnap());dvPropPaint();dvGo();return;}
+if(b.hasAttribute('data-dvmask')){var mk=b.getAttribute('data-dvmask'),mv=b.getAttribute('data-fv'),mvv=DV.params[mk];DV.params[mk]=Object.assign({},(mvv&&typeof mvv==='object')?mvv:{}, {mask:mv});dvCommit(dvSnap());dvPropPaint();dvGo();return;}
+if(b.hasAttribute('data-dvblend')){var bi=+b.getAttribute('data-dvblend');if(DV.sel>=0){var pre2=dvSnap();dvLp(DV.sel).blend=b.getAttribute('data-dvblend');var nn=dvSelNode();if(nn)nn.setAttribute('style','mix-blend-mode:'+DV.lprops[DV.sel].blend);dvCommit(pre2);dvPropPaint();}return;}
+if(b.hasAttribute('data-dvpick'))return dvPickOpen(b.getAttribute('data-dvpick'),b.getAttribute('data-dvslot')||'');
 var key=b.hasAttribute('data-dslot')?'background_slot':b.hasAttribute('data-dfs')?'font_size':'align';
 var v=b.getAttribute('data-dslot')||b.getAttribute('data-dfs')||b.getAttribute('data-dal');
 if(v===DV.params[key])return;
@@ -4395,6 +5269,56 @@ var pre=dvSnap();
 DV.params[key]=v;
 if(key==='background_slot'){dvRecentAdd(v);dvColorChips();}
 dvCommit(pre);dvGo();
+});
+// B2 属性面板 input 面：文字内容/文字色/透明度/背景参数（color·number·range）
+$('view-design').addEventListener('input',function(e){
+var el=e.target;
+if(el.id==='dv-prop-text'){
+var key=el.getAttribute('data-dvkey');
+if(!key||!(key in DV.params))return;
+var pre=dvSnap();
+DV.params[key]=el.value;
+dvCommit(pre);dvGo();return;
+}
+if(el.id==='dv-prop-fill'){var n2=dvSelNode();if(n2&&DV.sel>=0){var pre3=dvSnap();dvLp(DV.sel).fill=el.value;n2.setAttribute('fill',el.value);dvCommit(pre3);}return;}
+if(el.id==='dv-prop-op'){var n3=dvSelNode();if(n3&&DV.sel>=0){var lp=dvLp(DV.sel);lp.opacity=+el.value;n3.setAttribute('opacity',String(lp.opacity));}return;}
+var bgk=el.getAttribute('data-dvbg');
+if(bgk){dvBgParam(bgk,el.value);
+if(bgk==='overlay_alpha'){var sp=el.parentElement&&el.parentElement.querySelector('.dv-lz');if(sp)sp.textContent=Math.round(+el.value||0);}
+}
+});
+// B2 图层行拖拽重排（HTML5 DnD；paint 序=z 序）
+$('dv-layers').addEventListener('dragstart',function(e){
+var row=e.target.closest('[data-lrow]');
+if(!row)return;
+dvDragRow=+row.getAttribute('data-lrow');
+e.dataTransfer.effectAllowed='move';
+try{e.dataTransfer.setData('text/plain',String(dvDragRow));}catch(err2){}
+});
+$('dv-layers').addEventListener('dragover',function(e){
+var row=e.target.closest('[data-lrow]');
+if(row&&dvDragRow!=null&&+row.getAttribute('data-lrow')!==dvDragRow){e.preventDefault();return;}
+if(!row)e.preventDefault();
+});
+$('dv-layers').addEventListener('drop',function(e){
+var row=e.target.closest('[data-lrow]');
+e.preventDefault();
+if(!row||dvDragRow==null)return;
+var rect=row.getBoundingClientRect(),before=e.clientY<rect.top+rect.height/2;
+dvRowDrop(+row.getAttribute('data-lrow'),before);
+dvDragRow=null;
+});
+$('dv-layers').addEventListener('dragend',function(){dvDragRow=null;});
+// B2 素材选图弹层：格子点击/取消/上传
+$('dv-pick-grid').addEventListener('click',function(e){
+var c=e.target.closest('[data-dpick]');
+if(c)dvPickSel(c.getAttribute('data-dpick'));
+});
+on('dv-pick-cancel',function(){$('dv-pick').hidden=true;DV.pick=null;});
+$('dv-pick-file').addEventListener('change',function(){
+var f=this.files&&this.files[0];
+this.value='';
+if(f)dvPickUpload(f);
 });
 on('dv-fwd',function(){dvMove(1);});
 on('dv-bwd',function(){dvMove(-1);});
@@ -4411,7 +5335,7 @@ on('dv-sw-drop',function(){$('dv-sw').hidden=true;var s=DV.pendSpec;DV.pendSpec=
 $('dv-sw-save').addEventListener('click',async function(){var s=DV.pendSpec;$('dv-sw').hidden=true;DV.pendSpec='';await dvSave();dvApplySpec(s);});
 on('dv-ex-go',function(){dvExportGo();});
 // F72 编辑器域快捷键：⌘Z/⇧⌘Z 撤销重做（表外新增，编辑器域内生效）；Esc 逐层收
-// （切换确认/导出弹层 → 取消选中）。⌘1-7 七视图导航在全局 keydown（深构 §5.1/
+// （切换确认/导出弹层/选图弹层 → 取消选中）。⌘1-7 七视图导航在全局 keydown（深构 §5.1/
 // §八-4 分域裁决：视图外管导航、#article 内 ⌘1-4 管 tab）——原 design 域内实现
 // 属作用域缺陷，2026-11-17 集成轮修复移全局。
 document.addEventListener('keydown',function(e){
@@ -4423,6 +5347,7 @@ if(m&&(e.key==='z'||e.key==='Z')){e.preventDefault();e.shiftKey?dvTravel(0):dvTr
 if(e.key==='Escape'){
 if(!$('dv-sw').hidden){$('dv-sw').hidden=true;DV.pendSpec='';return;}
 if(!$('dv-ex').hidden){$('dv-ex').hidden=true;return;}
+if(!$('dv-pick').hidden){$('dv-pick').hidden=true;DV.pick=null;return;}
 dvSelect(-1);
 }
 });
@@ -4468,6 +5393,11 @@ if(variants.length) arts.push(qArt('edit','变体 ',variants.length));
 if(f.pack) arts.push(qArt('upload','物料包'));
 if(f.review) arts.push(qArt('eye','对照'));
 if(f.published) arts.push(qArt('publish','已发草稿'));
+// B3 多媒体（2026-11-26）：媒体徽章——🎬 视频文章（frontmatter.media 或 :::video
+// 块）/ 🖼 含图 N 张（![](…) 计数）；数据面=GET /api/articles 的 media 键（缺失回退无徽章）
+var md=item.media||{};
+if(md.video) arts.push(qArt('video','视频文章'));
+if(md.images) arts.push(qArt('image','含图 ',md.images));
 return '<a class="article-card qcard" href="'+href+'">' +
 '<div class="qcard-cover"'+(coverRel?' data-cover="'+esc(coverRel)+'"':'')+'>' +
 '<div class="qcover-block"><span class="qcover-text">'+title+'</span></div></div>' +
@@ -4477,7 +5407,7 @@ return '<a class="article-card qcard" href="'+href+'">' +
 (arts.length?'<div class="qcard-arts">'+arts.join('')+'</div>':'') +
 (variants.length?'<div class="tags qcard-variants">'+variants.map(function(code){
 return '<span class="tag accent">'+esc(code)+Z;}).join('')+'</div>':'') +
-'<div class="qcard-foot">'+checkSummary(item.checks,item.path)+'<button class="btn btn-ghost qcard-fb" data-fb="'+esc(item.path)+'" title="反哺素材库：全文归档 / 摘取段落 / AI 提炼论点">→ 素材库</button></div>' +
+'<div class="qcard-foot">'+checkSummary(item.checks,item.path)+'<button class="btn btn-ghost qcard-cover-btn" data-dvart="'+esc(item.path)+'" title="视觉编辑：为这篇文章生成封面/配图（选模板→存稿→导出 PNG）">🎨 封面</button><button class="btn btn-ghost qcard-fb" data-fb="'+esc(item.path)+'" title="反哺素材库：全文归档 / 摘取段落 / AI 提炼论点">→ 素材库</button></div>' +
 '</div></a>';
 }
 function mountCovers(){
@@ -4704,6 +5634,9 @@ $('fetch-btn').addEventListener('click',function(e){handleFetch(e.target);});
 // 内，preventDefault 断锚点导航）；fb 弹窗三路径切换/提交/关闭走 #viewer 委托
 // （id 前缀 fb- 独占——viewJob/clipCard 等既有 viewer 用法零干扰）
 $('view-publish').addEventListener('click',function(e){
+// V2（2026-11-26 视觉编辑审查批）：文章卡「🎨 封面」→ 深链 #design?article=xxx
+var dvb=e.target.closest('[data-dvart]');
+if(dvb){e.preventDefault();e.stopPropagation();location.hash='#design?article='+encodeURIComponent(dvb.getAttribute('data-dvart'));return;}
 var b=e.target.closest('[data-fb]');
 if(b){e.preventDefault();fbOpen(b.getAttribute('data-fb'));return;}
 // R3-2：FAIL 徽章直链检查 Tab（span role=link，避开卡片 <a> 内嵌锚的 DOM 折叠）
@@ -5072,12 +6005,14 @@ function scheduleLive(){if(liveTimer)clearTimeout(liveTimer);liveTimer=setTimeou
 // 块级映射同步滚动（沉淀·模式 6/doocs useScrollSync 移植）：mdBlocks 与 mdToHtml 同一
 // 分割规则→块数对齐，scrollTop→块索引+块内比例双向映射；双层防回环：sLock 一帧标志 +
 // sEcho 程序赋值目标，回声 scroll 与目标差 <2px 吞掉（Chrome/Fx scroll 事件推迟到下一帧）。
-var EDLH=20,EDPT=12,PVS='p,h1,h2,h3,h4,pre,blockquote,ul';
+var EDLH=20,EDPT=12,PVS='p,h1,h2,h3,h4,pre,blockquote,ul,figure';
 function mdBlocks(md){
 var ls=String(md).replace(/\r/g,'').split('\n'),o=[],ps=-1,as=-1,i=0;
 function cp(end){if(ps>=0)o.push([ps,end]);ps=-1;}
 while(i<ls.length){var L=ls[i];
 if(BANCHOR.test(L)){if(as<0&&ps<0)as=i;i++;continue;}
+// B3 :::video 容器=单块（mdToHtml 同规则产 <figure>；块数对齐是滚动同步的前提）
+if(MVID_OPEN.test(L)){cp(i);var va=as>=0?as:i,j=i+1;while(j<ls.length&&!/^:::[ \t]*$/.test(ls[j]))j++;o.push([va,Math.min(j+1,ls.length)]);as=-1;i=Math.min(j+1,ls.length);continue;}
 if(/^```/.test(L)){cp(i);var a=as>=0?as:i,j=i+1;while(j<ls.length&&!/^```/.test(ls[j]))j++;o.push([a,Math.min(j+1,ls.length)]);as=-1;i=Math.min(j+1,ls.length);continue;}
 if(/^(#{1,4})\s+/.test(L)){cp(i);o.push([as>=0?as:i,i+1]);as=-1;i++;continue;}
 if(/^>\s?/.test(L)){cp(i);var q=as>=0?as:i;while(i<ls.length&&/^>\s?/.test(ls[i]))i++;o.push([q,i]);as=-1;continue;}
@@ -5135,8 +6070,11 @@ catch(err){toast('载入正文失败：'+err.message,ER);return;}
 // F1 编辑器（深度评审 §3.1）：首次进编辑 tab 动态装载 assets/editor.js（CM5 本地
 // vendor，零外联），此后每次进入交其自同步正文（EA.value 差异→cm.setValue）；
 // 装载失败静默回落 textarea 原功能。工具栏/大纲/状态栏扩展全部由 editor.js 自管理。
-if(window.__mdpubEditor)window.__mdpubEditor.activate(EA);
-else if(!state._edq){state._edq=1;var _es=document.createElement('script');_es.src='assets/editor.js';_es.onload=function(){window.__mdpubEditor&&window.__mdpubEditor.activate(EA);};document.head.appendChild(_es);}
+// B3（2026-11-26）：__mdpubEditor.article=当前文章 root 相对路径——编辑器「插入
+// 媒体」POST /api/action/insert_media 需要文章落点（editor.js 自管理、无 state 访问，
+// 桥面走全局对象同 cm getter 先例）。
+if(window.__mdpubEditor){window.__mdpubEditor.article=p;window.__mdpubEditor.activate(EA);}
+else if(!state._edq){state._edq=1;var _es=document.createElement('script');_es.src='assets/editor.js';_es.onload=function(){if(window.__mdpubEditor){window.__mdpubEditor.article=p;window.__mdpubEditor.activate(EA);}};document.head.appendChild(_es);}
 if(state.aiModel===null){getJSON('/api/health').then(function(h){state.aiModel=(h&&h.ai&&h.ai.model)||'';updateStatusbar();}).catch(function(){state.aiModel='';updateStatusbar();});}
 syncGutter();renderHl();renderLive();updateStatusbar();
 await loadAnnotations();
@@ -5423,6 +6361,12 @@ if(payload.desc)bits.push('<span class="tag">描述 '+sbsEsc(payload.desc)+'</sp
 if(Array.isArray(payload.tags)&&payload.tags.length)bits.push('<span class="tag accent">'+payload.tags.map(function(t){return '#'+sbsEsc(t);}).join(' ')+'</span>');
 return bits.length?'<div class="sbs-meta">'+bits.join('')+'</div>':'';
 }
+// B3 打包预览媒体清单（字节格式化 + chips；B1/KB/MB——hbytes 在 material 块不可跨视图用，
+// 同域自备一份；media 数据面=pack_preview 的 media 键，空数组=无媒体物料的普通包）
+function sbsBytes(n){n=+n||0;if(n<1048576)return Math.round(n/1024)+' KB';return(n/1048576).toFixed(1)+' MB';}
+function sbsMedia(media){
+return (Array.isArray(media)?media:[]).map(function(x){
+return '<span class="tag">📦 '+sbsEsc(x.file)+' · '+sbsBytes(x.bytes)+'</span>';}).join('');}
 function sbsEmptyNote(note){return '<div class="empty sbs-empty"><div class="empty-title">尚未适配</div><div class="empty-text">'+sbsEsc(note||'该平台还没有物料包——在「操作」页「生成物料包」后回来看并排对照。')+'</div></div>';}
 /*__SBS_END__*/
 var SBS={path:'',packs:null,platform:''};
@@ -5491,7 +6435,7 @@ $('sbs-diff').innerHTML='';
 return;
 }
 $('sbs-note').textContent='与原文差异：+'+(diff.added||0)+' 行 / −'+(diff.removed||0)+' 行'+(diff.identical?'（无变体直出，正文与原文一致）':'');
-$('sbs-right').innerHTML=sbsMeta(d.payload)+'<div class="sbs-render">'+mdToHtml((d.payload||{}).body||'',dirOf(state.detailPath))+'</div>';
+$('sbs-right').innerHTML=sbsMeta(d.payload)+(d.media&&d.media.length?'<div class="sbs-meta">媒体清单：'+sbsMedia(d.media)+'</div>':'')+'<div class="sbs-render">'+mdToHtml((d.payload||{}).body||'',dirOf(state.detailPath))+'</div>';
 $('sbs-diff').innerHTML=diff.html||'';
 }
 // ── P1 双件（2026-11-23，契约 §3.26）：质量循环 job + 标题 A/B 三风格 ──

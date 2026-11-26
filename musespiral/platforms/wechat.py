@@ -77,7 +77,19 @@ def publish_flow(
     digest = str(article.metadata.get("digest", ""))
     if not digest:
         # 渲染后 HTML 去标签取正文前 54 字（与历史 cli.publish 同口径）
-        digest = re.sub(r"<[^>]+>", "", html)[:54].strip()
+        # 45004 修复（2026-11-26）：digest 兜底须字节级截断 ≤120B（中文 3B/字
+        # ×54 字 = 162B 超公众号上限 120B）——UTF-8 安全截：先按字节截，再
+        # 回退到最后一个完整字符边界（避免截到多字节中间产生乱码）
+        _plain = re.sub(r"<[^>]+>", "", html).strip()
+        _b = _plain.encode("utf-8")
+        if len(_b) > 120:
+            _cut = _b[:120]
+            # 回退到完整 UTF-8 字符边界（连续 10xxxxxx 的是续字节）
+            while _cut and (_cut[-1] & 0xC0) == 0x80:
+                _cut = _cut[:-1]
+            digest = _cut.decode("utf-8", errors="ignore").strip()
+        else:
+            digest = _plain
     say("创建草稿...")
     return create_draft(
         token,

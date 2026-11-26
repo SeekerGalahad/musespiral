@@ -4,12 +4,13 @@ var LIVE_CSS_DARK='body{background:#211f1e;color:#e6e2dc}a{color:#e8604f}pre,cod
 var liveTimer=null,sLock=false,bubbleTimer=null,sEcho={p:-1,e:-1};
 function renderLive(){LF.srcdoc='<!DOCTYPE html><meta charset="utf-8"><style>'+LIVE_CSS+(themeDark()?LIVE_CSS_DARK:'')+'</style>'+mdToHtml(EA.value,dirOf(state.detailPath));}
 function scheduleLive(){if(liveTimer)clearTimeout(liveTimer);liveTimer=setTimeout(renderLive,300);}
-var EDLH=20,EDPT=12,PVS='p,h1,h2,h3,h4,pre,blockquote,ul';
+var EDLH=20,EDPT=12,PVS='p,h1,h2,h3,h4,pre,blockquote,ul,figure';
 function mdBlocks(md){
 var ls=String(md).replace(/\r/g,'').split('\n'),o=[],ps=-1,as=-1,i=0;
 function cp(end){if(ps>=0)o.push([ps,end]);ps=-1;}
 while(i<ls.length){var L=ls[i];
 if(BANCHOR.test(L)){if(as<0&&ps<0)as=i;i++;continue;}
+if(MVID_OPEN.test(L)){cp(i);var va=as>=0?as:i,j=i+1;while(j<ls.length&&!/^:::[ \t]*$/.test(ls[j]))j++;o.push([va,Math.min(j+1,ls.length)]);as=-1;i=Math.min(j+1,ls.length);continue;}
 if(/^```/.test(L)){cp(i);var a=as>=0?as:i,j=i+1;while(j<ls.length&&!/^```/.test(ls[j]))j++;o.push([a,Math.min(j+1,ls.length)]);as=-1;i=Math.min(j+1,ls.length);continue;}
 if(/^(#{1,4})\s+/.test(L)){cp(i);o.push([as>=0?as:i,i+1]);as=-1;i++;continue;}
 if(/^>\s?/.test(L)){cp(i);var q=as>=0?as:i;while(i<ls.length&&/^>\s?/.test(ls[i]))i++;o.push([q,i]);as=-1;continue;}
@@ -62,8 +63,8 @@ try{var b=await getJSON(`/api/article/body?path=${encodeURIComponent(p)}`);
 EA.value=b.content||'';state.editPath=p;state.editLoaded=true;state.savedAt='';state.saveSt='saved';state.saveErr='';}
 catch(err){toast('载入正文失败：'+err.message,ER);return;}
 }
-if(window.__mdpubEditor)window.__mdpubEditor.activate(EA);
-else if(!state._edq){state._edq=1;var _es=document.createElement('script');_es.src='assets/editor.js';_es.onload=function(){window.__mdpubEditor&&window.__mdpubEditor.activate(EA);};document.head.appendChild(_es);}
+if(window.__mdpubEditor){window.__mdpubEditor.article=p;window.__mdpubEditor.activate(EA);}
+else if(!state._edq){state._edq=1;var _es=document.createElement('script');_es.src='assets/editor.js';_es.onload=function(){if(window.__mdpubEditor){window.__mdpubEditor.article=p;window.__mdpubEditor.activate(EA);}};document.head.appendChild(_es);}
 if(state.aiModel===null){getJSON('/api/health').then(function(h){state.aiModel=(h&&h.ai&&h.ai.model)||'';updateStatusbar();}).catch(function(){state.aiModel='';updateStatusbar();});}
 syncGutter();renderHl();renderLive();updateStatusbar();
 await loadAnnotations();
@@ -340,6 +341,10 @@ if(payload.desc)bits.push('<span class="tag">描述 '+sbsEsc(payload.desc)+'</sp
 if(Array.isArray(payload.tags)&&payload.tags.length)bits.push('<span class="tag accent">'+payload.tags.map(function(t){return '#'+sbsEsc(t);}).join(' ')+'</span>');
 return bits.length?'<div class="sbs-meta">'+bits.join('')+'</div>':'';
 }
+function sbsBytes(n){n=+n||0;if(n<1048576)return Math.round(n/1024)+' KB';return(n/1048576).toFixed(1)+' MB';}
+function sbsMedia(media){
+return (Array.isArray(media)?media:[]).map(function(x){
+return '<span class="tag">📦 '+sbsEsc(x.file)+' · '+sbsBytes(x.bytes)+'</span>';}).join('');}
 function sbsEmptyNote(note){return '<div class="empty sbs-empty"><div class="empty-title">尚未适配</div><div class="empty-text">'+sbsEsc(note||'该平台还没有物料包——在「操作」页「生成物料包」后回来看并排对照。')+'</div></div>';}
 var SBS={path:'',packs:null,platform:''};
 function sbsEnsure(){
@@ -403,7 +408,7 @@ $('sbs-diff').innerHTML='';
 return;
 }
 $('sbs-note').textContent='与原文差异：+'+(diff.added||0)+' 行 / −'+(diff.removed||0)+' 行'+(diff.identical?'（无变体直出，正文与原文一致）':'');
-$('sbs-right').innerHTML=sbsMeta(d.payload)+'<div class="sbs-render">'+mdToHtml((d.payload||{}).body||'',dirOf(state.detailPath))+'</div>';
+$('sbs-right').innerHTML=sbsMeta(d.payload)+(d.media&&d.media.length?'<div class="sbs-meta">媒体清单：'+sbsMedia(d.media)+'</div>':'')+'<div class="sbs-render">'+mdToHtml((d.payload||{}).body||'',dirOf(state.detailPath))+'</div>';
 $('sbs-diff').innerHTML=diff.html||'';
 }
 async function handleQualityLoop(btn){

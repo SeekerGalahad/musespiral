@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-3212%20passed-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-3483%20passed-success.svg)](tests/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 **视频 / 音频 / 字幕 / 文档 / 网页 / 书籍 → 转写切片 → 结构化成稿 → 多平台发布 → 反哺回素材库**
@@ -157,7 +157,7 @@ pip install faster-whisper
 # 可选：文档提取（PDF/DOCX，约 7MB）
 pip install pdfplumber python-docx
 
-pytest -q   # 3212 passed, 1 skipped
+pytest -q   # 3483 passed, 1 skipped
 ```
 
 启动本地工作台（12 个视图，Studio 只绑 127.0.0.1，数据不出本机）：
@@ -244,6 +244,38 @@ musespiral studio --root tests/fixtures/studio_demo
 
 ---
 
+## 本地书籍（TXT）
+
+**开源主推的能力：读你磁盘上的 `.txt`，把它变成可引用的素材。** 与「书籍检索」（抓第三方网络书源）性质不同——这里不抓任何站点，只解析你自己的文件。
+
+### 一条红线：只读，不复制
+
+导入一本书**不复制文件**。书架里只有两件元数据：`meta.json`（路径/编码/章节规则/统计）与 `chapters.json`（章节的字符偏移）。正文永远从你磁盘上的原文件现读现切——你改一个字节，阅读面板里的字立刻跟着变；你删掉文件，书架如实报「原文件已不可读」。
+
+选章入素材库同理：素材里只放 **≤500 字摘录 + 章节定位**（`payload = {local_book_id, chapter_n, chars, excerpt}`），整章正文不进库。
+
+```bash
+# Studio：书籍 → 本地书架 → 填绝对路径 → 导入 TXT → 点书卡读 → 选章入素材库
+# API
+POST /api/localbook/add      {path, title?, author?, rule?, confirm}
+GET  /api/localbook/list
+GET  /api/localbook/info?id=
+GET  /api/localbook/toc?id=
+GET  /api/localbook/chapter?id=&n=
+POST /api/localbook/reparse  {id, rule?, confirm}
+POST /api/localbook/remove   {id, confirm}     # 只删书架条目，你的文件零触碰
+POST /api/materials/from-local-chapters {id, chapters:[n…], confirm}
+```
+
+### 编码与章节：如实告诉你探测结果
+
+- **编码探测零依赖**（不引 chardet）：BOM → UTF-8 严格试解 → GB18030 → Big5，带置信度。双字节两族互相可解（Big5 的字节串用 GB18030 也能「解得出」但全是乱码），所以还有一层可读性打分——解得出 ≠ 解得对。
+- **章节规则是 JSON，不是代码**：内置三档 `cn-novel-standard`（第X章/节/回/卷）/ `cn-classic`（古典回目）/ `plain-split`（无结构定长切块）。新增规则 = 往 `~/.musespiral/localbook-rules/` 放一个 JSON；写错的 JSON 跳过并计数，不让一个坏规则拖垮整个书架。
+- **认不出章节就说认不出**：正则命中 < 3 章 → 按 5000 字定长切块，书架卡片上写「未识别章节结构」，不拿「0 章」冒充空书。
+- **阅读面板零重构复用**：本地书的目录与网络书同形（`{title, index, url}`，`url = localbook:<id>#<n>`），阅读面板按 `origin` 前缀分派数据面，DOM/交互/样式一字不改。
+
+---
+
 ## 与竞品的关系
 
 | 你需要的 | 用谁 |
@@ -271,7 +303,7 @@ musespiral 不与它们竞争单项能力，而是**把「素材 → 成稿 → 
 
 **Beta**。核心链路已跑通：
 
-- **3212 个测试通过**（1 个 e2e 需真机凭证，默认跳过）
+- **3483 个测试通过**（1 个 e2e 需真机凭证，默认跳过）
 - 12 个插件、12 个前端视图
 - 真实素材验证：513 秒中文讲座 → 221 段转写 → 8 关键帧 → 带时间戳锚的图文稿 → 素材库
 - 发布链路真机验证：Markdown → 审核 → 图片上传 → 公众号**草稿创建成功**

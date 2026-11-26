@@ -62,27 +62,38 @@ from ..security import (
 
 
 def _assert_asset_bounds(root: Path, article_path: Path, article: ParsedArticle) -> None:
-    """动作前校验：cover 与正文本地图片引用必须落在 root 内。
+    """动作前校验：cover 与正文本地媒体引用必须落在 root 内。
 
     pack 复制封面、publish 读盘上传——越界路径会把 root 外文件带入物料包/上传链路。
+    B3（2026-11-26）扩视频源：:::video 块的 src/poster 与 frontmatter.media 的
+    src/poster 同门（build_pack 会把 video.mp4/poster.jpg 复制进物料包——越界
+    即泄漏 root 外文件，与图片同一红线）。
     """
     refs: list[str] = []
     cover = str(article.metadata.get("cover") or "").strip()
     if cover:
         refs.append(cover)
     refs.extend(_collect_image_srcs(article.blocks))
+    for block in article.blocks:
+        if block.get("type") == "video":
+            refs.extend(str(block.get(k) or "").strip() for k in ("src", "poster"))
+    media = article.metadata.get("media")
+    if isinstance(media, dict) and str(media.get("kind") or "") == "video":
+        refs.extend(str(media.get(k) or "").strip() for k in ("src", "poster"))
     for raw in refs:
+        if not raw:
+            continue
         parsed = urlparse(raw)
         if parsed.scheme or parsed.netloc or raw.startswith("//"):
             continue  # 网络图不读本地盘（外域问题由渲染级检查覆盖）
         if Path(raw).is_absolute():
-            raise _HttpError(400, f"封面/正文图片必须是工作目录内相对路径（禁止绝对路径）: {raw}")
+            raise _HttpError(400, f"封面/正文媒体必须是工作目录内相对路径（禁止绝对路径）: {raw}")
         try:
             resolved = (article_path.parent / raw).resolve()
         except (OSError, ValueError):
-            raise _HttpError(400, f"封面/正文图片路径非法: {raw}") from None
+            raise _HttpError(400, f"封面/正文媒体路径非法: {raw}") from None
         if not resolved.is_relative_to(root):
-            raise _HttpError(400, f"封面/正文图片路径越界（必须仍在工作目录内）: {raw}")
+            raise _HttpError(400, f"封面/正文媒体路径越界（必须仍在工作目录内）: {raw}")
 
 
 # ---- 进程内共享 JobRunner（惰性创建 + 一次性孤儿恢复）----
@@ -215,6 +226,9 @@ def _action_pack(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
     variant_rel = data.get("variant")
     if variant_rel is not None and not isinstance(variant_rel, str):
         raise _HttpError(400, "variant 必须是 root 内相对路径或 null")
+    overwrite = data.get("overwrite", False)  # D10：重打包删旧重建
+    if not isinstance(overwrite, bool):
+        raise _HttpError(400, "overwrite 必须是布尔值")
     article_path = _resolve_file(ctx.root, article_rel)
     variant_path = str(_resolve_file(ctx.root, variant_rel)) if variant_rel else None
     try:
@@ -224,7 +238,7 @@ def _action_pack(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
     _assert_asset_bounds(ctx.root, article_path, article)  # 越界 → 400（提交期同步）
 
     def _body(_job_id: str) -> dict[str, Any]:
-        pack_dir = pack_service.build_pack_for(article_path, platform, variant=variant_path)
+        pack_dir = pack_service.build_pack_for(article_path, platform, variant=variant_path, overwrite=overwrite)
         return {"dir": _rel(ctx.root, pack_dir)}
 
     params: dict[str, Any] = {"article": article_rel, "platform": platform}

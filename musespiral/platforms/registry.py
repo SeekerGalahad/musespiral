@@ -70,9 +70,54 @@ class _ManualPackAdapter(PlatformAdapter):
         }
 
 
+class _VideoPackAdapter(PlatformAdapter):
+    """manual_pack 视频平台通用适配器（B3 2026-11-26，三线扩展设计 §3.2）。
+
+    在 _ManualPackAdapter 的标题门之上加「视频源在位」校验：
+    frontmatter.media.kind=video 时，正文须含 :::video 块**或**
+    frontmatter.media.src 非空（设计 §3.2 双入口）——缺视频源=FAIL（打包
+    产不出 video.mp4，校验面先暴露而不是留到 pack 才炸）；源只在
+    frontmatter 而正文无块=WARN（图文平台粘贴的正文将不带视频）。"""
+    _BASE: _ManualPackAdapter
+
+    def __init__(self, name: str, capabilities: set[str]) -> None:
+        self._BASE = _ManualPackAdapter(name, capabilities)
+        self.name = name
+        self.route = "manual_pack"
+        self.capabilities = capabilities
+
+    def validate(self, article, article_path=None):  # type: ignore[no-untyped-def]
+        results = list(self._BASE.validate(article, article_path))
+        media = article.metadata.get("media")
+        if not (isinstance(media, dict) and str(media.get("kind") or "") == "video"):
+            return results
+        from ..core.content.parser import extract_video_blocks
+
+        has_block = bool(extract_video_blocks(article.raw_body))
+        src = str(media.get("src") or "").strip()
+        if not (has_block or src):
+            results.append(
+                ("FAIL", "视频文章缺视频源（正文 :::video 块或 frontmatter.media.src 必须有其一）")
+            )
+        elif src and not has_block:
+            results.append(
+                ("WARN", "视频源只在 frontmatter.media（正文无 :::video 块——正文粘贴面不带视频）")
+            )
+        else:
+            results.append(
+                ("PASS", "视频源在位（正文 :::video 块" + (" + frontmatter.media.src" if src else "") + "）")
+            )
+        return results
+
+    def build_payload(self, article):  # type: ignore[no-untyped-def]
+        return self._BASE.build_payload(article)
+
+
 # 内置 manual_pack 平台注册（能力矩阵补全；capabilities 为展示口径）
 register(_ManualPackAdapter("xhs", {"text", "image"}))
-register(_ManualPackAdapter("channels", {"video", "text"}))
+# B3（2026-11-26）：channels 升视频物料包适配器（validate 扩视频源校验；
+# 物料包产物面在 services/publish/pack_service——适配器保持薄）。
+register(_VideoPackAdapter("channels", {"video", "text"}))
 register(_ManualPackAdapter("douyin", {"video", "text"}))
 register(_ManualPackAdapter("zhihu", {"text", "image"}))
 # F42 两新平台（裁决④）：无公开 API，走 manual_pack + 浏览器上传同型；

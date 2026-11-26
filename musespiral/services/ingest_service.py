@@ -237,13 +237,25 @@ def _refresh_dir(source: dict[str, Any]) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     for meta in scanner.scan_dir(root):
         abs_path = str(Path(meta["path"]).resolve())
+        # 2026-11-26 手册入库批：dir 源正文随采集落 payload.text——
+        # 原「只记 local_path」会让素材无法按正文检索、创作工坊 prompt 拿空内容。
+        # 红线「引用不复制」针对的是大文件/本地书（只读磁盘原文件）；
+        # 普通 .md 文档本身是文本，落正文与 kb 源同语义（幂等由 id 保证）。
+        _text = ""
+        try:
+            _text = Path(abs_path).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            pass  # 单篇读失败不塌，保留 local_path 引用
         rows.append(
             model.make_material(
                 mtype="text",
                 source_id=source["id"],
                 uri=abs_path,
                 title=str(meta.get("title") or ""),
-                payload={"local_path": abs_path},  # 引用不复制：正文不入库
+                payload={
+                    "local_path": abs_path,
+                    "text": _text,  # 正文入库（可检索 + 可创作）
+                },
                 fetched_at=fetched_at,
             )
         )

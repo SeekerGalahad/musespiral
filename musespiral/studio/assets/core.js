@@ -239,12 +239,37 @@ u=String(u).replace(/[?#].*$/,'').replace(/^\.\//,'');
 try{u=decodeURIComponent(u);}catch(e2){}
 return img?'/asset?path='+encodeURIComponent(dir+u):'#';}
 function mdInl(s,dir){return s.replace(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g,function(m,a,u){return '<img alt="'+a+'" src="'+safeSrc(u,dir,true)+'">';}).replace(/\[([^\]]+)\]\(([^)\s]+)[^)]*\)/g,function(m,t,u){return '<a href="'+safeSrc(u,dir,false)+'">'+t+'</a>';}).replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/`([^`\n]+)`/g,'<code>$1</code>');}
+// B3 视频块（2026-11-26）：:::video{src="…" poster="…"} 容器 → <figure class="md-video">
+// 内嵌播放器。src/poster 走 /media/（服务端 assets._rewrite_local_videos 同域：
+// 预览 iframe 与这里都指静态路由）；外链 http(s)/data 原样保留。属性解析与服务端
+// parser._VIDEO_ATTR_RE 同形（带引号值可含空格、裸值止于空白/}）。
 var BANCHOR=/^<!--b:[A-Za-z0-9_-]+-->[ \t]*$/;
+var MVID_OPEN=/^:::video[ \t]*\{(.*)\}[ \t]*$/,MVID_ATTR=/([a-zA-Z_][\w-]*)\s*=\s*(?:"([^"]*)"|([^\s"}]+))/g;
+function vidAttr(raw){
+var o={},m;
+MVID_ATTR.lastIndex=0;
+while((m=MVID_ATTR.exec(raw)))o[m[1]]=m[2]!==undefined?m[2]:m[3];
+return o;}
+function vidSrc(u,dir){
+u=String(u==null?'':u).trim();
+if(!u)return '';
+if(/^(https?:|data:)/i.test(u))return u;
+u=u.replace(/[?#].*$/,'').replace(/^\.\//,'');
+try{u=decodeURIComponent(u);}catch(e2){}
+return '/media/'+encodeURI(dir+u);}
 function mdToHtml(md,dir){
 var ls=String(md).replace(/\r/g,'').split('\n'),o=[],p=[],i=0;
 function fl(){if(p.length){o.push('<p>'+mdInl(p.join('<br>'),dir)+'</p>');p=[];}}
 while(i<ls.length){var L=ls[i];
 if(BANCHOR.test(L)){i++;continue;}
+var vm=MVID_OPEN.exec(L);
+if(vm){
+fl();var attrs=vidAttr(vm[1]),cap=[],j=i+1;
+while(j<ls.length&&!/^:::[ \t]*$/.test(ls[j]))cap.push(ls[j++].replace(/^\s+|\s+$/g,''));
+if(j<ls.length){i=j+1;}else{i=ls.length;}  // 未闭合：到文末（服务端同「不吞正文」）
+var src=vidSrc(attrs.src,dir),po=attrs.poster?vidSrc(attrs.poster,dir):'',ct=cap.filter(function(x){return x;}).join(' ');
+o.push('<figure class="md-video"><video controls'+(src?' src="'+esc(src)+'"':'')+(po?' poster="'+esc(po)+'"':'')+'></video>'+(ct?'<figcaption>'+esc(ct)+'</figcaption>':'')+'</figure>');
+continue;}
 if(/^```/.test(L)){fl();var b=[];i++;while(i<ls.length&&!/^```/.test(ls[i]))b.push(ls[i++]);o.push('<pre><code>'+esc(b.join('\n'))+'</code></pre>');i++;continue;}
 var h=L.match(/^(#{1,4})\s+(.*)$/);
 if(h){fl();o.push('<h'+h[1].length+'>'+mdInl(esc(h[2]),dir)+'</h'+h[1].length+'>');i++;continue;}
@@ -844,11 +869,15 @@ CM=m;
 $('clip-title').textContent=m==='clip'?'剪藏 URL':(m==='crawl'?'手动爬取':'登记视频');
 $('clip-ok').textContent=m==='clip'?'抓取预览':(m==='crawl'?'抓取入待决区':'登记');
 $('clip-sub').hidden=$('clip-note').hidden=m!=='video';
+// B3：视频登记双入口——URL（F61 零出网）或本地文件路径（读盘落仓+元数据探测）；
+// 占位符随模式切换（剪藏/爬取仍是纯 URL 门）
+$('clip-url').placeholder=m==='video'?'视频 URL（http/https）或本地路径（/… 或 ~/…，mp4/webm/mov）':'URL（http(s) 开头；SSRF/robots 门生效）';
 $('clip-url').value='';$('clip-sub').value='';$('clip-note').value='';$('clip-err').textContent='';
 openDlg('clip-form','#clip-url');
 }
 function clipSubmit0(){
 var u=$('clip-url').value.trim();
+if(CM==='video'&&(/^~\//.test(u)||/^\//.test(u)))return u;  // B3：本地路径形态走 register-local
 if(!/^https:\/\/|^http:\/\//i.test(u)){$('clip-err').textContent='URL 须 http(s):// 开头';return;}
 return u;
 }
@@ -861,7 +890,15 @@ var u=clipSubmit0();
 if(!u)return;
 this.disabled=true;$('clip-err').textContent='';
 try{
-if(CM==='video'){
+if(CM==='video'&&/^~?\//.test(u)){
+// B3：本地视频文件登记（读盘→硬链接/复制落仓→ffprobe 时长+ffmpeg 首帧——
+// 缺席如实置空）；文件不存在 404、格式/路径门 400 均可读
+var dl=await postJSON('/api/materials/register-local',{path:u,title:$('clip-sub').value.trim(),note:$('clip-note').value.trim(),confirm:true});
+closeDlg('clip-form');
+toast(dl.dedup?'已登记过（幂等命中）':'本地视频已登记'+(dl.material&&((dl.material.payload||{}).meta||{}).poster?'（含首帧封面）':''),dl.dedup?WN:OK);
+await loadMaterials();renderCollRail();viewRepaint('material');
+}
+else if(CM==='video'){
 var d=await postJSON('/api/materials/register',{url:u,title:$('clip-sub').value.trim(),note:$('clip-note').value.trim(),confirm:true});
 closeDlg('clip-form');
 	toast(d.dedup?'已登记过（幂等命中）':'视频已登记',d.dedup?WN:OK);
@@ -1343,3 +1380,21 @@ var addr=document.getElementById('server-addr');
 if(addr){addr.textContent=location.host||'本地文件';}
 }
 mountChrome();
+function lbEncClass(charset){
+var c=String(charset||'').toLowerCase();
+if(!c)return '';
+if(c.indexOf('utf')===0)return 'jade';
+if(c.indexOf('gb')===0)return 'amber';
+if(c.indexOf('big5')===0)return 'indigo';
+return '';
+}
+function lbWan(chars){
+var n=Number(chars)||0;
+return n>=10000?(n/10000).toFixed(1)+' 万字':(n?n.toLocaleString()+' 字':'');
+}
+var LB_GRAD=['linear-gradient(135deg,#3b5bdb,#8b5cf6)','linear-gradient(135deg,#2f9e6e,#0d9488)','linear-gradient(135deg,#d97706,#c9452c)','linear-gradient(135deg,#c9452c,#e07a4f)','linear-gradient(135deg,#5b3bbd,#3b5bdb)'];
+function lbCoverStyle(id){
+var h=0,i;var s=String(id||'');
+for(i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%1000;
+return LB_GRAD[h%LB_GRAD.length];
+}

@@ -267,13 +267,26 @@ def test_css_split_rule_multiset_equivalent_to_head() -> None:
                    b".qcheck[data-checks]{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}",
                    b".qcheck[data-checks]:focus-visible{outline:2px solid var(--vermilion);outline-offset:1px}",
                    b".chips>.notice-card{flex:1 1 100%;padding:12px 14px}",
-                   b".jobs-menu .notice-card,.coll-rail .notice-card{padding:12px 14px}"}
+                   b".jobs-menu .notice-card,.coll-rail .notice-card{padding:12px 14px}",
+                   # B1 本地书架（2026-11-26）在 ui.views/books.css 新增的 6 条
+                   # .lb-* 规则（书卡复用 .card 只补封面/标题/元信息/悬浮下架）——
+                   # 基线锚早于本批，合法新增登记。
+                   b".lb-card{display:flex;flex-direction:column;gap:6px;cursor:pointer}",
+                   b".lb-cover{height:120px;border-radius:var(--radius-btn);display:grid;place-items:center;color:#fff;font-size:22px;font-weight:700}",
+                   b".lb-title{font-weight:600;font-size:var(--fs-caption);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+                   b".lb-meta{display:flex;flex-wrap:wrap;gap:0 8px;font-size:var(--fs-micro)}",
+                   b".lb-del{position:absolute;top:6px;right:6px;opacity:0;font-size:var(--fs-micro);padding:1px 5px}",
+                   b".lb-card:hover .lb-del,.lb-card:focus-within .lb-del{opacity:1}"}
     # 2026-11-24 W2 源中枢重设计：表格→卡片，旧 eco-tile/src-table 规则退役、
     # 新 .src-*/.st-*/.pl-*/.con-*/.rg-*/.sf-* 规则进入 core+sources；这是
     # 一次**有意的大替换**（原型=源中枢-输入端重设计.html），故本轮按域精确
     # 豁免，下一轮基线刷新后回到逐条列举的严格模式。
     W2_MISSING_PREFIXES = (b".eco-", b".eco-tile", b".eco-n", b".eco-l", b".src-table")
-    W2_EXTRA_PREFIXES = (b".src-", b".st-", b".st-chip", b".pl-", b"a.pl-", b".con-", b".rg-", b".sf-", b".notice-card", b".pipeline-bar", b".sec-", b".results-", b".rgroup", b".modal-lg", b".spin", b".hx", b".io-", b".slow", b".cnt", b".engine-line", b".n-ic", b".n-body", b".n-act", b".src-search", b".sf-body", b".sf-types", b".sf-type", b".sf-field", b".sf-test")
+    # 渐进搜索批（2026-11-25）：详情懒加载提示+网页步骤条（core 层，reader.css 满门）+分组/脉冲动画
+    # B2 视觉编辑 2.0 批（2026-11-26）：三栏编辑器新规则族全数 `.dv-` 前缀
+    # （属性面板/图层列表/模板横条/背景参数/素材选图弹层——落 ui.views/design.css，
+    # 产物 4.8KB 未超 8KiB 单视图门，无件上提 core）。基线锚早于本批，按域前缀豁免登记。
+    W2_EXTRA_PREFIXES = (b".src-", b".st-", b".st-chip", b".pl-", b"a.pl-", b".con-", b".rg-", b".sf-", b".notice-card", b".pipeline-bar", b".sec-", b".results-", b".rgroup", b".modal-lg", b".spin", b".hx", b".io-", b".slow", b".cnt", b".engine-line", b".n-ic", b".n-body", b".n-act", b".src-search", b".sf-body", b".sf-types", b".sf-type", b".sf-field", b".sf-test", b".rd-fetch", b".rd-web-steps", b"@keyframes srcFade", b"@keyframes srcPulse", b".dv-", b".mat-mdframe", b".qcard-cover-btn")  # 素材查看器+视觉编辑审查批
     def _w2_owned(rule, prefixes):
         if isinstance(rule, bytes):
             return rule.startswith(prefixes)

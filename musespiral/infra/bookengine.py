@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any
+from typing import Any, Iterator
 from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -165,6 +165,57 @@ class BookEngineClient:
         )
         _require_shape(payload, "items", list, "search")
         return payload
+
+    def search_stream(
+        self,
+        key: str,
+        *,
+        sources: Any = "all",
+        page: int = 1,
+        mode: str = "parallel",
+        deadline_ms: int = 45_000,
+    ) -> Iterator[dict[str, Any]]:
+        """POST /search/stream：SSE 流式搜索生成器。
+
+        逐批 yield {"type":"batch","origin":...,"items":[...]}，结束 yield
+        {"type":"done","searched":...,"total":...}。mock 开时降级为单批+done
+        （体验模式无流可流）。连接期阻塞读由引擎侧 deadline 兜底（done 必达）。
+        """
+        if mock_enabled():
+            payload = _mock_search(key, page)
+            yield {"type": "batch", "origin": "Mock 源", "items": payload.get("items", [])}
+            yield {"type": "done", "searched": 1, "total": len(payload.get("items", []))}
+            return
+        body = {
+            "sources": sources,
+            "key": key,
+            "page": int(page),
+            "mode": "serial" if mode == "serial" else "parallel",
+            "deadline_ms": int(deadline_ms),
+        }
+        data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        req = Request(f"{BASE_URL}/search/stream", data=data, method="POST")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Accept", "text/event-stream")
+        try:
+            # socket 级 timeout=等待批次间隔的容忍度（串行模式源间可达数秒，
+            # 不能用 3s 探活超时——SSE read 会在批次间隙触发）；引擎侧 deadline
+            # 保证 done 事件必达，客户端只需容忍到 deadline+缓冲。
+            resp = urlopen(req, timeout=max(30.0, deadline_ms / 1000 + 15))
+        except (URLError, OSError, TimeoutError) as exc:
+            reason = getattr(exc, "reason", exc)
+            raise BookEngineUnavailable(f"bookengine 未就绪（{BASE_URL} 不可达: {reason}）") from None
+        with resp:
+            for raw in resp:
+                line = raw.decode("utf-8", "replace").strip()
+                if not line.startswith("data:"):
+                    continue
+                try:
+                    event = json.loads(line[5:].strip())
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(event, dict):
+                    yield event
 
     def book_info(self, source_url: str, book_url: str) -> dict[str, Any]:
         """GET /book/info：书籍详情（封面/简介/字数/tocUrl——§6.2）。"""

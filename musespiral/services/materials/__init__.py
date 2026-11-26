@@ -100,6 +100,7 @@ from .upload import (  # noqa: F401
     add_uploaded_document,
     add_uploaded_image,
     read_material_file,
+    register_local_video,
     register_video,
 )
 from .spark import (  # noqa: F401
@@ -205,6 +206,7 @@ __all__ = [
     "query_scored",
     "re",
     "read_material_file",
+    "register_local_video",
     "refresh_internal_articles",
     "register_video",
     "scanner",

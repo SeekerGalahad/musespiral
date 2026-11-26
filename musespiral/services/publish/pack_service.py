@@ -13,6 +13,8 @@ JobFailure/脱敏/相对路径包装不再出现——异常原样上抛，返�
 """
 from __future__ import annotations
 
+import json
+import os
 import re
 import shutil
 from pathlib import Path
@@ -21,7 +23,7 @@ from typing import Any
 import frontmatter
 
 from ...browser.flows.base import read_pack
-from ...core.content.parser import parse_article
+from ...core.content.parser import extract_video_blocks, parse_article
 from ...core.quality.pack_checks import (
     _checks_lines,
     _material_checks_lines,
@@ -33,6 +35,208 @@ from ...platforms import PLIMITS
 # variant（adapt 口播稿）正文自带的「描述：」行——payload 头部描述优先取它，
 # 与 README 字段对照表「描述→payload 头部描述行」的指引一致（第五期遗留 low 修复）
 _DESC_LINE_RE = re.compile(r"^描述[:：]\s*(.+)$", re.MULTILINE)
+
+# ── B3 视频物料包（2026-11-26，三线扩展设计 §3.2/§3.3）─────────────────
+# channels/douyin/xhs 三平台在四件套（README/payload/checks/cover）之上，
+# 当文章是视频文章（frontmatter.media.kind=video 或正文 :::video 块）时追加
+# 视频物料：video.mp4（硬链接或复制——同字节零拷贝）+ poster.jpg + meta.json
+# （标题/话题/章节时间点从 [mm:ss](#t=秒) 锚提取）+ README 视频上传步骤。
+# 诚实边界：视频号/抖音均无公开草稿 API（与公众号不同），README 明写
+# 「导出后人工上传」，绝不假装自动发布。
+_VIDEO_PACK_PLATFORMS: tuple[str, ...] = ("channels", "douyin", "xhs")
+# 时间戳锚（正典 §9.3 既有语法——章节时间点提取的输入面）
+_TS_ANCHOR_RE = re.compile(r"\[(\d{1,2}:\d{2}(?::\d{2})?)\]\(#t=(\d+)\)")
+_HEADING_RE = re.compile(r"^#{1,6}\s+(.+)$")
+# ffmpeg 首帧兜底（poster 无引用时才尝试；缺席静默跳过——pack 主流程不依赖）
+_FFMPEG_TIMEOUT_S = 60
+
+
+def _video_pack_sources(
+    var_meta: dict[str, Any], article: Any, content: str
+) -> dict[str, Any] | None:
+    """视频源探测（frontmatter.media 优先 > 正文首个 :::video 块）→ None 无。
+
+    设计 §3.2 双入口：frontmatter.media{kind,src,poster,duration}（视频文章
+    声明面）或编辑器插入的 :::video{src,poster} 块。variant 的 frontmatter
+    同键优先（adapt 产物若保留 media）。"""
+    for meta in (var_meta, article.metadata):
+        media = meta.get("media")
+        if isinstance(media, dict) and str(media.get("kind") or "") == "video":
+            src = str(media.get("src") or "").strip()
+            if src:
+                return {
+                    "src": src,
+                    "poster": str(media.get("poster") or "").strip() or None,
+                    "duration": media.get("duration"),
+                }
+    for block in extract_video_blocks(content):
+        src = str(block.get("src") or "").strip()
+        if src:
+            return {
+                "src": src,
+                "poster": str(block.get("poster") or "").strip() or None,
+                "duration": None,
+            }
+    return None
+
+
+def _chapters_from_anchors(content: str) -> list[dict[str, Any]]:
+    """[mm:ss](#t=秒) 锚 → 章节时间点清单（t=秒 int / ts=原文 / label=锚
+    所属小节标题——**向上找最近标题行**：时间戳锚通常开讲新小节，章节语义
+    是「该时刻进入的段落」，即其上方最近的 ## 标题）。顺序即文档序；label
+    缺省空串（锚本身已在正文可回看）。"""
+    lines = content.split("\n")
+    out: list[dict[str, Any]] = []
+    last_heading = ""
+    for i, line in enumerate(lines):
+        hm = _HEADING_RE.match(line)
+        if hm:
+            last_heading = hm.group(1).strip()
+        for m in _TS_ANCHOR_RE.finditer(line):
+            out.append({"t": int(m.group(2)), "ts": m.group(1), "label": last_heading})
+    return out
+
+
+def _link_or_copy(src: Path, dst: Path) -> None:
+    """video.mp4 落包：硬链接优先（同卷零拷贝），跨卷回退 copy2（media_store.
+    store_media_file 同款判例——GB 级视频不真复制是物料包的成本底线）。"""
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.unlink(missing_ok=True)
+    try:
+        os.link(src, dst)
+    except OSError:
+        shutil.copy2(src, dst)
+
+
+def _poster_first_frame(video: Path, dst: Path) -> bool:
+    """poster 无引用时 ffmpeg 抽首帧兜底；缺席/失败 False（不报错——封面
+    缺失由 meta.json 如实记录，README 提示上传时自选封面）。"""
+    if shutil.which("ffmpeg") is None:
+        return False
+    import subprocess
+
+    try:
+        proc = subprocess.run(
+            ["ffmpeg", "-y", "-i", str(video), "-vframes", "1", "-q:v", "2", str(dst)],
+            capture_output=True, text=True, timeout=_FFMPEG_TIMEOUT_S,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return proc.returncode == 0 and dst.is_file() and dst.stat().st_size > 0
+
+
+def _video_pack_readme(platform: str, meta_json: dict[str, Any]) -> str:
+    """视频物料包 README 追加段（上传步骤 + 章节时间点表 + 诚实边界）。"""
+    chapters = meta_json.get("chapters") or []
+    rows = "".join(
+        f"| {c['ts']} | `{c['t']}` | {c.get('label') or '—'} |\n" for c in chapters
+    )
+    honest = (
+        "\n> ⚠️ 诚实边界：视频号无公开草稿 API（与公众号不同），本包**不自动上传**——"
+        "导出后请人工上传。\n" if platform == "channels" else
+        "\n> 提示：该平台无草稿 API，导出后人工上传。\n"
+    )
+    poster_line = (
+        "- poster.jpg：上传为视频封面" if meta_json.get("poster") else
+        "- 封面：poster.jpg 缺失（视频无引用封面且首帧抽取不可用），上传时自选"
+    )
+    return (
+        "\n## 视频上传步骤（B3 视频物料）\n\n"
+        "1. 上传 `video.mp4` 到平台发布页（拖入或选择文件）；\n"
+        f"{poster_line}；\n"
+        "3. 标题/话题/描述按 payload.md 头部逐字段粘贴；\n"
+        "4. 章节时间点（若有）逐条粘贴进「章节/分段」编辑位：\n\n"
+        + (
+            f"| 时间 | 秒 | 章节 |\n|---|---|---|\n{rows}\n"
+            if rows
+            else "（正文无 [mm:ss](#t=) 时间戳锚——无章节时间点）\n"
+        )
+        + honest
+    )
+
+
+def _build_video_pack(
+    pack_dir: Path,
+    article_file: Path,
+    platform: str,
+    video_src: dict[str, Any],
+    title: str,
+    digest: str,
+    tags: list[str],
+    content: str,
+    raw_limits: dict[str, Any] | None,
+) -> list[str]:
+    """视频物料三件套落包（video.mp4/poster.jpg/meta.json），返回追加的
+    checks.txt 行（物料级：视频存在/大小、douyin 封面尺寸）。"""
+    src = Path(video_src["src"])
+    if not src.is_absolute():
+        src = article_file.parent / src
+    if not src.is_file():
+        raise FileNotFoundError(
+            f"视频源不存在: {video_src['src']}（frontmatter.media/:::video 引用的文件）"
+        )
+    _link_or_copy(src, pack_dir / "video.mp4")
+
+    poster_rel: str | None = None
+    if video_src.get("poster"):
+        poster_src = Path(video_src["poster"])
+        if not poster_src.is_absolute():
+            poster_src = article_file.parent / poster_src
+        if poster_src.is_file():
+            shutil.copy2(poster_src, pack_dir / "poster.jpg")
+            poster_rel = "poster.jpg"
+    if poster_rel is None and _poster_first_frame(src, pack_dir / "poster.jpg"):
+        poster_rel = "poster.jpg"
+
+    meta_json: dict[str, Any] = {
+        "platform": platform,
+        "title": title,
+        "desc": digest,
+        "tags": tags,
+        "video": "video.mp4",
+        "poster": poster_rel,
+        "duration": video_src.get("duration"),
+        "chapters": _chapters_from_anchors(content),
+        "src": str(video_src["src"]),
+    }
+    (pack_dir / "meta.json").write_text(
+        json.dumps(meta_json, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    # README 追加视频步骤（四件套的 README 先落——追加不覆盖平台指引）
+    readme = pack_dir / "README.md"
+    if readme.is_file():
+        readme.write_text(
+            readme.read_text(encoding="utf-8") + _video_pack_readme(platform, meta_json),
+            encoding="utf-8",
+        )
+
+    video_mb = (pack_dir / "video.mp4").stat().st_size / (1024 * 1024)
+    lines = [f"ok 视频物料: video.mp4 {video_mb:.1f}MiB（meta.json 含标题/话题/章节时间点）"]
+    # 尺寸检查的 limits：build_pack_for 注入 PLIMITS；直调 build_pack 未传时回退
+    # 同名平台档案（cover_w/cover_h 是平台事实而非调用方输入——回退不改变语义）
+    lim = raw_limits or PLIMITS.get(platform) or {}
+    if platform == "douyin" and lim.get("cover_w") and poster_rel:
+        # 抖音封面尺寸检查（B3 任务书）：poster.jpg 偏离 profiles cover_w×cover_h
+        # ±25% → WARN（PIL 读尺寸，不可读跳过——mp cover_ratio 同纪律）
+        try:
+            from PIL import Image
+
+            with Image.open(pack_dir / "poster.jpg") as im:
+                w, h = im.size
+            target = lim["cover_w"] / lim["cover_h"]
+            ratio = w / h
+            if not target * 0.75 <= ratio <= target * 1.25:
+                lines.append(
+                    f"WARN 抖音封面: {w}×{h} 偏离建议 {lim['cover_w']}×{lim['cover_h']}"
+                    f"（±25% 容差）——上传前建议裁切"
+                )
+            else:
+                lines.append(f"ok 抖音封面: {w}×{h}（建议 {lim['cover_w']}×{lim['cover_h']}）")
+        except Exception:
+            pass  # 封面不可读：存在性已有 README 提示，尺寸检查跳过
+    return lines
+
 
 # README.md 各平台固定指引（入口 URL + 粘贴位置 + 字段对应表）。
 # 表中字数为设计 §十四 PLIMITS 的建议值，仅指引文案；实际校验以注入 limits 为准。
@@ -167,11 +371,14 @@ def build_pack(
     variant: str | Path | None = None,
     limits: dict[str, int] | None = None,
     outdir: str | Path | None = None,
+    overwrite: bool = False,
 ) -> Path:
     """生成发布清单物料包目录并返回其路径。
 
     目录四件套：README.md / payload.md / checks.txt / cover/（cover 缺失时跳过，
-    不创建 cover/）。目标目录已存在时拒绝覆盖（FileExistsError）。
+    不创建 cover/）。B3 视频文章追加视频物料三件套：video.mp4（硬链接或
+    复制）/ poster.jpg / meta.json（标题/话题/章节时间点，channels/douyin/
+    xhs——见 _VIDEO_PACK_PLATFORMS 注）。
 
     - variant 显式传入时必须存在（FileNotFoundError，拒绝静默回退原文），
       其内容与标题/标签优先（adapt 产物带 platform/tags，见 §十四 F14）。
@@ -189,7 +396,13 @@ def build_pack(
     default_dir = article_file.parent / f"{article_file.stem}.{platform}.pack"
     pack_dir = Path(outdir) if outdir else default_dir
     if pack_dir.exists():
-        raise FileExistsError(f"物料包目录已存在，拒绝覆盖: {pack_dir}")
+        if not overwrite:
+            raise FileExistsError(
+                f"物料包目录已存在，拒绝覆盖: {pack_dir}（重打包传 overwrite=true）"
+            )
+        # D10（2026-11-26）：overwrite=true 删旧重建（重打包场景——目录内容
+        # 是生成物可安全重建；用户显式确认后不阻塞）
+        shutil.rmtree(pack_dir)
 
     # payload 内容与字段取材：variant 优先；显式传入但路径不存在是输入错误，拒绝静默回退
     source = "文章正文"
@@ -252,6 +465,18 @@ def build_pack(
                 for png in pngs:
                     shutil.copy2(png, cards_out / png.name)
 
+    # B3 视频物料包（2026-11-26）：channels/douyin/xhs 遇视频文章追加
+    # video.mp4/poster.jpg/meta.json + README 视频步骤（设计 §3.2；先于
+    # checks.txt 落盘——douyin 封面尺寸检查要看 poster.jpg）
+    video_check_lines: list[str] = []
+    if platform in _VIDEO_PACK_PLATFORMS:
+        video_src = _video_pack_sources(var_meta, article, content)
+        if video_src is not None:
+            video_check_lines = _build_video_pack(
+                pack_dir, article_file, platform, video_src,
+                title, digest, tags, content, raw_limits,
+            )
+
     # checks.txt 后写（F33B）：物料级校验（图数/封面尺寸）要先复制完
     # cover/ 与 images-cards/ 才能核对；limits 只有旧四键时输出与旧版逐行一致
     text_lines = _checks_lines(title, content, tags, limits)
@@ -259,7 +484,7 @@ def build_pack(
     if material_lines and text_lines == ["未接入平台限制表"]:
         text_lines = []  # 限制表只含物料级键时不算「未接入」
     (pack_dir / "checks.txt").write_text(
-        "\n".join(text_lines + material_lines) + "\n", encoding="utf-8"
+        "\n".join(text_lines + material_lines + video_check_lines) + "\n", encoding="utf-8"
     )
 
     return pack_dir
@@ -325,13 +550,13 @@ def _first_prose_line(content: str) -> str:
     return ""
 
 
-
 def build_pack_for(
     article_path: str | Path,
     platform: str,
     *,
     variant: str | Path | None = None,
     outdir: str | Path | None = None,
+    overwrite: bool = False,
 ) -> Path:
     """生成发布物料包目录（README.md / payload.md / checks.txt / cover/）。
 
@@ -346,6 +571,7 @@ def build_pack_for(
         variant=variant,
         limits=PLIMITS.get(platform),
         outdir=outdir,
+        overwrite=overwrite,
     )
 
 
@@ -400,6 +626,8 @@ def pack_preview(article_path: str | Path, platform: str) -> dict[str, Any]:
     - platform 不在白名单 → PackPreviewError（表现层转 400；同时挡路径穿越）；
     - 物料包不存在 / 缺 payload.md → **200 形状** `available:false` + 可读
       note（前端「尚未适配」提示面，不报错不打断切平台）；
+    - B3（2026-11-26）：`media` 键——视频物料包的媒体清单与体积（前端打包
+      预览列清单用；无视频物料=空列表）；
     - diff 口径：原文取 `parse_article(...).raw_body`（与 pack 落盘时同源），
       两侧 `.strip()` 后逐行比（行尾/首尾空白不是「改了哪一段」；无 variant
       的 pack 正文=原文，两侧 strip 后 identical）；渲染层对替换块配对行做
@@ -420,6 +648,7 @@ def pack_preview(article_path: str | Path, platform: str) -> dict[str, Any]:
         "payload": None,
         "original": None,
         "diff": None,
+        "media": [],
     }
     if not d.is_dir():
         out["note"] = "尚未适配——该平台还没有物料包（先在「操作」页生成）。"
@@ -451,6 +680,7 @@ def pack_preview(article_path: str | Path, platform: str) -> dict[str, Any]:
             "body": fields.body,
         },
         original=original,
+        media=_pack_media_inventory(d),
         diff={
             **result.to_dict(),
             "html": render_diff_html(
@@ -459,3 +689,22 @@ def pack_preview(article_path: str | Path, platform: str) -> dict[str, Any]:
         },
     )
     return out
+
+
+# B3：媒体清单（打包预览「列媒体清单与体积」的数据面）。固定名三件
+# （video.mp4/poster.jpg/meta.json）+ images-cards/ 内 PNG——全部真实
+# stat 体积；不存在的固定名跳过（如无封面视频包）。
+_PACK_MEDIA_NAMES: tuple[str, ...] = ("video.mp4", "poster.jpg", "meta.json")
+
+
+def _pack_media_inventory(pack_dir: Path) -> list[dict[str, Any]]:
+    media: list[dict[str, Any]] = []
+    for name in _PACK_MEDIA_NAMES:
+        p = pack_dir / name
+        if p.is_file():
+            media.append({"file": name, "bytes": p.stat().st_size})
+    cards = pack_dir / "images-cards"
+    if cards.is_dir():
+        for png in sorted(cards.glob("*.png")):
+            media.append({"file": f"images-cards/{png.name}", "bytes": png.stat().st_size})
+    return media

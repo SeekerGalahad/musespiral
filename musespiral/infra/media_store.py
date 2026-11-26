@@ -150,3 +150,100 @@ def make_thumbnail(material_id: str, data: bytes) -> Path:
 def local_rel_path(material_id: str, ext: str) -> str:
     """payload.local_path 形态：相对 ~/.musespiral 的 posix 路径（正典 §1.1）。"""
     return f"materials/files/{material_id}.{ext}"
+
+
+# ── 视频媒体（B3 多媒体与视频发布，2026-11-26）─────────────────────────
+# 视频不进 8MiB 门：那是 HTTP 上传（Content-Length 预检）的防线，本地登记
+# 直接读盘无请求体；大文件落盘用「硬链接优先、跨卷回退 copy2」——同字节
+# 零拷贝（build_pack 复制 video.mp4 的同款判例），跨卷才真复制。
+VIDEO_EXTS: tuple[str, ...] = ("mp4", "webm", "mov")
+# poster 落盘名约定：<material_id>.poster.jpg（与缩略 <id>.thumb.webp 同目录同
+# 命名族——都是「缓存不是素材」位，但 poster 要进 payload.meta 供前端 /media/
+# 引用，故给确定性路径而非临时文件）
+_POSTER_JPEG_QUALITY = 2  # ffmpeg mjpeg 质量档（frame-grab 同档，best 附近）
+_PROBE_TIMEOUT_S = 60
+
+
+def store_media_file(material_id: str, ext: str, src_path: str | Path) -> Path:
+    """大媒体（视频）落仓：files/<id>.<ext>——硬链接优先，跨卷回退 copy2。
+
+    与 store_original 的差异：字节不走内存（视频 GB 级不能 read_bytes）、
+    不做 8MiB 门（本地登记非 HTTP 上传）、幂等以「目标已存在先删」保证
+    （同 id 内容寻址，重登记同文件——链接/复制前清掉旧链接防
+    FileExistsError，与 _atomic_write 的「重写同字节」语义对齐）。"""
+    import shutil
+
+    path = files_dir() / f"{material_id}.{ext}"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.unlink(missing_ok=True)
+    try:
+        os.link(src_path, path)  # 同卷零拷贝
+    except OSError:  # EXDEV 跨卷 / 权限等：真复制（元数据保 mtime 便于排查）
+        shutil.copy2(src_path, path)
+    return path
+
+
+def poster_rel_path(material_id: str) -> str:
+    """payload.meta.poster 形态：素材仓内相对 posix 路径（/media/ 消费面）。"""
+    return f"materials/files/{material_id}.poster.jpg"
+
+
+def probe_video_meta(material_id: str, src_path: str | Path) -> dict[str, Any]:
+    """视频元数据探测：ffprobe 时长 + ffmpeg 首帧封面——**缺席/失败如实置空**。
+
+    设计纪律（B3 任务书）：ffmpeg/ffprobe 缺失时不报错（登记本地视频是
+    主链路，封面只是增强信息——「宁可空值不可假值」）；探测失败（损坏
+    文件/超时/非零退出）同样置空，meta 里不写键（前端按缺省处理）。返回
+    {"duration": 秒(float)|None, "poster": 仓内相对路径|None}。"""
+    out: dict[str, Any] = {"duration": None, "poster": None}
+    src = str(src_path)
+
+    def _bin(name: str) -> str | None:
+        """D7 修复（2026-11-26）：launchd 服务 PATH 无 /opt/homebrew/bin——
+        裸名 ffprobe/ffmpeg 在 Studio（launchd 常驻）里 OSError 被如实置空。
+        解析序：shutil.which（继承 PATH）→ 常见安装路径显式探测。"""
+        import shutil
+
+        found = shutil.which(name)
+        if found:
+            return found
+        for d in ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"):
+            cand = f"{d}/{name}"
+            if os.path.exists(cand):
+                return cand
+        return None
+
+    ffprobe_bin = _bin("ffprobe")
+    ffmpeg_bin = _bin("ffmpeg")
+    try:
+        import subprocess
+
+        proc = subprocess.run(
+            [ffprobe_bin or "ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", src],
+            capture_output=True, text=True, timeout=_PROBE_TIMEOUT_S,
+        )
+        if proc.returncode == 0:
+            try:
+                out["duration"] = round(float(proc.stdout.strip().splitlines()[0]), 3)
+            except (ValueError, IndexError):
+                pass  # 非数字时长（流信息缺失）→ 置空
+    except (OSError, subprocess.SubprocessError):
+        pass  # ffprobe 缺席/超时——如实置空（主流程继续）
+    try:
+        import subprocess
+
+        poster = files_dir() / f"{material_id}.poster.jpg"
+        poster.parent.mkdir(parents=True, exist_ok=True)
+        proc = subprocess.run(
+            [ffmpeg_bin or "ffmpeg", "-y", "-i", src, "-vframes", "1",
+             "-q:v", str(_POSTER_JPEG_QUALITY), str(poster)],
+            capture_output=True, text=True, timeout=_PROBE_TIMEOUT_S,
+        )
+        if proc.returncode == 0 and poster.is_file() and poster.stat().st_size > 0:
+            out["poster"] = poster_rel_path(material_id)
+        else:
+            poster.unlink(missing_ok=True)  # 失败不留半帧文件
+    except (OSError, subprocess.SubprocessError):
+        pass  # ffmpeg 缺席/超时——如实置空（主流程继续）
+    return out

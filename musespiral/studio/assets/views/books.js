@@ -58,7 +58,11 @@ bkSub=function(m){origBkSub(m);if(m==='subs')bsLoad();};
 var BK={bookUrl:'',sourceUrl:'',name:'',info:null,toc:[],gs:[],sel:{},filter:'',spec:'all',job:null,pid:0};
 function bkDigestInit(){try{BK.digest=localStorage.getItem('musespiral-book-digest')!=='0'}catch(e){BK.digest=true}
 var b=$('bk-digest');if(b){b.checked=BK.digest;$('bk-digest-off').hidden=BK.digest;}}
-function bkSub(m){$('bk-search').hidden=m!=='search';$('bk-detail').hidden=m!=='detail';$('bk-subs').hidden=m!=='subs';}
+function bkSub(m){
+$('bk-search').hidden=m!=='search';$('bk-detail').hidden=m!=='detail';$('bk-subs').hidden=m!=='subs';
+var lc=$('bk-local');if(lc)lc.hidden=m!=='local';
+var on=m==='local'?'local':m==='subs'?'subs':'search';
+QA('#bk-tabs [data-bktab]').forEach(function(t){t.classList.toggle('is-active',t.getAttribute('data-bktab')===on);});}
 function bkMode(m,kw){bkSub(m);if(m==='search'){bkLamp();if(kw)$('bk-search-box').value=kw;}}
 async function bkLamp(){
 var d=null;
@@ -368,14 +372,102 @@ toast('已导入 '+(d.stored||0)+' 源（选择 '+(d.deduped_from||0)+' 条 · �
 imClose();bkLamp();
 }catch(err){toast('导入失败：'+err.message,ER);}
 finally{btn.disabled=false;if(IM.st==='importing')IM.st='previewing';}}
+var LBK={books:[],fail:'',loading:false};
+function lbkCard(b){
+var un=b.structure==='fixed';
+var chap=un?'未识别章节结构':((b.chapters||0)+' 章');
+var meta='<span>'+esc(chap)+'</span>'+(b.chars?'<span>'+esc(lbWan(b.chars))+'</span>':'')+
+'<span class="badge lb-enc '+lbEncClass(b.charset)+'">'+esc(b.charset||'?')+'</span>';
+return '<div class="card lb-card" role="button" tabindex="0" data-lbid="'+esc(b.id)+'" aria-label="打开本地书 '+esc(b.title||'')+'">'+
+'<div class="lb-cover" style="background:'+esc(lbCoverStyle(b.id))+'">'+esc(String(b.title||'?').slice(0,2))+'</div>'+
+'<div class="lb-title" title="'+esc(b.path||'')+'">'+esc(b.title||'(无题)')+'</div>'+
+'<div class="lb-meta">'+meta+'</div>'+
+'<button class="btn btn-ghost lb-del" type="button" data-lbdel="'+esc(b.id)+'" aria-label="下架 '+esc(b.title||'')+'" title="下架（不删你的文件）">下架</button></div>';
+}
+function lbkPaint(){
+var host=$('bk-local');if(!host)return;
+if(LBK.loading){host.innerHTML='<div class="skel"><div class="skel-line w90"></div><div class="skel-line w70"></div></div>';return;}
+if(LBK.fail){host.innerHTML=loadFailHTML('本地书架',LBK.fail,'lbkLoad');return;}
+var h='<div class="action-row lb-bar"><input class="input lb-path" id="lb-path" placeholder="TXT 文件绝对路径（如 /Users/你/books/星河彼岸.txt）" aria-label="要导入的 TXT 路径">'+
+'<button class="btn btn-primary" id="lb-add" type="button">＋ 导入 TXT</button>'+
+'<span class="action-hint">只读你磁盘上的文件，不入库复制</span></div>';
+if(!LBK.books.length){
+h+='<div class="empty"><div class="empty-icon" data-icon="docs"></div><div class="empty-title">书架还空着</div>'+
+'<div class="empty-text">把一本 .txt 的完整路径填到上面，点「导入 TXT」。书不会入库复制——书架只记下文件位置、编码与章节偏移，正文永远读你磁盘上的原文件。</div></div>';
+}else{
+h+='<div class="card-grid lb-grid">'+LBK.books.map(lbkCard).join('')+'</div>';
+}
+host.innerHTML=h;
+mountChrome();
+var add=$('lb-add');if(add)add.addEventListener('click',function(){lbkAdd(this);});
+var inp=$('lb-path');if(inp)inp.addEventListener('keydown',function(e){
+if(e.isComposing||e.keyCode===229||e.key!=='Enter')return;
+lbkAdd($('lb-add'));});
+var grid=host.querySelector('.lb-grid');
+if(grid)grid.addEventListener('click',function(e){
+if(e.target.closest('[data-lbdel]'))return;
+var c=e.target.closest('[data-lbid]');if(!c)return;
+lbkOpen(c.getAttribute('data-lbid'));});
+if(grid)grid.addEventListener('keydown',function(e){
+if(e.key!=='Enter'&&e.key!==' ')return;
+var c=e.target.closest('[data-lbid]');if(!c||e.target.closest('[data-lbdel]'))return;
+e.preventDefault();lbkOpen(c.getAttribute('data-lbid'));});
+}
+function lbkLoad(){
+LBK.loading=!LBK.books.length;LBK.fail='';lbkPaint();
+getJSON('/api/localbook/list').then(function(d){
+LBK.books=Array.isArray(d.books)?d.books:[];LBK.fail='';LBK.loading=false;lbkPaint();
+}).catch(function(err){LBK.loading=false;LBK.fail=err.message||'服务未响应';lbkPaint();});
+}
+async function lbkAdd(btn){
+var inp=$('lb-path'),path=inp?inp.value.trim():'';
+if(!path)return toast('先填 TXT 的完整路径',WN);
+if(btn)btn.disabled=true;
+try{
+var d=await postJSON('/api/localbook/add',{path:path,confirm:true});
+var b=(d&&d.book)||{};
+toast('已导入《'+(b.title||'')+'》· '+(b.structure==='fixed'?'未识别章节结构':(b.chapters||0)+' 章')+' · '+(b.charset||''),OK);
+if(inp)inp.value='';
+LBK.books=[];lbkLoad();
+}catch(err){toast('导入失败：'+err.message,ER);}
+finally{if(btn)btn.disabled=false;}
+}
+async function lbkRemove(id,title){
+var ok=await askConfirm({title:'下架这本书？',message:'《'+(title||'')+'》会从书架移除（章节偏移与元数据一并删除）。你磁盘上的 TXT 文件不受任何影响；已入素材库的章节素材也保留。',confirmText:'下架'});
+if(!ok)return;
+try{await postJSON('/api/localbook/remove',{id:id,confirm:true});
+toast('已下架',OK);LBK.books=[];lbkLoad();}
+catch(err){toast('下架失败：'+err.message,ER);}
+}
+async function lbkOpen(id){
+var b=LBK.books.filter(function(x){return x.id===id;})[0]||{};
+try{
+await ensureView('reader');
+VAPI.reader.openBook({origin:'localbook:'+id,originName:'本地: '+(b.title||'TXT'),
+name:b.title||'',author:b.author||'',bookUrl:''});
+}catch(err){toast('阅读面板装载失败：'+err.message,ER);}
+}
 VAPI.books={enter:function(route){
-if(route.params.get('tab')==='subs')bkMode('subs');
+var tab=route.params.get('tab');
+if(tab==='subs')bkMode('subs');
+else if(tab==='local'){bkMode('local');lbkLoad();}
 else if(route.params.get('book')&&route.params.get('source'))bkOpen(route.params.get('book'),route.params.get('source'),route.params.get('name')||'');
 else bkMode('search',route.params.get('search'));
 }};
 function bindBooks(){
 bindBookSubs();
 bkDigestInit();
+$('bk-tabs').addEventListener('click',function(e){
+var t=e.target.closest('[data-bktab]');if(!t)return;
+var v=t.getAttribute('data-bktab');
+location.hash=v==='search'?'#books':('#books?tab='+v);});
+$('bk-local').addEventListener('click',function(e){
+var d=e.target.closest('[data-lbdel]');if(!d)return;
+e.stopPropagation();
+var id=d.getAttribute('data-lbdel');
+var b=LBK.books.filter(function(x){return x.id===id;})[0]||{};
+lbkRemove(id,b.title||'');
+});
 $('bk-subs-btn').addEventListener('click',function(){location.hash='#books?tab=subs';});
 $('bk-subs-back').addEventListener('click',function(){location.hash='#books';});
 $('bk-guide-subs').addEventListener('click',function(){location.hash='#books?tab=subs';});

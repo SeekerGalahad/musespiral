@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import config
-from ..core.content.parser import ParsedArticle, parse_article
+from ..core.content.parser import ParsedArticle, article_media_info, parse_article
 from ..core.quality.checks import run_checks
 from ..core.quality.render_checks import render_checks
 from ..core.quality.review import build_review_html
@@ -26,7 +26,7 @@ from ..services import pack_service  # N-5 物料包并排预览读面（清单+
 from ..services import publish_log_service, publish_service
 from .actions import _runner
 from .annotations import _load_annotations, _read_article_text, _split_head_body
-from .assets import _rewrite_local_images
+from .assets import _rewrite_local_images, _rewrite_local_videos
 from .scan import (
     _article_flags,
     _front_status,
@@ -120,6 +120,10 @@ def _articles_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> dict[
                 "checks": counts,
                 "flags": _article_flags(ctx.root, path, cache=scan, body=article.raw_body),
                 "status": _front_status(metadata),  # R3：队列卡片状态徽章数据面
+                # B3（2026-11-26）：媒体徽章数据面——🎬 视频文章（frontmatter.
+                # media.kind=video 或正文 :::video 块）/ 🖼 含图 N 张（前端发布
+                # 中心卡片徽章消费；parser 纯函数，见 article_media_info）
+                "media": article_media_info(article),
             }
         )
     articles.sort(key=lambda item: (item["date"], item["path"]), reverse=True)
@@ -164,12 +168,14 @@ def _article_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> dict[s
 
 
 def _article_html(ctx: _StudioContext, query: dict[str, list[str]]) -> str:
-    """渲染后完整 HTML（iframe 预览用；相对图片 src 重写为 /asset）。"""
+    """渲染后完整 HTML（iframe 预览用；相对图片 src 重写为 /asset，:::video
+    块的 src/poster 重写为 /media——B3 多媒体，发布上传仍用原始相对路径）。"""
     rel = _query_str(query, "path")
     if rel is None:
         raise _HttpError(400, "缺少 path 参数（root 内相对路径）")
     article_path = _resolve_file(ctx.root, rel)
-    return _rewrite_local_images(_render(parse_article(article_path)), ctx.root, article_path)
+    html = _rewrite_local_images(_render(parse_article(article_path)), ctx.root, article_path)
+    return _rewrite_local_videos(html, ctx.root, article_path)
 
 
 def _article_review(ctx: _StudioContext, query: dict[str, list[str]]) -> str:
@@ -499,9 +505,75 @@ def _material_detail_payload(ctx: _StudioContext, query: dict[str, list[str]]) -
     return {"ok": True, "material": detail, "cascade": cascade, "related": related}
 
 
-# ── 第二十一期 Phase A：文件服务（F60）/ 标签频次（F63）/ 集合清单（F62）──
+# 素材渲染截断门（查看器批：>3 万字先截断渲染，前端「加载全部」再 full=1）
+RENDER_CAP = 30_000
 
-# 内容寻址 id 永不变更 → 浏览器可永久缓存（正典 §二-F60）
+
+def _materials_render_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> dict[str, Any]:
+    """GET /api/materials/render?id=&full?：素材正文 md→HTML（沙箱渲染数据面）。
+
+    素材查看器批（2026-11-26）：text/crawled 素材的 payload.text（或本地书
+    章节现取全文）经 core.content.Renderer 渲染为完整 HTML——前端以 iframe
+    sandbox srcdoc 注入（不可信内容零脚本执行）。大小门控：>RENDER_CAP 字
+    缺省渲染截断段（chars 回真实总数），full=1 整段渲染（前端「加载全部」
+    确认后）。无正文的素材（image/video/link）404 可读错误。
+    """
+    from ..services import materials_service
+
+    mid = _query_str(query, "id")
+    if mid is None:
+        raise _HttpError(400, "缺少必填参数 id")
+    full = _query_str(query, "full") == "1"
+    material = materials_service.get_material(mid)
+    if material is None:
+        raise _HttpError(404, f"素材不存在或已删: {mid}")
+    p = material.get("payload") or {}
+    text = str(p.get("text") or "")
+    uri = str((material.get("origin") or {}).get("uri") or "")
+    if not text and p.get("local_path"):
+        # kb 类引用素材（正文不入 payload——local_path 相对知识库根）：现读
+        # 文件（读取失败不回退——404 语义统一走下方无正文分支）
+        from .. import config as _cfg
+
+        kroot = _cfg.knowledge_root()
+        if kroot:
+            _f = Path(kroot) / str(p["local_path"])
+            if _f.is_file():
+                text = _f.read_text(encoding="utf-8", errors="replace")
+    if not text and uri.startswith("localbook:"):
+        # 本地书素材：正文不入库（§五红线）——现取章节全文（文件被移走时
+        # 回退 excerpt，两者皆空 404 同款可读语义）
+        try:
+            from ..services import localbook_service
+
+            bid, _, n = uri[len("localbook:"):].partition("#")
+            text = str(localbook_service.book_chapter(bid, int(n or 1)).get("content") or "")
+        except Exception:
+            text = str(p.get("excerpt") or "")
+    if not text:
+        raise _HttpError(404, f"该素材无可渲染正文（{material.get('type')} 类型或正文为空）")
+    chars = len(text)
+    truncated = not full and chars > RENDER_CAP
+    if truncated:
+        text = text[:RENDER_CAP]
+    from ..core.content.parser import ParsedArticle, parse_blocks
+    from ..core.content.renderer import Renderer
+
+    title = str((material.get("origin") or {}).get("title") or material.get("title") or "")
+    article = ParsedArticle(metadata={"title": title}, blocks=parse_blocks(text), raw_body=text)
+    html = Renderer().render(article)
+    return {
+        "ok": True,
+        "html": html,
+        "chars": chars,
+        "rendered": len(text),
+        "truncated": truncated,
+        # 原文面（前端「原文」切换用——与渲染段同源同截断，避免二次请求 file 端点）
+        "plain": text,
+    }
+
+# 内容寻址 id 永不变更 → 浏览器可永久缓存（正典 §二-F60；D14 恢复——重构
+# 删重复轮子时误删此常量，file 端点 500「name not defined」）
 _IMMUTABLE_CACHE = (("Cache-Control", "public, max-age=31536000, immutable"),)
 
 

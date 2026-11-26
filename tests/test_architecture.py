@@ -360,7 +360,9 @@ CONTRACT_GET_EXACT = {
     "/api/articles", "/api/article", "/api/article/html", "/api/article/review",
     "/api/article/body", "/api/annotations", "/api/platforms", "/api/stats",
     "/api/meta", "/api/health", "/api/jobs", "/api/discover", "/api/discover/star",
-    "/api/materials", "/api/materials/detail", "/api/settings", "/api/sources",
+    "/api/materials", "/api/materials/detail",
+    "/api/materials/render",  # 素材查看器批（2026-11-26）：md→HTML 沙箱渲染
+    "/api/settings", "/api/sources",
     "/api/compose", "/api/compose/session", "/asset",
     # §3.23 新增（FEAT-P1B 2026-11-23：写作节奏读面——纯读，rounds 历史现算）
     "/api/writing_stats",
@@ -423,6 +425,14 @@ CONTRACT_GET_EXACT = {
     # materials_total），供 ctl.sh smoke 与外部探针。与 F20 的 /api/health 九键
     # 面板并存（该面板前端四处消费、形状不动——「前端零字节」验收）。GET 49→50。
     "/api/healthz",
+    # B1 本地书籍（2026-11-26，正典=《musespiral-三线扩展设计-本地TXT书籍-
+    # 视觉编辑2-多媒体-2026-11-26》§1.2/§1.4）：书架清单 / 详情 / 目录
+    # （bookengine 同形，url=`localbook:<id>#<n>`）/ 单章正文（引用型现取、
+    # cap 200k）。四读面均为精确路由（id/n 走 query）。GET 51→55。
+    "/api/localbook/list",
+    "/api/localbook/info",
+    "/api/localbook/toc",
+    "/api/localbook/chapter",
 }
 CONTRACT_POST_EXACT = {
     # §3.1 既有 27 条
@@ -571,6 +581,25 @@ CONTRACT_POST_EXACT = {
     # POST 75→77。
     "/api/action/quality_loop",
     "/api/action/title_ab",
+    # B1 本地书籍（2026-11-26，正典=《musespiral-三线扩展设计-本地TXT书籍-
+    # 视觉编辑2-多媒体-2026-11-26》§1.2/§1.4）：书架三动作（导入=读文件→探测
+    # 编码→解析章节→写 meta，引用型文件不复制 / 下架=删书架条目原文件零触碰 /
+    # 换规则重解析）+ 选章入素材库 job（kind=localbook_fetch，KINDS 20→21；
+    # 每章一条 text 素材，payload 只放摘录≤500——全文留在用户磁盘=「只读不
+    # 复制」红线的落点）。POST 85→89（+4；GET 同批 +4）。
+    "/api/localbook/add",
+    "/api/localbook/remove",
+    "/api/localbook/reparse",
+    "/api/materials/from-local-chapters",
+    # B3 多媒体与视频发布（2026-11-26，正典=《musespiral-三线扩展设计-本地
+    # TXT书籍-视觉编辑2-多媒体-2026-11-26》§三）：本地视频文件登记（读盘→
+    # 内容寻址落仓→ffprobe/ffmpeg 元数据如实探测，缺席置空不报错）+ 编辑器
+    # 插入媒体（素材文件→文章 media/ durable 副本，返回 root 相对引用——
+    # ![](rel) 与 :::video{src=rel} 的服务面）。GET 零新增（/media/<rel>
+    # 为 server 层只读旁路，同 /assets/* 先例不进 _GET_ROUTES 契约锁）。
+    # POST 89→91。
+    "/api/materials/register-local",
+    "/api/action/insert_media",
 }
 
 

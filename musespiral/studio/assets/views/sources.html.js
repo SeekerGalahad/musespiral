@@ -44,6 +44,11 @@ document.getElementById('view-sources').innerHTML=`
 <div class="src-search-box">
 <span data-icon="search"></span>
 <input class="input" id="src-q" type="search" placeholder="搜书名、作者，或粘贴网址直接阅读" aria-label="搜索书籍、素材，或粘贴网址阅读网页" autocomplete="off" spellcheck="false">
+<div class="seg src-mode" role="radiogroup" aria-label="书籍搜索模式">
+<button id="src-mode-parallel" class="on" title="32 线程并发逐源返回——快">并行 · 快</button>
+<button id="src-mode-serial" title="逐源顺序慢搜——适合观察每个源的规则（本地学习）">串行 · 观察</button>
+</div>
+<button class="btn btn-primary" id="src-go-btn"><span data-icon="search"></span>搜索</button>
 <button class="btn btn-ghost btn-icon" id="src-q-clear" aria-label="清空搜索" hidden><span data-icon="close"></span></button>
 <span class="kbd" id="src-q-kbd" aria-hidden="true">/</span>
 </div>

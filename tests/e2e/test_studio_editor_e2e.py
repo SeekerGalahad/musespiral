@@ -80,13 +80,16 @@ def editor(page):
 
 
 def test_cm_mounts_and_replaces_textarea(editor) -> None:
-    """CM5 挂载：实例替换 textarea（隐藏），工具栏 16 钮 + 大纲侧栏 + 状态栏扩展就位。"""
+    """CM5 挂载：实例替换 textarea（隐藏），工具栏 17 钮 + 大纲侧栏 + 状态栏扩展就位。
+
+    B3（2026-11-26）插入媒体批：工具栏 +🎬（ED_BTNS media 项）——原 16 钮基线
+    随实现更新（锚的是「按钮数与 ED_BTNS 一致」，不是某个数字本身）。"""
     page = editor
     expect(page.locator(".ed-stack .CodeMirror")).to_be_visible()
     expect(page.locator("#edit-area")).to_be_hidden()  # fromTextArea 隐藏原 textarea
     expect(page.locator("#edit-gutter")).to_be_hidden()  # 旧行号列退役（.ed-cm）
     expect(page.locator("#edit-hl")).to_be_hidden()  # 旧 overlay 退役
-    assert page.locator("#ed-bar .ed-tb").count() == 16, "工具栏应 16 钮（含专注/打字机）"
+    assert page.locator("#ed-bar .ed-tb").count() == 17, "工具栏应 17 钮（含插入媒体/专注/打字机）"
     expect(page.locator("#ed-outline")).to_be_visible()
     for sid in ("ed-sect", "ed-paras", "ed-aib", "ed-read", "ed-goal",
                 "ed-sync", "ed-focus-btn", "ed-tw", "ed-sprint"):

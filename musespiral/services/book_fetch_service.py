@@ -60,7 +60,13 @@ from .agent_service import apply_prompt_overrides, finish_attached_run, open_att
 # 章节缓存根（config.home_dir() 下；随 MUSESPIRAL_HOME 漂移）
 BOOK_CACHE_DIR = "book_cache"
 # 搜索结果进 job result 的条数上限（result 持久化，防大结果刷爆 jobs.jsonl）
-SEARCH_ITEMS_CAP = 50
+# 2026-11-25 去重分页批：原 50 截断丢 96% 命中（实测引擎 1205 本只留 50），
+# 提到 2000（去重后通常 600-800 条，留余量）；配合 dedupe_search_items 归并。
+SEARCH_ITEMS_CAP = 2000
+# 去重归并后前端分批显示条数（"显示更多"每批增量）——前端常量镜像（契约注）
+SEARCH_PAGE_SIZE = 30
+# 单书组 variants 上限（极热门书同书 100+ 源时截住；sourceCount 仍如实计）
+_VARIANT_CAP = 12
 # 「AI 失败续跑」的连续降级守门：连续 N 章因 AI 失败降级即停（全降级剩余），
 # 防止 AI 服务整体宕机时逐章空跑 N 轮计划
 MAX_CONSECUTIVE_AI_DEGRADES = 3
@@ -794,11 +800,70 @@ def submit_to_runner(
 # ── book_search job（引擎代理聚合搜索）──────────────────────────────
 
 
+def dedupe_search_items(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """跨源归并：按 (name, author) 分组 → 唯一书组 + variants 源清单。
+
+    2026-11-25 分页批：引擎聚合搜索跨源重复严重（实测 1205 条 → 唯一书名
+    433；「斗破苍穹」17 源各出一卡）。归并后每条 = canonical（首个/最全源，
+    保留全部原始字段）+ variants（每源精简卡：name/author/origin/
+    originName/bookUrl）+ sourceCount。variants[0] 恒为 canonical 自身——
+    前端「N 源」展开即完整源清单；单组变体数上限 _VARIANT_CAP 防极热门书
+    （同书 100+ 源）撑爆 result。intro 仅 canonical 保留并截断。
+    """
+    groups: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for it in rows:
+        name = str(it.get("name") or "").strip()
+        if not name:
+            continue
+        author = str(it.get("author") or "").strip()
+        k = f"{name}\x1f{author}"
+        v = {
+            "name": name,
+            "author": author,
+            "origin": str(it.get("origin") or ""),
+            "originName": str(it.get("originName") or it.get("origin") or ""),
+            "bookUrl": str(it.get("bookUrl") or ""),
+        }
+        g = groups.get(k)
+        if g is None:
+            g = dict(it)
+            g["variants"] = [v]
+            g["sourceCount"] = 1
+            groups[k] = g
+            order.append(k)
+            continue
+        g["sourceCount"] = g["sourceCount"] + 1
+        if len(g["variants"]) < _VARIANT_CAP:
+            g["variants"].append(v)
+    for g in groups.values():
+        intro = g.get("intro")
+        if isinstance(intro, str) and len(intro) > 400:
+            g["intro"] = intro[:400] + "…"
+    return [groups[k] for k in order]
+
+
+def _merge_search_result(key: str, page: int, mode: str, rows: list[dict[str, Any]], searched: int) -> dict[str, Any]:
+    """搜索 result 统一形状：items=去重组（截 CAP）+ total/unique 诚实计数。"""
+    groups = dedupe_search_items(rows)
+    return {
+        "ok": True,
+        "key": key,
+        "page": int(page),
+        "mode": mode,
+        "items": groups[:SEARCH_ITEMS_CAP],
+        "total": len(rows),        # 引擎原始命中（未去重）
+        "unique": len(groups),      # 去重后书组数
+        "searched": searched,
+    }
+
+
 def run_search(
     key: str,
     *,
     sources: Any = "all",
     page: int = 1,
+    mode: str = "parallel",
     client: BookEngineClient | None = None,
 ) -> dict[str, Any]:
     """聚合搜索一次（引擎代理）→ 计数 result（items 截断 SEARCH_ITEMS_CAP）。"""
@@ -806,14 +871,40 @@ def run_search(
     payload = cli.search(key, sources=sources, page=page)
     items = payload.get("items")
     rows = [it for it in items if isinstance(it, dict)] if isinstance(items, list) else []
-    return {
-        "ok": True,
-        "key": key,
-        "page": int(page),
-        "items": rows[:SEARCH_ITEMS_CAP],
-        "total": payload.get("total", len(rows)),
-        "searched": payload.get("searched", 0),
-    }
+    return _merge_search_result(key, page, mode, rows, int(payload.get("searched", 0) or 0))
+
+
+def run_search_stream(
+    runner: Any,
+    job_id: str,
+    key: str,
+    *,
+    sources: Any = "all",
+    page: int = 1,
+    mode: str = "parallel",
+    client: BookEngineClient | None = None,
+) -> dict[str, Any]:
+    """流式搜索 job 体：消费引擎 SSE 逐批，partial result 写回 running 行。
+
+    前端轮询 /api/jobs 即可看到渐进 items/searched（阅读 app 式「源逐个
+    返回」）；done 事件后终态返回与 run_search 同形（含 mode 标记）。
+    """
+    cli = client if client is not None else get_engine_client()
+    items: list[dict[str, Any]] = []
+    searched = 0
+    for event in cli.search_stream(key, sources=sources, page=page, mode=mode):
+        if event.get("type") == "batch":
+            batch = event.get("items")
+            if isinstance(batch, list):
+                items.extend(it for it in batch if isinstance(it, dict))
+            searched += 1
+            runner.update_result(
+                job_id,
+                dict(_merge_search_result(key, page, mode, items, searched), partial=True),
+            )
+        elif event.get("type") == "done":
+            searched = int(event.get("searched", searched) or searched)
+    return _merge_search_result(key, page, mode, items, searched)
 
 
 def submit_search(
@@ -822,25 +913,36 @@ def submit_search(
     *,
     sources: Any = "all",
     page: int = 1,
+    mode: str = "parallel",
     client: BookEngineClient | None = None,
 ) -> dict[str, Any]:
     """提交一次搜索 job（kind=book_search）→ {job_id}。
 
     引擎探活在提交前（缺席 → BookEngineUnavailable，零 job；studio 转
     200 {ok:false} 灰灯语义——与 engine_status 的 absent 同源数据）。
+    mode=parallel|serial（串行=逐源观察模式，本地学习用）。
     """
     if not isinstance(key, str) or not key.strip():
         raise BookFetchError("缺少必填字段 key（搜索关键词）")
+    if mode not in ("parallel", "serial"):
+        raise BookFetchError("mode 必须是 parallel 或 serial")
     cli = client if client is not None else get_engine_client()
     if not cli.available():
         raise BookEngineUnavailable(
             "bookengine 未就绪——搜索暂不可用（引擎服务 R1-R2 建设中或未运行）"
         )
 
-    def _run(_job_id: str) -> dict[str, Any]:
-        return run_search(key.strip(), sources=sources, page=page, client=cli)
+    def _run(job_id: str) -> dict[str, Any]:
+        # 流式体：逐批 partial 写回 running 行（前端轮询即见渐进结果）
+        return run_search_stream(
+            runner, job_id, key.strip(), sources=sources, page=page, mode=mode, client=cli
+        )
 
-    job_id = runner.submit("book_search", {"key": key.strip(), "sources": sources, "page": page}, _run)
+    job_id = runner.submit(
+        "book_search",
+        {"key": key.strip(), "sources": sources, "page": page, "mode": mode},
+        _run,
+    )
     return {"job_id": job_id}
 
 
@@ -855,7 +957,10 @@ __all__ = [
     "job_fn",
     "resolve_original_ref",
     "run_fetch",
+    "SEARCH_PAGE_SIZE",
+    "dedupe_search_items",
     "run_search",
+    "run_search_stream",
     "submit_search",
     "submit_to_runner",
 ]

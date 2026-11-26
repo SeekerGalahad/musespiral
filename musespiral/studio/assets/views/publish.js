@@ -33,6 +33,9 @@ if(variants.length) arts.push(qArt('edit','变体 ',variants.length));
 if(f.pack) arts.push(qArt('upload','物料包'));
 if(f.review) arts.push(qArt('eye','对照'));
 if(f.published) arts.push(qArt('publish','已发草稿'));
+var md=item.media||{};
+if(md.video) arts.push(qArt('video','视频文章'));
+if(md.images) arts.push(qArt('image','含图 ',md.images));
 return '<a class="article-card qcard" href="'+href+'">' +
 '<div class="qcard-cover"'+(coverRel?' data-cover="'+esc(coverRel)+'"':'')+'>' +
 '<div class="qcover-block"><span class="qcover-text">'+title+'</span></div></div>' +
@@ -42,7 +45,7 @@ return '<a class="article-card qcard" href="'+href+'">' +
 (arts.length?'<div class="qcard-arts">'+arts.join('')+'</div>':'') +
 (variants.length?'<div class="tags qcard-variants">'+variants.map(function(code){
 return '<span class="tag accent">'+esc(code)+Z;}).join('')+'</div>':'') +
-'<div class="qcard-foot">'+checkSummary(item.checks,item.path)+'<button class="btn btn-ghost qcard-fb" data-fb="'+esc(item.path)+'" title="反哺素材库：全文归档 / 摘取段落 / AI 提炼论点">→ 素材库</button></div>' +
+'<div class="qcard-foot">'+checkSummary(item.checks,item.path)+'<button class="btn btn-ghost qcard-cover-btn" data-dvart="'+esc(item.path)+'" title="视觉编辑：为这篇文章生成封面/配图（选模板→存稿→导出 PNG）">🎨 封面</button><button class="btn btn-ghost qcard-fb" data-fb="'+esc(item.path)+'" title="反哺素材库：全文归档 / 摘取段落 / AI 提炼论点">→ 素材库</button></div>' +
 '</div></a>';
 }
 function mountCovers(){
@@ -249,6 +252,8 @@ handleDropFiles(files);
 });
 $('fetch-btn').addEventListener('click',function(e){handleFetch(e.target);});
 $('view-publish').addEventListener('click',function(e){
+var dvb=e.target.closest('[data-dvart]');
+if(dvb){e.preventDefault();e.stopPropagation();location.hash='#design?article='+encodeURIComponent(dvb.getAttribute('data-dvart'));return;}
 var b=e.target.closest('[data-fb]');
 if(b){e.preventDefault();fbOpen(b.getAttribute('data-fb'));return;}
 var f=e.target.closest('[data-checks]');

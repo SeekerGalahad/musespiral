@@ -51,8 +51,8 @@ def test_dir_refresh_scan_and_reference(env, tmp_path) -> None:
     assert result["status"] == "ok" and result["scanned"] == 2 and result["added"] == 2
     rows = _lines(env)
     assert all(r["origin"]["source_id"] == "my-notes" for r in rows)
-    # 引用不复制：payload 只有 local_path，无 text
-    assert all("local_path" in r["payload"] and "text" not in r["payload"] for r in rows)
+    # .md 正文随采集落 payload.text（手册入库批——可检索+可创作），local_path 仍在
+    assert all("local_path" in r["payload"] and "text" in r["payload"] for r in rows)
     # uri = 绝对路径（与 kb 相对路径口径区分）
     for r in rows:
         assert r["origin"]["uri"].startswith("/")

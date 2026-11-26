@@ -487,7 +487,7 @@ def test_jobs_kinds_include_tts_generate() -> None:
     from musespiral.jobs.store import KINDS
 
     assert "tts_generate" in KINDS
-    assert len(KINDS) == 20
+    assert len(KINDS) == 21  # B1 本地书籍批 +localbook_fetch（2026-11-26）
     for kind in (
         "adapt", "pack", "publish", "batch_adapt", "status", "annotate_rewrite",
         "fetch", "sync_stats", "compose_generate", "ingest", "clip",

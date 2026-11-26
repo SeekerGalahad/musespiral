@@ -95,6 +95,10 @@ class JobRunner:
     def set_phase(self, job_id: str, phase: str) -> None:
         self._store.update(job_id, phase=phase)
 
+    def update_result(self, job_id: str, result: Any) -> None:
+        """running 期部分结果写回（渐进 job：流式搜索逐批合并，轮询方可见 partial）。"""
+        self._store.update(job_id, result=result)
+
     # ---- 协作式取消（2026-11-18 集成轮）----
 
     def cancel(self, job_id: str) -> bool:

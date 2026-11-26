@@ -36,9 +36,28 @@ SEMANTIC_COLOR_SLOTS: tuple[str, ...] = (
     "border", "code_bg", "code_text", "quote_bg", "quote_border",
 )
 
+# ── B2 视觉编辑 2.0（2026-11-26，三线扩展设计 §二）──────────────────────
+# 混合模式白名单：SVG mix-blend-mode 的受限子集（Pillow ImageChops 有
+# multiply/screen/overlay 同名实现——两路渲染器共用一张表，防「SVG 可渲、
+# C 路不认」的语义漂移）。
+BLEND_MODES: tuple[str, ...] = ("normal", "multiply", "screen", "overlay")
+# 背景种类白名单（Background.kind）：solid/linear/radial/pattern/image 五形态
+# ——渲染器（svg/pillow）与模板 meta.backgrounds 允许集同源引用本表。
+BACKGROUND_KINDS: tuple[str, ...] = ("solid", "linear", "radial", "pattern", "image")
+# 内置纹样四选（Background.pattern；渲染器各持同款 tile 生成，枚举在此钉死）
+PATTERN_KINDS: tuple[str, ...] = ("dots", "grid", "waves", "paper")
+# image_slot 的填充/蒙版枚举（Element.fit/mask 承载——templates image_slot 规则
+# 的默认值与运行时值都从这里取；空串=存量元素不带该语义，序列化面零变化）
+IMAGE_FITS: tuple[str, ...] = ("cover", "contain")
+IMAGE_MASKS: tuple[str, ...] = ("none", "rounded", "circle", "arch")
+
 # 新增规格常量（§1.3：社媒方图/通用横图，无既有出处，本期钉死）
 SQUARE = (1080, 1080)
 WIDE16X9 = (1242, 700)
+# B2 article-long 长图规格（设计 §2.2）：1080 宽×自适应高，此元组钉的是
+# **上限**（SPECS 恒 (w,h) 形态供 spec_size/校验用；模板 build 按内容实测高
+# clamp 到 [1400, 8000]——高度自适应是模板侧职责，见 templates._build_article_long）。
+ARTICLE_LONG = (1080, 8000)
 
 SPECS: dict[str, tuple[int, int]] = {
     "mp": (int(PLIMITS["mp"]["cover_w"]), int(PLIMITS["mp"]["cover_h"])),
@@ -46,6 +65,7 @@ SPECS: dict[str, tuple[int, int]] = {
     "xhs-4x5": RATIOS["4:5"],
     "square": SQUARE,
     "wide16x9": WIDE16X9,
+    "article-long": ARTICLE_LONG,
 }
 
 _ALIGN = ("left", "center", "right")
@@ -103,7 +123,7 @@ def _check_color(value: object, where: str) -> None:
 
 def _check_href(value: str, where: str) -> None:
     """图片引用执法：dataURI 或本地相对路径；任何网络地址一律拒收
-    （poster.py offline_route「光栅不触网」同红线，在文档层前置）。"""
+    （poster.py offline_route「光栅不触网」红线，在文档层前置）。"""
     low = value.lower()
     if low.startswith(("http://", "https://", "//")) or "://" in low:
         raise ValueError(
@@ -116,6 +136,13 @@ def _check_href(value: str, where: str) -> None:
         )
     if value.startswith("data:") and not _DATA_URI.match(value):
         raise ValueError(f"{where}: 非法 dataURI {value!r}")
+
+
+def check_image_ref(value: str, where: str) -> None:
+    """公开版图片引用校验（B2）：templates 的 image_slot 槽值复用同一执法面
+    ——私有 _check_href 只服务 Element/Background 构造，image_slot 的值在
+    validate_params 处也须拒 http（「光栅不触网」单一事实源，不复制逻辑）。"""
+    _check_href(value, where)
 
 
 @dataclass
@@ -160,6 +187,129 @@ class TextBlock:
 
 
 @dataclass
+class Background:
+    """B2 背景层（设计 §2.2）：替代单一 background 色槽的五形态背景。
+
+    - kind ∈ solid/linear/radial/pattern/image（BACKGROUND_KINDS 执法）；
+    - color：solid 底色 / linear·radial 兜底底色 / pattern 底色 / image 蒙版色
+      （白纱默认，暗纱给 #000000——单一字段多形态复用，不另设 scrim 色）；
+    - stops：linear/radial 的插值锚点 [(0.0,'#..'),(1.0,'#..')]，≥2 点；
+    - angle：linear 方向角（度，0=→、90=↓，屏幕坐标系）；
+    - pattern：dots/grid/waves/paper 内置四纹样（PATTERN_KINDS 执法）；
+    - image：本地相对路径或 dataURI（http(s) 一律拒——光栅不触网红线同
+      Element.href 单一执法面 _check_href）；
+    - overlay_alpha：image 蒙版不透明度 0..1（0=不叠纱）。
+    JSON 往返走 to_dict/from_dict（design.json v2 的 background 字段）。
+    """
+
+    kind: str = "solid"
+    color: str = "#ffffff"
+    stops: list[tuple[float, str]] | None = None
+    angle: float = 135.0
+    pattern: str = "dots"
+    image: str = ""
+    overlay_alpha: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.kind not in BACKGROUND_KINDS:
+            raise ValueError(
+                f"background.kind: 非法值 {self.kind!r}"
+                f"（可选: {'/'.join(BACKGROUND_KINDS)}）"
+            )
+        _check_color(self.color, "background.color")
+        if self.stops is not None:
+            if not isinstance(self.stops, list) or len(self.stops) < 2:
+                raise ValueError(
+                    "background.stops: 渐变至少两个锚点 [(offset, '#hex')]"
+                )
+            for i, item in enumerate(self.stops):
+                if not isinstance(item, (tuple, list)) or len(item) != 2:
+                    raise ValueError(f"background.stops[{i}]: 应为 (offset, hex) 对")
+                pos, col = item
+                if isinstance(pos, bool) or not isinstance(pos, (int, float)) or not 0.0 <= pos <= 1.0:
+                    raise ValueError(
+                        f"background.stops[{i}].offset: 应在 0..1，得到 {pos!r}"
+                    )
+                _check_color(col, f"background.stops[{i}].color")
+        if isinstance(self.angle, bool) or not isinstance(self.angle, (int, float)):
+            raise ValueError(f"background.angle: 应为数值，得到 {self.angle!r}")
+        if self.pattern not in PATTERN_KINDS:
+            raise ValueError(
+                f"background.pattern: 非法纹样 {self.pattern!r}"
+                f"（可选: {'/'.join(PATTERN_KINDS)}）"
+            )
+        if self.image:
+            _check_href(self.image, "background.image")
+        if isinstance(self.overlay_alpha, bool) or not isinstance(self.overlay_alpha, (int, float)) \
+                or not 0.0 <= self.overlay_alpha <= 1.0:
+            raise ValueError(
+                f"background.overlay_alpha: 应在 0..1，得到 {self.overlay_alpha!r}"
+            )
+        # kind 专属必填：渐变无 stops / image 无 image → 构造期即拒（可读 ValueError）
+        if self.kind in ("linear", "radial") and (not self.stops):
+            raise ValueError(f"background.stops: kind={self.kind} 必须给出插值锚点")
+        if self.kind == "image" and not self.image:
+            raise ValueError("background.image: kind=image 必须给出本地相对路径或 dataURI")
+
+    def to_dict(self) -> dict[str, object]:
+        """design.json v2 序列化形态（stops 落 [pos, hex] 列表——JSON 无元组）。"""
+        out: dict[str, object] = {
+            "kind": self.kind, "color": self.color,
+            "angle": self.angle, "pattern": self.pattern,
+            "image": self.image, "overlay_alpha": self.overlay_alpha,
+        }
+        if self.stops is not None:
+            out["stops"] = [[float(p), c] for p, c in self.stops]
+        return out
+
+    @classmethod
+    def from_dict(cls, data: object) -> "Background":
+        """design.json v2 反序列化（未知键拒收；构造期全套校验照跑）。"""
+        if not isinstance(data, dict):
+            raise ValueError("background 应为对象（Background 五字段）")
+        allowed = {"kind", "color", "stops", "angle", "pattern", "image", "overlay_alpha"}
+        unknown = [k for k in data if k not in allowed]
+        if unknown:
+            raise ValueError(f"background: 未知键 {unknown}（可选: {'/'.join(sorted(allowed))}）")
+        raw_stops = data.get("stops")
+        stops: list[tuple[float, str]] | None = None
+        if raw_stops is not None:
+            if not isinstance(raw_stops, list):
+                raise ValueError("background.stops: 应为 [pos, hex] 列表")
+            stops = []
+            for i, item in enumerate(raw_stops):
+                if not isinstance(item, (list, tuple)) or len(item) != 2:
+                    raise ValueError(f"background.stops[{i}]: 应为 [pos, hex] 对")
+                pos, col = item
+                if isinstance(pos, bool) or not isinstance(pos, (int, float)):
+                    raise ValueError(f"background.stops[{i}].offset: 应为数值")
+                stops.append((float(pos), str(col)))
+        return cls(
+            kind=str(data.get("kind", "solid")),
+            color=str(data.get("color", "#ffffff")),
+            stops=stops,
+            angle=float(data.get("angle", 135.0)),  # type: ignore[arg-type]
+            pattern=str(data.get("pattern", "dots")),
+            image=str(data.get("image", "")),
+            overlay_alpha=float(data.get("overlay_alpha", 0.0)),  # type: ignore[arg-type]
+        )
+
+
+def _check_layer_flags(e: "Element", where: str) -> None:
+    """B2 层级四标量复验（构造期与 validate_doc 共用——防构造后篡改）。"""
+    if isinstance(e.z, bool) or not isinstance(e.z, int):
+        raise ValueError(f"{where}.z: 应为整数，得到 {e.z!r}")
+    if not isinstance(e.locked, bool):
+        raise ValueError(f"{where}.locked: 应为布尔，得到 {e.locked!r}")
+    if not isinstance(e.visible, bool):
+        raise ValueError(f"{where}.visible: 应为布尔，得到 {e.visible!r}")
+    if e.blend not in BLEND_MODES:
+        raise ValueError(
+            f"{where}.blend: 非法混合模式 {e.blend!r}（可选: {'/'.join(BLEND_MODES)}）"
+        )
+
+
+@dataclass
 class Element:
     """画布图元：kind + 几何/样式属性（白名单内的受限词汇，非自由 SVG）。"""
 
@@ -187,6 +337,14 @@ class Element:
     href: str = ""
     text: TextBlock | None = None
     children: list["Element"] = field(default_factory=list)
+    # ── B2 层级扩展（全部默认值=旧行为，向后兼容：存量构造零改动零漂移）──
+    z: int = 0              # 绘制层级（升序稳定排序渲染；同 z 保文档序）
+    locked: bool = False    # 编辑器锁定（不参与渲染，仅交互面）
+    visible: bool = True    # False → 两路渲染器均跳过
+    blend: str = "normal"   # 混合模式（BLEND_MODES 白名单执法）
+    # image_slot 承载面（B2）：空串=不带该语义（存量 image 元素序列化面零变化）
+    fit: str = ""           # cover/contain（IMAGE_FITS）
+    mask: str = ""          # none/rounded/circle/arch（IMAGE_MASKS）
 
     def __post_init__(self) -> None:
         if self.kind not in ELEMENT_WHITELIST:
@@ -199,6 +357,15 @@ class Element:
             _check_color(self.stroke, f"{self.kind}.stroke")
         if not 0.0 <= self.opacity <= 1.0:
             raise ValueError(f"{self.kind}.opacity: 应在 0..1，得到 {self.opacity!r}")
+        _check_layer_flags(self, self.kind)
+        if self.fit and self.fit not in IMAGE_FITS:
+            raise ValueError(
+                f"{self.kind}.fit: 非法填充 {self.fit!r}（可选: {'/'.join(IMAGE_FITS)}）"
+            )
+        if self.mask and self.mask not in IMAGE_MASKS:
+            raise ValueError(
+                f"{self.kind}.mask: 非法蒙版 {self.mask!r}（可选: {'/'.join(IMAGE_MASKS)}）"
+            )
         if self.d and not _PATH_DATA.match(self.d):
             raise ValueError(
                 f"{self.kind}.d: 非法路径数据（只允许 SVG 路径指令字符与数值，"
@@ -224,11 +391,17 @@ class Element:
 
 @dataclass
 class CanvasDoc:
-    """SVG 画布文档：尺寸 + 背景色 + 白名单元素列表（F70 文档模型）。"""
+    """SVG 画布文档：尺寸 + 背景 + 白名单元素列表（F70 文档模型）。
+
+    B2（2026-11-26）：background 字段从「恒 hex 串」扩为 **str | Background | None**
+    联合——str 存量语义不变（#ffffff 单色底）；Background=五形态背景层
+    （渐变/纹样/图）；None=透明底（两路渲染器：SVG 不发底 rect、Pillow 白底
+    兜底同旧空串语义）。向后兼容：CanvasDoc(w,h,"#fff") 逐字节旧行为。
+    """
 
     width: int
     height: int
-    background: str = "#ffffff"
+    background: str | Background | None = "#ffffff"
     elements: list[Element] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -236,11 +409,67 @@ class CanvasDoc:
             v = getattr(self, name)
             if isinstance(v, bool) or not isinstance(v, int) or v <= 0:
                 raise ValueError(f"doc.{name}: 应为正整数，得到 {v!r}")
-        if self.background:
-            _check_color(self.background, "doc.background")
+        _check_doc_background(self.background)
         for e in self.elements:
             if not isinstance(e, Element):
                 raise ValueError(f"doc.elements: 应为 Element 列表，得到 {e!r}")
+
+    def layers(self) -> list[Element]:
+        """B2 渲染序辅助：按 z **稳定**升序（同 z 保文档序——存量模板零 z
+        声明时输出恒等于 doc.elements，老稿渲染逐字节不变）。"""
+        return sorted(self.elements, key=lambda e: e.z)
+
+
+def _check_doc_background(bg: object) -> None:
+    """doc.background 联合执法：str→hex 校验 / Background→复验 / None→放行。"""
+    if bg is None:
+        return
+    if isinstance(bg, Background):
+        _validate_background(bg)
+        return
+    if isinstance(bg, str):
+        if bg:
+            _check_color(bg, "doc.background")
+        return
+    raise ValueError(
+        f"doc.background: 应为 hex 串、Background 或 None，得到 {type(bg).__name__}"
+    )
+
+
+def _validate_background(bg: Background) -> None:
+    """Background 构造后篡改复验（validate_doc 第二道门的背景段）。"""
+    _check_doc_background_kind(bg)
+    if not isinstance(bg.color, str):
+        raise ValueError("background.color: 应为 hex 串")
+    _check_color(bg.color, "background.color")
+    if bg.stops is not None:
+        if not isinstance(bg.stops, list) or len(bg.stops) < 2:
+            raise ValueError("background.stops: 渐变至少两个锚点")
+        for i, item in enumerate(bg.stops):
+            if not isinstance(item, (tuple, list)) or len(item) != 2:
+                raise ValueError(f"background.stops[{i}]: 应为 (offset, hex) 对")
+            pos, col = item
+            if isinstance(pos, bool) or not isinstance(pos, (int, float)) or not 0.0 <= pos <= 1.0:
+                raise ValueError(f"background.stops[{i}].offset: 应在 0..1")
+            _check_color(col, f"background.stops[{i}].color")
+    if isinstance(bg.angle, bool) or not isinstance(bg.angle, (int, float)):
+        raise ValueError(f"background.angle: 应为数值，得到 {bg.angle!r}")
+    if bg.pattern not in PATTERN_KINDS:
+        raise ValueError(f"background.pattern: 非法纹样 {bg.pattern!r}")
+    if bg.image and not isinstance(bg.image, str):
+        raise ValueError("background.image: 应为字符串（本地相对路径/dataURI）")
+    if bg.image:
+        _check_href(bg.image, "background.image")
+    if isinstance(bg.overlay_alpha, bool) or not isinstance(bg.overlay_alpha, (int, float)) \
+            or not 0.0 <= bg.overlay_alpha <= 1.0:
+        raise ValueError(f"background.overlay_alpha: 应在 0..1，得到 {bg.overlay_alpha!r}")
+
+
+def _check_doc_background_kind(bg: Background) -> None:
+    if bg.kind not in BACKGROUND_KINDS:
+        raise ValueError(
+            f"background.kind: 非法值 {bg.kind!r}（可选: {'/'.join(BACKGROUND_KINDS)}）"
+        )
 
 
 def validate_doc(doc: CanvasDoc) -> CanvasDoc:
@@ -251,11 +480,12 @@ def validate_doc(doc: CanvasDoc) -> CanvasDoc:
     lines）。设计稿载入路径不经 TextBlock 重建（只过 verify_svg 与 params
     schema），本门是该路径的唯一防线：漏检的标量会以未捕获 TypeError/KeyError
     崩在序列化层（500 面），而非设计承诺的可读 ValueError。
+    B2：background 联合（str/Background/None）与元素 z/locked/visible/blend/
+    fit/mask 同入复验面。
     """
     if not isinstance(doc.width, int) or doc.width <= 0 or not isinstance(doc.height, int) or doc.height <= 0:
         raise ValueError(f"doc 尺寸非法: {doc.width}×{doc.height}")
-    if doc.background:
-        _check_color(doc.background, "doc.background")
+    _check_doc_background(doc.background)
     for e in doc.elements:
         _validate_element(e)
     return doc
@@ -303,6 +533,12 @@ def _validate_element(e: object) -> None:
         raise ValueError(
             f"非法元素 kind={e.kind!r}（元素白名单: {'/'.join(ELEMENT_WHITELIST)}）"
         )
+    # B2 层级四标量 + fit/mask（全部进入序列化或渲染决策，篡改必须拦）
+    _check_layer_flags(e, e.kind)
+    if e.fit and e.fit not in IMAGE_FITS:
+        raise ValueError(f"{e.kind}.fit: 非法填充 {e.fit!r}")
+    if e.mask and e.mask not in IMAGE_MASKS:
+        raise ValueError(f"{e.kind}.mask: 非法蒙版 {e.mask!r}")
     if e.fill:
         _check_color(e.fill, f"{e.kind}.fill")
     if e.stroke:
@@ -337,14 +573,22 @@ def _validate_element(e: object) -> None:
 
 
 __all__ = [
+    "ARTICLE_LONG",
+    "BACKGROUND_KINDS",
+    "BLEND_MODES",
     "ELEMENT_WHITELIST",
+    "IMAGE_FITS",
+    "IMAGE_MASKS",
+    "PATTERN_KINDS",
     "SEMANTIC_COLOR_SLOTS",
     "SPECS",
     "SQUARE",
     "WIDE16X9",
+    "Background",
     "CanvasDoc",
     "Element",
     "TextBlock",
+    "check_image_ref",
     "spec_size",
     "validate_doc",
 ]

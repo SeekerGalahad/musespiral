@@ -185,6 +185,19 @@ function edDiffStat(rows){
 var add=0,del=0,i;
 for(i=0;i<rows.length;i++){if(rows[i].t>0)add+=rows[i].s.length;else if(rows[i].t<0)del+=rows[i].s.length;}
 return{add:add,del:del};}
+// HTML 转义（哨兵段内唯一定义——纯函数零 DOM；node 行为断言段可直接执行，
+// 段外消费点照用全文件拼接后的同名函数）
+function edEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+// B3（2026-11-26）:::video 容器块 markdown 生成（「插入媒体」视频形态；caption
+// 选填=素材标题进 figcaption）。src/poster 过 edEsc——值里的引号变 &quot;，
+// Python 端 _VIDEO_ATTR_RE 的带引号属性形态照常吃到且不截断。
+function edVideoMd(src,poster,caption){
+var s=':::video{src="'+edEsc(src)+'"'+(poster?' poster="'+edEsc(poster)+'"':'')+'}';
+return '\n'+s+'\n'+(caption?edEsc(String(caption).replace(/\s+/g,' ').trim())+'\n':'')+':::\n';}
+// B3 视频时长徽章文案：秒→m:ss / h:mm:ss（素材库 fmtDur 同算法——两文件不可
+// 共享（editor.js 自管理纪律），故同款双写，测试各锚各的）
+function edDurFmt(s){s=Math.round(+s||0);if(s<=0)return'';var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),x=s%60;
+return(h?h+':'+(m<10?'0':'')+m:m)+':'+(x<10?'0':'')+x;}
 /*__ED_END__*/
 
 /*__GT_BEGIN__*/
@@ -317,7 +330,6 @@ var edCM=null,edTA=null,edLoading=false,edProg=false;
 var edTypewriter=false,edFocus=false,edSprint=null,edSync=true;
 var edCurLine=null,edDeb=null,edOutlineCache=[];
 var edEchoP=-1,edEchoE=-1,edLockP=false;
-function edEsc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 
 // ── 装载（vendor 链式加载；失败静默回落 textarea 原功能）──
 function edLink(href){var l=document.createElement('link');l.rel='stylesheet';l.href=href;document.head.appendChild(l);}
@@ -524,6 +536,7 @@ var ED_BTNS=[
 ['h1','H1','一级标题'],['h2','H2','二级标题'],['h3','H3','三级标题'],
 ['quote','❝','引用'],['link','链接','链接（⌘K）'],['code','</>','行内码 / 围栏代码块'],
 ['table','表格','插入表格'],['image','图片','插入图片'],
+['media','🎬','插入媒体：从素材库选图/视频，文件复制进文章 media/ 后插入引用（图片 ![](rel) / 视频 :::video 块）'],
 ['mat','📚','内联素材搜索（⌘⇧S）：编辑器底部实时搜素材库，点击即插入引用'],
 ['ai','✨AI','创作工坊 AI 块生成（F3 微操作落地前的入口）'],
 ['full','⛶','全屏'],
@@ -544,6 +557,7 @@ else if(k==='link')edLinkSel();
 else if(k==='code')edCodeSel();
 else if(k==='table')edSnippet('\n| 列A | 列B | 列C |\n| --- | --- | --- |\n|  |  |  |\n');
 else if(k==='image')edSnippet('\n![图片描述](cover.png)\n');
+else if(k==='media')return edMediaOpen();
 else if(k==='mat')return edRpToggle();
 else if(k==='ai')location.hash='#compose';
 else if(k==='full')edFullscreen();
@@ -893,6 +907,88 @@ if(!v||v.hidden||!p||p.hidden)return;
 e.preventDefault();
 edRpToggle();
 });
+
+// ── B3 插入媒体（2026-11-26，三线扩展设计 §3.3）──────────────────────
+// 工具栏 🎬 → 弹层从素材库选（GET /api/materials?type=image|video）→ 点选
+// POST /api/action/insert_media（素材文件复制进文章 media/，durable 副本）
+// → 图片插 ![](rel)、视频插 :::video{src=rel poster=…} 容器块（服务端渲染
+// 识别为 <figure class="md-video"> 内嵌播放器；公众号发布上传仍按文章相对
+// 路径走既有 upload_content_image）。文案明写「复制进文章目录」——用户
+// 该知道插入不是引用（素材仓 GC 不影响已插入媒体）。
+var edMed=null;  // {ov,kind,items,busy}——null=未开
+function edMediaOpen(){
+if(edMed)return;
+var ov=document.createElement('div');
+ov.className='ed-med-ov';
+ov.innerHTML='<div class="ed-med-panel" role="dialog" aria-label="插入媒体">'+
+'<div class="ed-med-head"><span>插入媒体</span><span class="ed-med-hint">从素材库选——文件复制进文章 media/ 后插入（自包含）</span><button type="button" class="btn btn-ghost btn-icon" data-mx="1" aria-label="关闭">✕</button></div>'+
+'<div class="chips"><button class="chip is-active" data-mk="image">图片</button><button class="chip" data-mk="video">视频</button></div>'+
+'<div class="ed-med-grid" id="ed-med-grid"></div></div>';
+ov.addEventListener('mousedown',function(e){if(e.target===this)edMediaClose();});
+ov.addEventListener('click',function(e){
+var x=e.target.closest('[data-mx]');
+if(x)return edMediaClose();
+var k=e.target.closest('[data-mk]');
+if(k){edMed.kind=k.getAttribute('data-mk');edMediaLoad();return;}
+var c=e.target.closest('[data-mpick]');
+if(c&&!edMed.busy)edMediaPick(c.getAttribute('data-mpick'));});
+document.addEventListener('keydown',edMediaEsc);
+document.body.appendChild(ov);
+edMed={ov:ov,kind:'image',items:[],busy:0};
+edMediaLoad();
+}
+function edMediaEsc(e){
+if(e.isComposing||e.keyCode===229)return;
+if(e.key==='Escape'&&edMed){e.stopPropagation();edMediaClose();}}
+function edMediaClose(){
+if(!edMed)return;
+edMed.ov.remove();edMed=null;
+document.removeEventListener('keydown',edMediaEsc);
+if(edCM)edCM.focus();}
+function edMediaLoad(){
+var kind=edMed.kind,g=$id('ed-med-grid');
+if(!g)return;
+g.innerHTML='<p class="ed-med-empty">读取素材库…</p>';
+QA2(edMed.ov,'[data-mk]').forEach(function(b){b.classList.toggle('is-active',b.getAttribute('data-mk')===kind);});
+fetch('/api/materials?type='+kind+'&limit=60')
+.then(function(r){return r.json();})
+.then(function(d){
+if(!edMed||edMed.kind!==kind)return;  // 迟到响应丢弃（已关/已切 tab）
+edMed.items=(d&&Array.isArray(d.items))?d.items:[];
+g.innerHTML=edMed.items.length?edMed.items.map(function(m){
+var meta=(m.payload||{}).meta||{},poster=meta.poster?('/media/'+meta.poster):'',dur=edDurFmt(meta.duration);
+var _t=String(m.title||((m.origin||{})||{}).title||m.id);  // D11：素材行 title 在 origin.title（顶层缺省链）
+return '<button type="button" class="ed-med-cell" data-mpick="'+edEsc(m.id)+'" title="'+edEsc(_t)+'">'+
+(m.type==='image'?'<img loading="lazy" alt="" src="'+edEsc('/api/materials/file?id='+encodeURIComponent(m.id)+'&variant=thumb')+'">'
+:'<span class="ed-med-vid">'+(poster?'<img loading="lazy" alt="" src="'+edEsc(poster)+'">':'▶')+(dur?'<i>'+edEsc(dur)+'</i>':'')+'</span>')+
+'<span class="ed-med-t">'+edEsc(_t.slice(0,30))+'</span></button>';}).join('')
+:'<p class="ed-med-empty">暂无'+(kind==='image'?'图片':'视频')+'素材——先去素材库上传/登记。</p>';
+})
+.catch(function(){if(edMed&&g)g.innerHTML='<p class="ed-med-empty">素材库读取失败（Studio 服务不可达）</p>';});}
+function edMediaPick(mid){
+var m=null,i;
+for(i=0;i<edMed.items.length;i++)if(edMed.items[i].id===mid){m=edMed.items[i];break;}
+if(!m)return;
+var ap=(window.__mdpubEditor&&window.__mdpubEditor.article)||'';
+if(!ap){var g0=$id('ed-med-grid');if(g0)g0.innerHTML='<p class="ed-med-empty">未知文章落点（先从文章列表打开本文再插入）</p>';return;}
+edMed.busy=1;
+var g=$id('ed-med-grid');
+if(g)g.innerHTML='<p class="ed-med-empty">复制素材文件进文章 media/…</p>';
+fetch('/api/action/insert_media',{method:'POST',headers:{'Content-Type':'application/json'},
+body:JSON.stringify({id:mid,path:ap,confirm:true})})
+.then(function(r){return r.json().then(function(j){
+if(!r.ok||j.ok===false)throw new Error((j&&j.error)||('HTTP '+r.status));return j;});})
+.then(function(j){
+var md=j.kind==='video'?edVideoMd(j.rel,j.poster_rel||'',m.title||''):edImgMd(j.rel);
+edMediaClose();
+edMatInsert(md);  // 既有 E-2 插入件：行中起插补换行、光标落插入尾
+})
+.catch(function(err){
+edMed.busy=0;
+var g2=$id('ed-med-grid');
+if(g2)g2.innerHTML='<p class="ed-med-empty">插入失败：'+edEsc(err.message)+'</p>';});
+}
+function QA2(root,sel){return [].slice.call(root.querySelectorAll(sel));}
 
 // ── E-3 AI 微操作（§3.3：选中 → 浮动菜单 5 动作 → diff 弹窗 → 接受写回）──
 // 链路：CM cursorActivity → 选区 >10 字 → 菜单定位到选区上方 → 点动作 →

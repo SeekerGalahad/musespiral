@@ -678,8 +678,12 @@ def test_contract_lock_membership() -> None:
     # （/api/writing_stats 写作节奏读面）；W1-B1 批（2026-11-23）：GET 49→50
     # （/api/healthz 轻量探针五键——/api/health 九键面板不动）
     # 2026-11-23 用户反馈批：POST 77→78（/api/action/bookengine_demo 体验模式开关）
-    assert len(CONTRACT_POST_EXACT) == 85  # W14b+4 / W6+2 / W2 +probe（2026-11-24）
-    assert len(CONTRACT_GET_EXACT) == 51  # 2026-11-24 W2/W3：+chapter
+    # B1 本地书籍批（2026-11-26，契约 §3.27）：POST 85→89（localbook 三动作 +
+    # /api/materials/from-local-chapters），GET 51→55（list/info/toc/chapter）
+    # B3 多媒体批（2026-11-26，同正典 §三）：POST 89→91（/api/materials/
+    # register-local + /api/action/insert_media；GET 零新增）
+    assert len(CONTRACT_POST_EXACT) == 91  # W14b+4 / W6+2 / W2 +probe / B1 +4 / B3 +2（2026-11-26）
+    assert len(CONTRACT_GET_EXACT) == 56  # W2/W3 +chapter；B1 +4 localbook；素材查看器 +render（2026-11-26）
 
 
 def test_kind_field_backward_compatible_with_legacy_session(root: Path) -> None:

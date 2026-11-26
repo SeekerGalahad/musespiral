@@ -98,7 +98,7 @@ document.getElementById('view-article').innerHTML=`
 </div>
 <div class="action-group">
 <h3 class="action-title">生成物料包</h3>
-<p class="action-hint">pack · 生成 README / payload / checks / cover 四件套。</p>
+<p class="action-hint">pack · 生成 README / payload / checks / cover 四件套；视频文章在 视频号/抖音/小红书 追加 video.mp4 + poster.jpg + meta.json（章节时间点）——包内 README 明写「导出后人工上传」（这些平台无公开草稿 API，绝不自动发布）。</p>
 <div class="action-row">
 <label class="field">平台 <select id="pack-platform"></select></label>
 <label class="field">变体 <select id="pack-variant"></select></label>

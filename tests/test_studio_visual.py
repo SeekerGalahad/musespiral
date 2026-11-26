@@ -285,14 +285,70 @@ def test_design_get_malicious_svg_ok_false(server, article: Path) -> None:
     assert "svg" not in payload
 
 
+# ── B2 v2：render 带背景 / save 带图层状态 / design GET v2 键（2026-11-26）──
+
+
+def test_render_with_background_v2(server, article: Path) -> None:
+    """POST /api/visual/render 带 background → SVG 展开渐变；非法 http 图 → 400。"""
+    code, payload = _request(server, "POST", "/api/visual/render", {
+        "confirm": True, "template": "article-long", "spec": "article-long",
+        "params": {"title": "带底"},
+        "background": {"kind": "linear", "color": "#ffffff",
+                       "stops": [[0.0, "#ffffff"], [1.0, "#dbeafe"]], "angle": 120},
+    })
+    assert code == 200 and payload["ok"] is True
+    assert "<linearGradient" in payload["svg"]
+    code2, payload2 = _request(server, "POST", "/api/visual/render", {
+        "confirm": True, "template": "xhs-cover-pro", "spec": "square",
+        "params": {}, "background": {"kind": "image", "image": "https://x/y.jpg"},
+    })
+    assert code2 == 400 and "网络地址" in payload2["error"]
+
+
+def test_save_v2_background_elements_and_design_get(server, article: Path) -> None:
+    """save v2（background/elements 随稿）→ design GET 回 version/background/
+    elements；v1 老稿 GET 补默认（缺省键不发 undefined——前端零分叉）。"""
+    code, payload = _request(server, "POST", "/api/visual/save", {
+        "confirm": True, "article": "demo.md", "kind": "article",
+        "template": "article-long", "spec": "article-long",
+        "params": {"title": "标题", "paragraphs": "段一。"},
+        "background": {"kind": "pattern", "pattern": "dots", "color": "#eff6ff"},
+        "elements": [{"i": 0, "z": 1, "opacity": 0.6, "locked": True, "blend": "screen"}],
+    })
+    assert code == 200 and payload["ok"] is True
+    code2, d = _request(server, "GET", "/api/visual/design?article=demo.md")
+    assert code2 == 200
+    assert d["version"] == 2
+    assert d["background"]["kind"] == "pattern" and d["background"]["pattern"] == "dots"
+    assert d["elements"][0]["blend"] == "screen" and d["elements"][0]["z"] == 1
+    # 坏图层状态 → 400（提交期执法）
+    code3, payload3 = _request(server, "POST", "/api/visual/save", {
+        "confirm": True, "article": "demo.md", "kind": "article",
+        "template": "article-long", "spec": "article-long", "params": {},
+        "elements": [{"i": 0, "blend": "xor"}],
+    })
+    assert code3 == 400 and "blend" in payload3["error"]
+
+
 # ── GET /api/visual/templates ───────────────────────────────
 
 
 def test_templates_get_four_items(server) -> None:
+    """B2 视觉编辑 2.0 批（2026-11-26）：GET templates=4 旧+6 新共 10 项
+    （三线扩展设计 §2.3；每项含 backgrounds 允许种类声明）。"""
     code, payload = _request(server, "GET", "/api/visual/templates")
     assert code == 200
     ids = {row["id"] for row in payload["items"]}
-    assert ids == {"vermilion-slab", "indigo-slab", "xhs-card", "points-three"}
+    assert ids == {
+        "vermilion-slab", "indigo-slab", "xhs-card", "points-three",
+        "article-long", "xhs-cover-pro", "interview-card",
+        "list-three", "quote-poster", "chapter-divider",
+    }
+    assert len(payload["items"]) == 10
+    for row in payload["items"]:
+        assert row["backgrounds"] and set(row["backgrounds"]) <= {
+            "solid", "linear", "radial", "pattern", "image"
+        }
 
 
 def test_templates_get_zero_secrets(server) -> None:

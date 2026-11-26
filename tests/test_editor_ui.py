@@ -122,7 +122,8 @@ def _run_ed(script_body: str) -> dict:
         "'use strict';\n" + _ed_segment() + "\n"
         "module.exports={edCount:edCount,edRead:edRead,edAI:edAI,edOutline:edOutline,"
         "edSection:edSection,edWrap:edWrap,edLinePrefix:edLinePrefix,edSprintAdd:edSprintAdd,"
-        "edQuote:edQuote,edImgMd:edImgMd,edMatExcerpt:edMatExcerpt,edMatMeta:edMatMeta};\n"
+        "edQuote:edQuote,edImgMd:edImgMd,edMatExcerpt:edMatExcerpt,edMatMeta:edMatMeta,"
+        "edVideoMd:edVideoMd,edDurFmt:edDurFmt};\n"
         + script_body
     )
     with tempfile.TemporaryDirectory() as td:
@@ -291,6 +292,35 @@ console.log(JSON.stringify({ok:1,len:b.length}));
     assert out == {"ok": 1, "len": len("> 来自[T]：") + 120}
 
 
+def test_ed_video_md_and_dur_fmt():
+    """B3（2026-11-26）:::video 容器生成与时长徽章（node 真实执行哨兵段纯函数）。
+
+    edVideoMd：src 必有 / poster 选填 / caption 压空白——产 `:::video{src="…"}`
+    容器块（服务端 parser._VIDEO_OPEN_RE 的带引号属性形态上游）；属性值过
+    edEsc（引号→&quot;，不截断容器头）。edDurFmt：秒→m:ss / h:mm:ss。
+    """
+    out = _run_ed(r"""
+// 基本形态：src only，无 poster 无 caption
+var v1=edVideoMd('media/abc123.mp4','','');
+if(v1!=='\n:::video{src="media/abc123.mp4"}\n:::\n')throw new Error('基础形态错: '+JSON.stringify(v1));
+// src+poster+caption（多空白压单空格）
+var v2=edVideoMd('media/a.mp4','media/a.poster.jpg','  多头   注意力  ');
+if(v2!=='\n:::video{src="media/a.mp4" poster="media/a.poster.jpg"}\n多头 注意力\n:::\n')throw new Error('全参形态错: '+JSON.stringify(v2));
+// 属性值含引号 → &quot;（不截断容器头；服务端解析的带引号形态仍成立）
+var v3=edVideoMd('a"b.mp4','','');
+if(v3.indexOf('src="a&quot;b.mp4"')<0)throw new Error('引号应转义: '+JSON.stringify(v3));
+if(v3.indexOf('\n:::\n')<0)throw new Error('闭合行缺失: '+JSON.stringify(v3));
+// 时长徽章：<1h 不补零小时；≥1h 补零分
+if(edDurFmt(215)!=='3:35')throw new Error('3:35 错: '+edDurFmt(215));
+if(edDurFmt(11)!=='0:11')throw new Error('0:11 错: '+edDurFmt(11));
+if(edDurFmt(3661)!=='1:01:01')throw new Error('1:01:01 错: '+edDurFmt(3661));
+if(edDurFmt(0)!=='')throw new Error('0 应空串');
+if(edDurFmt(null)!=='')throw new Error('null 应空串');
+console.log(JSON.stringify({ok:1}));
+""")
+    assert out == {"ok": 1}
+
+
 def test_ed_img_md_and_excerpt_meta():
     """E-2 图片 Markdown 与结果行摘要/元信息：![](path) 剥空白圆括号；
     摘录 text 优先 url 兜底截 80；meta 按 image 宽高 / video 时长 / text 字数分派。"""
@@ -348,9 +378,10 @@ def test_editor_js_wiring_anchors():
                   "edRead", "400",  # 阅读时长
                   "__mdpubEditor"):  # 对 ui.js 暴露的装载契约
         assert token in src, token
-    # 工具栏 16 钮全在（UIX #9 增 focus/tw 显式专注+打字机入口）
+    # 工具栏 17 钮全在（UIX #9 增 focus/tw 显式专注+打字机入口；
+    # B3 2026-11-26 增 media 插入媒体）
     for btn in ("bold", "italic", "strike", "h1", "h2", "h3", "quote", "link",
-                "code", "table", "image", "mat", "ai", "full", "focus", "tw"):
+                "code", "table", "image", "media", "mat", "ai", "full", "focus", "tw"):
         assert f"data-edb=\"{btn}\"" in src or f"['{btn}'" in src, btn
     # 数据回写契约：change → save() 写回 textarea → 派发 input（ui.js 链路零改动）
     assert "cm.save()" in src and "dispatchEvent(new Event('input'" in src

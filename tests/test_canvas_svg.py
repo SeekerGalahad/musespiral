@@ -312,15 +312,27 @@ def test_render_svg_rejects_smuggled_kind() -> None:
 
 
 def test_layout_then_render_roundtrip_via_template() -> None:
-    """layout 固化行结构 → 序列化 → XML 可解析（F70 调用流 3-4 步集成冒烟）。"""
+    """layout 固化行结构 → 序列化 → XML 可解析（F70 调用流 3-4 步集成冒烟）。
+
+    B2：注册表十模板（新六模板 schema 各异——params 按模板给齐）。"""
     from musespiral.core.visual.canvas.templates import REGISTRY, resolve
 
     colors = {"primary": "#2563eb", "text": "#1f2937", "muted": "#6b7280",
               "background": "#ffffff", "accent": "#dc2626"}
     for tid, meta in REGISTRY.items():
         params = {"title": "集成冒烟" * 5, "hook": "钩子"}
-        if tid == "points-three":
+        if tid in ("points-three", "list-three"):
             params = {"title": "集成冒烟", "points": [{"label": "一", "value": 2}]}
+        elif tid == "chapter-divider":
+            params = {"number": "01", "title": "集成冒烟"}
+        elif tid == "article-long":
+            params = {"title": "集成冒烟" * 5, "subtitle": "副题", "paragraphs": "正文段。"}
+        elif tid == "interview-card":
+            params = {"title": "集成冒烟" * 5, "author": "作者"}
+        elif tid == "quote-poster":
+            params = {"title": "集成冒烟" * 5, "author": "作者"}
+        elif tid == "xhs-cover-pro":
+            params = {"title": "集成冒烟" * 5, "hook": "钩子", "tag": "# 标签"}
         m, merged = resolve(REGISTRY, tid, params=params)
         doc = m.build(merged, colors, m.specs[0])
         layout_document(doc)

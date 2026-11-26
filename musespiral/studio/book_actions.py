@@ -63,8 +63,11 @@ def _action_book_search(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, 
     scope = data.get("scope", "all")
     if not isinstance(scope, (str, list)):
         raise _HttpError(400, "scope 必须是字符串或字符串数组（缺省 all）")
+    mode = data.get("mode", "parallel")
+    if mode not in ("parallel", "serial"):
+        raise _HttpError(400, "mode 必须是 parallel 或 serial（缺省 parallel）")
     try:
-        out = book_fetch_service.submit_search(_runner(), key, sources=scope, page=page)
+        out = book_fetch_service.submit_search(_runner(), key, sources=scope, page=page, mode=mode)
     except book_fetch_service.BookFetchError as exc:
         raise _HttpError(400, str(exc)) from None
     except BookEngineUnavailable as exc:

@@ -2,6 +2,8 @@ function matPreview(m){
 var p=m.payload||{},o=m.origin||{},t=p.text||(o&&o.title)||'';
 return String(t).replace(/\s+/g,' ').slice(0,120);
 }
+function fmtDur(s){s=Math.round(+s||0);if(s<=0)return'';var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),x=s%60;
+return (h?h+':'+(m<10?'0':'')+m:m)+':'+(x<10?'0':'')+x;}
 function hbytes(n){n=+n||0;if(n<1024)return n+' B';if(n<1048576)return(n/1024).toFixed(1)+' KB';return(n/1048576).toFixed(1)+' MB';}
 var MEMPTY_T=$('mat-empty-title').textContent,MEMPTY_X=$('mat-empty-text').textContent;
 function matRow(m){
@@ -12,6 +14,8 @@ return '<details class="mat-row"'+(state.mdens==='full'?' open':'')+' data-mid="
 '<button class="btn btn-ghost btn-icon dstar'+(tri.starred?' on':'')+'" data-mstar="'+esc(m.id)+'" title="'+st+'" aria-label="'+st+'">'+I('star')+'</button>'+
 (m.type==='image'?'<img class="mat-thumb" loading="lazy" data-mlight="'+esc(m.id)+'" src="'+esc('/api/materials/file?id='+encodeURIComponent(m.id)+'&variant=thumb')+'" alt="" tabindex="0" role="button" aria-label="查看大图" onerror="this.style.visibility=\'hidden\';this.nextElementSibling.style.display=\'inline-flex\'">':'')+
 (m.type==='image'?'<span class="mty-ico mat-thumb-fb" title="'+esc(MTY[m.type]||m.type)+'" style="display:none">'+I('image')+'</span>':'')+
+(m.type==='video'&&meta.poster?'<img class="mat-thumb" loading="lazy" src="'+esc('/media/'+meta.poster)+'" alt="" onerror="this.style.visibility=\'hidden\';this.nextElementSibling.style.display=\'inline-flex\'">':'')+
+(m.type==='video'&&meta.poster?'<span class="mty-ico mat-thumb-fb" title="视频" style="display:none">'+I('video')+'</span>':'')+
 '<span class="mty-ico" title="'+esc(MTY[m.type]||m.type)+'">'+I(MTYI[m.type]||'tag')+'</span>'+
 '<span class="mat-row-main"><span class="mat-row-title" data-mdrow="'+esc(m.id)+'">'+(tri.read?'':'<i class="unread-dot" title="未读"></i>')+hl(m.title||o.title||o.uri||m.id)+(m.drafted?' <span class="badge pass">已入队</span>'+Z:'')+(tri.enabled?'':' <span class="badge archived">已禁用</span>'+Z)+
 (bk&&!bk.synthesis&&bk.distilled===false?' <span class="badge warn" title="AI 提炼失败，此条为原始文本；可在详情重新提炼">未提炼</span>'+Z:'')+'</span>'+
@@ -20,7 +24,7 @@ return '<details class="mat-row"'+(state.mdens==='full'?' open':'')+' data-mid="
 (bk?'<a class="bk-line" href="#books?search='+encodeURIComponent(bk.name||'')+'" title="书籍视图：'+esc(bk.name||'')+(bk.chapter_index?' 第 '+bk.chapter_index+' 章':'')+'">《'+esc(String(bk.name||'').slice(0,20))+'》'+(bk.chapter_index?'第 '+bk.chapter_index+' 章':'')+'</a>':'')+
 (s==null?'':'<span class="dc-bar '+lv+'" title="评分 '+s+'"><i style="width:'+t+'%"></i>'+Z)+
 licBadge(m)+
-'<span class="tag">'+esc(MTY[m.type]||m.type)+(meta.line?' · '+esc(meta.line):'')+(m.grade?' · '+esc(m.grade)+' 级':'')+(meta.platform?' · '+esc(meta.platform):'')+(meta.duration_text?' · '+esc(meta.duration_text):'')+Z+
+'<span class="tag">'+esc(MTY[m.type]||m.type)+(meta.line?' · '+esc(meta.line):'')+(m.grade?' · '+esc(m.grade)+' 级':'')+(meta.platform?' · '+esc(meta.platform):'')+(meta.duration_text?' · '+esc(meta.duration_text):(meta.duration?' · ⏱ '+fmtDur(meta.duration):''))+Z+
 '</span></span></span>'+
 '<button class="btn btn-ghost btn-icon mat-more" data-mmore="'+esc(m.id)+'" title="更多操作（右键同）" aria-label="更多操作">⋯</button>'+
 '<button class="btn" data-mread="'+esc(m.id)+'">'+(tri.read?'已读':'未读')+'</button>'+

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-zcode-design>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>素材查看器 · 内容分型展示</title>
+<style>
+:root{
+  --paper-0:#faf7f2;--paper-1:#fff;--wash:#f3eee6;
+  --ink-1:#2b2722;--ink-2:#6b6459;--ink-3:#a39a8d;
+  --line-1:#e8e2d6;--line-2:#d4ccbb;
+  --vermilion:#c9452c;--vermilion-ink:#a83823;--tint:rgba(201,69,44,.08);
+  --indigo:#3b5bdb;--jade:#2f9e6e;--amber:#d97706;--crimson:#c92a2a;
+  --fs-h2:16px;--fs-h3:14px;--fs-cap:12px;
+  --shadow-md:0 4px 16px rgba(43,39,34,.10);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--paper-0);color:var(--ink-1);font:13.5px/1.65 -apple-system,"PingFang SC",sans-serif;padding:26px 20px 60px}
+button{font:inherit;cursor:pointer;border:1px solid var(--line-2);background:var(--paper-1);border-radius:8px;padding:5px 13px}
+.btn-primary{background:var(--vermilion);border-color:var(--vermilion);color:#fff}
+.btn-ghost{border-color:transparent;background:none;color:var(--ink-2)}
+.btn-sm{padding:2px 9px;font-size:var(--fs-cap)}
+.wrap{max-width:880px;margin:0 auto}
+h1{font-size:22px;margin-bottom:4px}
+.sub{color:var(--ink-2);font-size:var(--fs-cap);margin-bottom:18px}
+.sect{margin-bottom:30px}
+.sect h2{font-size:var(--fs-h2);margin-bottom:10px;padding-bottom:7px;border-bottom:2px solid var(--line-2)}
+.muted{color:var(--ink-2);font-size:var(--fs-cap)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line-2);border-radius:999px;padding:2px 12px;font-size:var(--fs-cap);background:var(--paper-1);cursor:pointer;color:var(--ink-2)}
+.chip.on{background:var(--vermilion);border-color:var(--vermilion);color:#fff;font-weight:600}
+.card{background:var(--paper-1);border:1px solid var(--line-1);border-radius:10px;box-shadow:0 1px 3px rgba(43,39,34,.06)}
+
+/* 抽屉内容查看器 */
+.drawer{padding:14px 16px}
+.d-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;padding-bottom:9px;border-bottom:1px solid var(--line-1)}
+.d-head .t{font-weight:700;font-size:var(--fs-h3);flex:1}
+.meta-chip{font-size:11px;border:1px solid var(--line-1);border-radius:4px;padding:0 6px;color:var(--ink-2)}
+.meta-chip.warn{color:var(--amber);border-color:rgba(217,119,6,.4)}
+.view-toggle{display:flex;gap:0;border:1px solid var(--line-2);border-radius:8px;overflow:hidden}
+.view-toggle button{border:0;border-radius:0;padding:3px 11px;font-size:11px;color:var(--ink-2);background:var(--paper-1)}
+.view-toggle button.on{background:var(--vermilion);color:#fff}
+/* 文本 pre（原文模式） */
+.txt-pre{white-space:pre-wrap;word-break:break-word;font:12px/1.75 ui-monospace,"SF Mono",Menlo,monospace;background:var(--wash);border:1px solid var(--line-1);border-radius:8px;padding:12px 14px;max-height:340px;overflow:auto;color:#3a352e}
+/* md 渲染容器（沙箱 iframe 模拟） */
+.md-view{border:1px solid var(--line-1);border-radius:8px;overflow:hidden;max-height:380px}
+.md-view iframe{display:block;width:100%;height:340px;border:0}
+/* 门控遮罩 */
+.trunc-veil{position:relative}
+.trunc-veil::after{content:"";position:absolute;left:0;right:0;bottom:46px;height:70px;background:linear-gradient(transparent,var(--paper-1));pointer-events:none}
+.load-all{text-align:center;padding:10px 0 4px}
+.load-all button{min-width:220px}
+/* 图片查看 */
+.img-view{text-align:center;padding:6px}
+.img-view img{max-width:100%;max-height:340px;border-radius:8px;cursor:zoom-in}
+.img-meta{display:flex;justify-content:center;gap:12px;margin-top:7px}
+/* 视频播放 */
+.vid-view video{width:100%;max-height:340px;border-radius:8px;background:#000;display:block}
+.vid-meta{display:flex;justify-content:center;gap:12px;margin-top:7px}
+/* localbook 现取 */
+.lb-fetch{text-align:center;padding:14px 10px}
+.lb-fetch .hint{font-size:11px;color:var(--ink-3);margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>素材查看器 · 内容分型展示</h1>
+<p class="sub">素材抽屉「内容」tab 增强：文本大小门控（>30k 分级加载防卡死）· Markdown 渲染（沙箱）· 图片灯箱 · 视频播放</p>
+
+<!-- ① 文本（小）+ MD 渲染切换 -->
+<section class="sect">
+  <h2>① 文本素材（5,840 字 · Markdown）</h2>
+  <div class="card drawer">
+    <div class="d-head">
+      <span class="t">源码分析-Uniswap-v3-core</span>
+      <span class="meta-chip">text</span><span class="meta-chip">5,840 字</span>
+      <div class="view-toggle"><button class="on">渲染</button><button>原文</button></div>
+    </div>
+    <div id="v1-md">
+      <div class="md-view">
+        <iframe sandbox="" srcdoc="<!doctype html><style>body{font:13px/1.8 -apple-system,'PingFang SC',sans-serif;color:#2b2722;padding:18px 20px}h1{font-size:19px}h2{font-size:15px;border-bottom:1px solid #e8e2d6;padding-bottom:4px}code{background:#f3eee6;border-radius:4px;padding:1px 5px;font-size:12px}pre{background:#f3eee6;padding:10px;border-radius:6px;overflow:auto}blockquote{border-left:3px solid #c9452c;margin:0;padding:2px 12px;color:#6b6459}</style><h1>源码分析：Uniswap V3 Core</h1><p><strong>定位</strong>：集中流动性 AMM。核心公式在 <code>TickMath.sol</code>：</p><pre>liquidity = amount0 * (sqrtP_b - sqrtP) / sqrtP</pre><h2>一、关键权衡</h2><blockquote>作者选择了不可升级（无代理）——用不可逆性换信任。</blockquote><p>工厂 <code>Factory.deploy</code>…</p>"></iframe>
+      </div>
+    </div>
+    <div id="v1-raw" hidden>
+      <pre class="txt-pre"># 源码分析：Uniswap V3 Core
+**定位**：集中流动性 AMM。核心公式在 `TickMath.sol`：
+
+    liquidity = amount0 * (sqrtP_b - sqrtP) / sqrtP
+
+## 一、关键权衡
+> 作者选择了不可升级（无代理）——用不可逆性换信任。
+工厂 `Factory.deploy`…</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ② 文本（大）门控 -->
+<section class="sect">
+  <h2>② 大文本素材（127 万字 · 门控截断）</h2>
+  <div class="card drawer">
+    <div class="d-head">
+      <span class="t">《云海剑歌》第 3 章</span>
+      <span class="meta-chip">text</span><span class="meta-chip warn">127 万字 · 已截取前 3 万</span>
+    </div>
+    <div class="trunc-veil">
+      <pre class="txt-pre" style="max-height:220px">第三章 云海剑歌之三
+
+这是GBK编码书籍的第3章内容。云海之上，剑气纵横三万里。一段足够长的正文用来验证编码探测与章节切分。
+（……以下 127 万字，截取展示前 3 万字防止浏览器卡死……）
+这是GBK编码书籍的第3章内容。云海之上，剑气纵横三万里。
+这是GBK编码书籍的第3章内容。云海之上，剑气纵横三万里。
+这是GBK编码书籍的第3章内容。云海之上，剑气纵横三万里。
+这是GBK编码书籍的第3章内容。云海之上，剑气纵横三万里。
+这是GBK编码书籍的第3章内容。云海之上，剑气纵横三万里。
+这是GBK编码书籍的第3章内容。云海之上，剑气纵横三万里。</pre>
+    </div>
+    <div class="load-all">
+      <button class="btn-primary">加载全部（共 1,270,431 字 · 约 4.2 MB）</button>
+      <p class="muted" style="margin-top:5px">大文本分级加载：默认前 3 万字，确认后整段渲染</p>
+    </div>
+  </div>
+</section>
+
+<!-- ③ localbook 章节（现取全文） -->
+<section class="sect">
+  <h2>③ 本地书章节素材（excerpt 500 字 · 现取全文）</h2>
+  <div class="card drawer">
+    <div class="d-head">
+      <span class="t">《星河观测站》第 4 章</span>
+      <span class="meta-chip">text</span><span class="meta-chip">摘录 185 字</span><span class="meta-chip">本地书</span>
+    </div>
+    <pre class="txt-pre">这是第4章的正文第一段。四章讲述了主角林远在星河观测站的日常……（摘录 185 字，正文不入素材库——红线）</pre>
+    <div class="lb-fetch">
+      <button>读取本章全文（现取 · 185 字）</button>
+      <p class="hint">本地书正文永远读磁盘原文件，按需现取不复制</p>
+    </div>
+  </div>
+</section>
+
+<!-- ④ 图片 + ⑤ 视频 -->
+<section class="sect">
+  <h2>④ 图片 / ⑤ 视频（既有能力保留 + 元信息）</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <div class="card drawer">
+      <div class="d-head"><span class="t">test_cover.jpg</span><span class="meta-chip">image</span></div>
+      <div class="img-view">
+        <div style="height:180px;border-radius:8px;background:linear-gradient(135deg,#c9452c,#e07a4f);display:grid;place-items:center;color:#fff;font-weight:700;font-size:22px" onclick="this.style.outline='2px solid var(--vermilion)'">400 × 300</div>
+        <div class="img-meta"><span class="muted">400×300 · 2.4 KB</span><span class="muted">·</span><button class="btn-sm">灯箱查看</button></div>
+      </div>
+    </div>
+    <div class="card drawer">
+      <div class="d-head"><span class="t">城市漫游测试片</span><span class="meta-chip">video</span><span class="meta-chip">⏱ 5.0s</span></div>
+      <div class="vid-view">
+        <div style="height:180px;border-radius:8px;background:linear-gradient(135deg,#1e3a5f,#3b5bdb);display:grid;place-items:center;color:#fff;font-size:26px">▶</div>
+        <div class="vid-meta"><span class="muted">640×360 · 5.0s · 340 KB</span><span class="muted">·</span><button class="btn-sm">新窗口打开</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+// 渲染/原文切换演示
+document.querySelectorAll('.view-toggle').forEach(function(tg){
+  tg.querySelectorAll('button').forEach(function(b){
+    b.addEventListener('click', function(){
+      tg.querySelectorAll('button').forEach(function(x){x.classList.remove('on');});
+      b.classList.add('on');
+      var card=tg.closest('.drawer');
+      var isMd = b.textContent==='渲染';
+      card.querySelector('#v1-md').hidden = !isMd;
+      card.querySelector('#v1-raw').hidden = isMd;
+    });
+  });
+});
+</script>
+</body>
+</html>

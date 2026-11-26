@@ -57,9 +57,13 @@ ORIGINAL_TYPES: tuple[str, ...] = tuple(t for t in MATERIAL_TYPES if t != "deriv
 #   generate/book_fetch 的虚拟标记不同，slug 在文章根可解析回原文件）
 # distill：N-2 路径 C 论点提炼（同上正典）——AI 抽文章核心论点 → 多条
 #   spark（from_id=源文章 slug；每条 spark 一条单链，与 single_op 豁免同族）
+# adopt：B1 本地书籍选章（2026-11-26，正典=《musespiral-三线扩展设计-本地TXT
+#   书籍-视觉编辑2-多媒体-2026-11-26》§1.4）——本地 TXT 章节 → 素材的血统动作
+#   （from_id=`localbook:<bookId>:<n>` 虚拟标记：指向用户磁盘文件里的字符偏移，
+#   不是素材 id；正文不进素材库=引用型红线的落点）
 PROVENANCE_OPS: tuple[str, ...] = (
     "summarize", "synthesize", "generate", "book_fetch", "plugin_pipeline",
-    "published_from", "distill",
+    "published_from", "distill", "adopt",
 )
 
 # payload.meta.book schema 键（R0 定五键；R3.5 提炼批 2026-11-18 扩两键：
@@ -296,6 +300,11 @@ def validate_material(row: dict[str, Any]) -> list[str]:
         # generate/book_fetch/plugin_pipeline 同族单链形态，血统只由
         # from-article 动作写入），immutable 红线不变：其余任何 chain/
         # derived_from 组合照旧拒绝。
+        # 豁免条六（B1 本地书籍 2026-11-26，正典=《musespiral-三线扩展设计-本地
+        # TXT书籍-视觉编辑2-多媒体-2026-11-26》§1.4）：本地书选章素材——**单条
+        # adopt 链**（from_id=`localbook:<id>:<n>` 虚拟标记，指向用户磁盘文件
+        # 的章偏移而非素材 id；血统只由 localbook_service 写入）。同族单链形态，
+        # 直接加入 single_op 白名单，immutable 红线不变：其余组合照旧拒绝。
         sub_type = ""
         payload = row.get("payload")
         if isinstance(payload, dict):
@@ -307,7 +316,14 @@ def validate_material(row: dict[str, Any]) -> list[str]:
             and len(chain) == 1
             and isinstance(chain[0], dict)
             and chain[0].get("op")
-            in ("generate", "book_fetch", "plugin_pipeline", "published_from", "distill")
+            in (
+                "generate",
+                "book_fetch",
+                "plugin_pipeline",
+                "published_from",
+                "distill",
+                "adopt",
+            )
         )
         # 人物卡人工手写（无血统）合法——写入不是 derive，不写 chain
         handwritten_character = sub_type == "character" and not derived_from

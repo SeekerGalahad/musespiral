@@ -7,14 +7,22 @@ from __future__ import annotations
 
 from .layout import layout_document, load_font, relayout_vertical, wrap_text
 from .model import (
+    ARTICLE_LONG,
+    BACKGROUND_KINDS,
+    BLEND_MODES,
     ELEMENT_WHITELIST,
+    IMAGE_FITS,
+    IMAGE_MASKS,
+    PATTERN_KINDS,
     SEMANTIC_COLOR_SLOTS,
     SPECS,
     SQUARE,
     WIDE16X9,
+    Background,
     CanvasDoc,
     Element,
     TextBlock,
+    check_image_ref,
     spec_size,
     validate_doc,
 )
@@ -24,8 +32,11 @@ from .svg import render_svg
 from .templates import FONT_STEPS, HOOK_STEPS, REGISTRY, TemplateMeta, resolve, validate_params
 
 __all__ = [
-    "ELEMENT_WHITELIST", "SEMANTIC_COLOR_SLOTS", "SPECS", "SQUARE", "WIDE16X9",
-    "CanvasDoc", "Element", "TextBlock", "spec_size", "validate_doc",
+    "ARTICLE_LONG", "BACKGROUND_KINDS", "BLEND_MODES", "ELEMENT_WHITELIST",
+    "IMAGE_FITS", "IMAGE_MASKS", "PATTERN_KINDS",
+    "SEMANTIC_COLOR_SLOTS", "SPECS", "SQUARE", "WIDE16X9",
+    "Background", "CanvasDoc", "Element", "TextBlock", "check_image_ref",
+    "spec_size", "validate_doc",
     "layout_document", "load_font", "relayout_vertical", "wrap_text",
     "render_svg", "render_pillow",
     "MIN_BAR_WIDTH", "bar", "empty_state", "ring", "stat", "timeline",

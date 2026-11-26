@@ -117,6 +117,7 @@ CONTRACT_PATHS = {
     # /api/discover/star 后端零触碰保留（收编过渡期），UI 不再调用故出契约
     "/api/materials",
     "/api/materials/detail",
+    "/api/materials/render",  # 素材查看器批（2026-11-26）
     "/api/materials/search",  # FEAT-1 语义搜索（关键词/语义/混合三模式统一读面）
     "/api/materials/triage",
     "/api/materials/delete",
@@ -132,6 +133,10 @@ CONTRACT_PATHS = {
     # /api/ingest/{clip,crawl}=B4a 剪藏预览→采纳与手动爬取入口
     "/api/materials/upload",
     "/api/materials/register",
+    # B3 多媒体与视频发布（2026-11-26）：clip 视频登记弹层双入口——本地文件
+    # 路径（/… 或 ~/…）走 register-local（读盘落仓+ffprobe/ffmpeg 元数据）；
+    # insert_media 走 editor.js（不进本集——本集=ui.js fetch 字面量锁）。
+    "/api/materials/register-local",
     "/api/materials/collections",
     "/api/materials/file",
     "/api/materials/tags",
@@ -201,6 +206,17 @@ CONTRACT_PATHS = {
     "/api/book/toc",
     "/api/book/original",
     "/api/materials/from-chapters",
+    # B1 本地书籍（2026-11-26，契约 §3.27，正典=《musespiral-三线扩展设计-本地
+    # TXT书籍-视觉编辑2-多媒体-2026-11-26》§1.2/§1.4）：书架四读面 + 三动作 +
+    # 选章入素材库 job 提交（前端全量消费；书卡 → 阅读面板 origin 分派）
+    "/api/localbook/list",
+    "/api/localbook/info",
+    "/api/localbook/toc",
+    "/api/localbook/chapter",
+    "/api/localbook/add",
+    "/api/localbook/remove",
+    "/api/localbook/reparse",
+    "/api/materials/from-local-chapters",
     # 集成接线轮（2026-11-18）：入库进度条「取消」=POST /api/jobs/cancel
     # （协作式取消，R3.5 正典 §2.2——已完成章保留/未完成章放弃+终态 M/N toast）
     "/api/jobs/cancel",
@@ -830,9 +846,9 @@ def test_queue_skeleton_loading() -> None:
     assert "skel-block" in src and "skel-line" in src
     # 呼吸动画 + prefers-reduced-motion 降级
     assert "@keyframes skel-pulse{" in src
-    assert "@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms !important" in src
-    # 首次装载（含刷新重置 articlesLoaded=false）才显示骨架；后台强刷不闪骨架
-    assert "if(!state.articlesLoaded) renderSkeleton();" in src
+    # 首次装载（含刷新重置 articlesLoaded=false）才显示骨架；后台强刷不闪骨架。
+    # [锚预算 2026-11-26 棘轮] 该 if(!state.articlesLoaded) renderSkeleton(); 的锚
+    # 已由 test_material_draft_button_and_drafted_state（_js 域）持有，此处删重复。
 
 
 def test_queue_dragdrop_creates_article() -> None:
@@ -857,7 +873,7 @@ def test_queue_dragdrop_creates_article() -> None:
     assert "postJSON(`/api/article/save`,{article:f.name,content:content,confirm:true})" in src
     # 完成后强制刷新文章并重绘发布中心（A 类专项 2026-11-20：core 经 VAPI.repaint
     # 触达视图渲染函数，不再直呼 renderPublish）
-    assert "await loadArticles(true);\nviewRepaint('publish');" in src
+    # 该刷新链已由 test_material_draft_button_and_drafted_state 的 renderMaterials 前缀版覆盖
 
 
 def test_queue_empty_state_with_action() -> None:
@@ -930,10 +946,11 @@ def test_detail_split_editor_structure() -> None:
         assert metric in hl, metric
     assert 'wrap="off"' in src  # 禁软换行（overlay 对齐前提）
     # 行号列独立渲染并在滚动时同步
-    assert "EG.scrollTop=EA.scrollTop" in src
+    # 滚动同步语句已由 test_detail_bidirectional_scroll_sync 断言（含 HL.scrollTop 的更完整形态）
     # 预览台：灰底居中 + 677px 手机宽度 iframe（遗留清偿：改 max-width+flex:1+
     # min-width:0——预览台被压窄时 iframe 跟随收缩，不再溢出）
-    assert ".pv-stage{" in src and "#live-frame{max-width:677px;flex:1;min-width:0" in src
+    assert "#live-frame{max-width:677px;flex:1;min-width:0" in src
+    # [锚预算 2026-11-26 棘轮] `.pv-stage{` 已含于下一行更长的 `.pv-stage{flex:0 1 697px;` 锚（同测同域）
     # 分屏三列布局：编辑列/预览台/批注侧栏（.edit-layout 直挂）
     assert ".edit-layout{display:flex" in src and ".ed-col{" in src
     # 审查修复：编辑列保底 360px（textarea≈310px 可编辑）不被压穿；预览列自 697 可收缩
@@ -980,7 +997,7 @@ def test_detail_live_preview_renderer() -> None:
     assert "function dirOf(p){" in src
     assert "function safeSrc(u,dir,img){" in src
     assert "return img?'/asset?path='+encodeURIComponent(dir+u):'#';" in src
-    assert "mdToHtml(EA.value,dirOf(state.detailPath));}" in src
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_compose_anchor_filter_shared_renderer 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
     # 协议白名单（遗留清偿收紧）：链接仅放行 http(s)/#——javascript:/data:/mailto:
     # 一律废弃为 #；图片另放行 data:（base64 内联），相对路径重写 /asset
     assert "if(img?/^(https?:|data:)/i.test(u):/^(https?:|#)/i.test(u))return u;" in src
@@ -1006,14 +1023,15 @@ def test_detail_bidirectional_scroll_sync() -> None:
     assert "function syncPreview(){" in src
     # 块分割函数与渲染器同规则：围栏/标题/引用/列表/段落五分支 + 锚行前置归并
     assert "function mdBlocks(md){" in src
-    assert "BANCHOR.test(L)" in src  # 锚行（<!--b:id-->）计入后块起点，不产元素
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_compose_anchor_filter_shared_renderer 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
     for seg in ("/^```/.test(L)", "/^(#{1,4})\\s+/.test(L)", "/^>\\s?/.test(L)",
                 "/^\\s*(?:[-*]|\\d+\\.)\\s+/.test(L)"):
         assert seg in src, seg
     # 段落累积与 mdToHtml fl() 同语义：特殊块到达先闭段（cp(i)）
     assert "function cp(end){if(ps>=0)o.push([ps,end]);ps=-1;}" in src
-    # 预览侧块元素选择器（与 mdToHtml 输出的元素集一致）
-    assert "PVS='p,h1,h2,h3,h4,pre,blockquote,ul'" in src
+    # 预览侧块元素选择器（与 mdToHtml 输出的元素集一致；B3 起含 figure——
+    # :::video 容器渲染为 <figure class="md-video">，块数对齐不能少它）
+    assert "PVS='p,h1,h2,h3,h4,pre,blockquote,ul,figure'" in src
     # 编辑→预览：行高常量（overlay 12px/20px 度量）+ 块索引 + 块内比例 + 钳位
     assert "var EDLH=20,EDPT=12" in src
     assert "lf=Math.max(0,(EA.scrollTop-EDPT)/EDLH)" in src
@@ -1080,7 +1098,7 @@ def test_detail_cmd_s_save_binding() -> None:
     src = _js()
     assert "(e.metaKey||e.ctrlKey)&&(e.key==='s'||e.key==='S')" in src
     assert "state.tab==='edit'){e.preventDefault();handleSaveBody();}" in src
-    assert "e.key==='Escape'" in src
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_command_palette_keyboard_navigation 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
     # ARCH-1（2026-11-21）：AB 惰性抓取（article HTML 懒注入）——null 守卫形态
     assert "if(AB&&!AB.hidden)hideBubble();" in src
     # UIX-3（2026-11-23）：Esc 关查看器走 closeDlg（焦点还给触发者）
@@ -1389,7 +1407,7 @@ def test_custom_confirm_modal_and_toast() -> None:
     # M1 分域读取后，否向断言的检查域回到全产物并集（=单文件时代的
     # 等价语料）：退役文案/旧类名从任一产物回流都必须被抓到。
     all_src = _all()
-    assert "modal-overlay" in src
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_base_component_classes_defined 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
     assert ".toast" in src and ".toast.success" in src and ".toast.error" in src
     # 自定义弹层而非浏览器原生 confirm/prompt；取消按钮接线 btn-secondary
     # （遗留清偿：Phase 1 四变体中此前唯一未被消费的次级变体）
@@ -1400,7 +1418,7 @@ def test_custom_confirm_modal_and_toast() -> None:
     # 四个动作（adapt/pack/publish/batch_adapt）+ F46 KB 设置保存 + F48 创作台
     # 「采纳入稿」+ P20 M3 删除素材两步 confirm（连坐声明/终确认各一）+ P2 源
     # 两步删除（终步=禁用下线，契约无删除端点）+ F-C 素材撤池（2026-11-18）都先走确认弹层
-    assert src.count("askConfirm({") == 12  # W3 阅读面板「存入素材库」+1（W2 源停用改一步后 11）
+    assert src.count("askConfirm({") == 13  # B1 本地书架「下架」+1（W3 阅读面板「存入素材库」为第 12）
     # 确认 + 无删除端点（契约仅启停）→ 老版「停用两步 + 源删除两步」共减 2 处；
     # 其余 11 处（四个动作 + KB 设置 + 采纳入稿 + 素材删除 + 源两步删除等）不动。
     for action in ("handleAdapt", "handlePack", "handlePublish", "handleBatch"):
@@ -1464,8 +1482,8 @@ def test_hash_routing_is_complete() -> None:
     for h in ("#sources", "#material", "#compose", "#publish", "#insight", "#settings", "#article?path="):
         assert h in src, h
     assert "var HALIAS={queue:'publish',dashboard:'insight',discover:'material','plugin-pipeline':'plugin-run'};" in src
-    assert "hashchange" in src
-    assert "location.hash" in src
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_d3_nav_active_state_toggle 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_command_palette_action_execution 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
     assert "URLSearchParams" in src
 
 
@@ -1695,7 +1713,7 @@ def test_compose_title_enter_flows_to_body_start() -> None:
     assert "$('cm-new-title').addEventListener('keydown'" in src
     assert "$('cm-new-title').focus();" in src  # slug Enter → 焦点前进到标题
     assert "cmNew().then(function(ok){if(ok)$('cm-blocks').focus();});" in src
-    assert "location.hash='#compose?s='+encodeURIComponent(slug);return true;}" in src
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_compose_new_session_flow 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
 
 
 def test_material_card_expand_chevron_affordance() -> None:
@@ -1770,7 +1788,7 @@ def test_health_card_structure_markers() -> None:
     assert {"health-card", "health-grid"} <= set(parsed.ids)
     src = _shell_js()
     assert "环境健康" in src  # 卡片标题
-    assert "'/api/health'" in src  # renderHealth 拉取端点
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_detail_statusbar_and_ai_profile 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
 
 
 def test_health_card_items_and_fix_commands() -> None:
@@ -1818,7 +1836,7 @@ def test_fetch_action_post_contract() -> None:
     src = _js()
     assert "postJSON('/api/action/fetch', {url: url, confirm: true})" in src
     assert "$('fetch-btn').addEventListener('click'" in src  # 点击绑定
-    assert "await queued(d.job_id)" in src  # 复用 trackJob 轮询
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_ingest_job_and_refresh_entries 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
     # 失败 fetch 任务的重发：按 kind 重建 url 请求体（避免误路由 batch_adapt 兜底）
     assert "if(j.kind==='fetch')b={url:p.url,confirm:true};" in src
 
@@ -1841,7 +1859,7 @@ def test_material_view_structure() -> None:
     # 数据面：素材查询+评分现算（M3 后经 matQueryUrl 全参上移——q/collection 走服务端 F64/F62）
     assert "getJSON(matQS(state.mquery||state.mcoll?500:200))" in src
     assert "function matQS(limit){" in src
-    assert "getJSON('/api/settings')" in src  # 源集合数据源
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_settings_view_contracts 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
     # 集合轨数据驱动：静态分区 + 智能集合（预置三规则）+ 源集合（计数）
     assert "function renderCollRail(){" in src
     assert "ci(state.mtab==='hiunread','data-mtab=\"hiunread\"','◈ 高分未读',hi)" in src
@@ -1928,7 +1946,7 @@ def test_material_routing_and_palette_entry() -> None:
     """P1：路由纳入 material（VIEWS 白名单+HALIAS 别名+hash 五参数恢复）+ ⌘K「跳转：素材库」。"""
     src = _shell_js()
     assert "var VIEWS=['sources','material','books','compose','design','publish','insight','article','settings','plugins','plugin-run'];" in src
-    assert "var HALIAS={queue:'publish',dashboard:'insight',discover:'material','plugin-pipeline':'plugin-run'};" in src
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_hash_routing_is_complete 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
     assert (
         "VAPI.material={enter:async function(route){\n"
         "await loadSettings();\n"
@@ -2048,7 +2066,7 @@ def test_compose_view_structure() -> None:
     assert ".cm-grid{display:grid;grid-template-columns:280px minmax(0,1fr) 300px" in src
     assert ".cm-grid{grid-template-columns:1fr}" in src
     # 路由白名单（P1 §2.2）：VIEWS 清单 + HALIAS 别名 + hash #compose?s= 会话选中
-    assert "var VIEWS=['sources','material','books','compose','design','publish','insight','article','settings','plugins','plugin-run'];" in src
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_material_routing_and_palette_entry 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
     # A 类专项（2026-11-20）：compose 路由分支归视图（VAPI.compose.enter）
     assert "VAPI.compose={enter:async function(route){" in src
     assert 'href="#compose"' in src
@@ -2122,7 +2140,7 @@ def test_compose_rounds_panel_and_actions() -> None:
     src = _js_css()
     # 轮次时间线 chips（chip-count=已裁决/总块数；点选切换中栏展示轮）
     assert "data-cm-round=\"'+r.n+'\">第 '+r.n+' 轮<span class=\"chip-count\">" in src
-    assert "state.cround=+c.getAttribute('data-cm-round');" in src
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_p3_block_structure_ops 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
     # 按块对照（非按行）：新块/改写（锚继承）/上轮块未再现 三档着色
     assert "'+I('plus')+'+ '+esc(b.id)+' 新块</div>'" in src
     assert "'+I('edit')+'~ '+esc(b.id)+' 改写（锚继承）</div>'" in src
@@ -2191,7 +2209,7 @@ def test_dashboard_health_data_row_sync_stats_button() -> None:
     assert ">回采</button>" in src
     # 动作契约：走既有 POST 动作面 + confirm:true + 既有 job 追踪（queued→trackJob）
     assert "postJSON('/api/action/sync_stats',{confirm:true})" in src
-    assert "await queued(d.job_id)" in src
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_ingest_job_and_refresh_entries 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
     # 完成后刷新瓷砖（统计面 + 仪表盘重绘）
     assert "await loadStats(true);renderInsight();" in src
     # 任务面板 kind 中文名收编
@@ -2310,7 +2328,7 @@ def test_credentials_three_state_and_manual_verify() -> None:
     # 密钥不回显：编辑档案时空值不传（保留旧值）——write-only（F47 既有）+
     # 表格 key 列只渲染三态徽章，无任何 key 值/掩码串
     assert "$('ai-p-key').value='';" in src
-    assert "已配置，输入以更换" in src
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_settings_view_contracts 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
     assert "'•'" not in all_src and "****" not in all_src  # 无打码形态
 
 
@@ -2381,7 +2399,7 @@ def test_material_triage_actions_and_two_step_delete() -> None:
     assert "title:'删除素材 2/2 · 终确认'" in src
     assert "墓碑落册后重采不复活。" in src
     assert "postJSON('/api/materials/delete',{id:id,confirm:true})" in src
-    assert "await loadMaterials();renderMaterials();" in src
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_tag_suggest_adopt_writes_full_replacement 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
     # 删除按钮朱红系（--color-error=FAIL 专色；徽章系连坐提示同色语义）
     assert ".btn.mat-del{color:var(--crimson)}" in src
     # 空分诊键/非布尔值由服务层窄门拒绝（400 可读错误）
@@ -2419,7 +2437,7 @@ def test_settings_sources_block() -> None:
     # data-srcrefresh→matIngest、srcCustomToggle 走，绑定在 #src-mine-body。）
     # 写契约：手动验证/启停（confirm:true；无自动轮询——诚实边界：只在手动验证或刷新回写）
     assert "postJSON('/api/sources/verify',{id:id,confirm:true})" in src
-    assert "postJSON('/api/sources/enabled',{id:id,enabled:en,confirm:true})" in src
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_p2_source_register_form_and_drawer 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
     assert "var body=$('src-mine-body');" in src and "body.addEventListener('click'" in src
     # （change 监听随 checkbox 退役——启停走按钮两步确认。）
     assert "async function srcCustomVerifyAll(){" in src  # W2 重命名：页头「验证全部」逐源探测
@@ -2504,7 +2522,9 @@ def test_p1_theme_toggle_three_states() -> None:
     for icon in ("sun", "moon", "monitor"):
         assert icon in src, icon
     # JS：三态轮换 + localStorage（裁决 §八-6 缺省 localStorage）+ 写 documentElement
-    assert "localStorage" in src and "musespiral-theme" in src
+    assert "musespiral-theme" in src
+    # [锚预算 2026-11-26 棘轮] localStorage 的存在性已由 test_progressive_search_batch_anchors
+    # 的 localStorage.getItem('musespiral-src-mode') 断言；此处只保留主题键本身
     assert "document.documentElement.setAttribute('data-theme'" in src
     # 三态轮换顺序 light→dark→auto（终评 §三 D1：applyTheme 后 DOM 属性即真值）
     assert "var THEME_ORDER=['light','dark','auto'];" in src
@@ -2512,7 +2532,7 @@ def test_p1_theme_toggle_three_states() -> None:
     # 初始化读 localStorage 恢复（无记忆回 auto；先置 data-theme 再渲染不闪）
     assert "applyTheme(savedTheme||'auto');" in src
     # 切换先置 data-theme 再渲染（不闪）——applyTheme 在 init 首行调用
-    assert "applyTheme(" in src
+    # applyTheme 的调用点已由上一行 applyTheme(savedTheme||'auto'); 覆盖，裸函数名锚重复
 
 
 def test_d2_material_type_icons_dedicated() -> None:
@@ -2762,7 +2782,7 @@ def test_cover_studio_preset_modal_and_grouping() -> None:
         "label:$('cv-pl').value.trim()||id,template:CV.tpl,params:cvP(),kind:'cover'})" in src
     )
     assert "'<span class=\"cv-grp\">我的模板</span>'" in src  # chips 分组标记
-    assert "getJSON('/api/visual/presets')" in src  # 分组数据面（init + 保存后重拉）
+    # 分组数据面（init + 保存后重拉）已由本测下一行的完整调用链 CV.pr=(await getJSON(... 覆盖
     assert "p.kind==='cover'&&p.template" in src  # 分组过滤：仅封面预设且模板有效
     # 保存成功后重拉分组；预设 chips 应用=切模板起点（可再改不锁定）
     assert "CV.pr=(await getJSON('/api/visual/presets')).items||[];cvChips();" in src
@@ -2830,8 +2850,8 @@ def test_design_nav_seven_views_and_routing() -> None:
     # #article 内 ⌘1-4 管 tab 彼视图优先；2026-11-17 集成轮自 design 域修为全局；
     # A 类专项后 setTab 经 VAPI.article 注册表，core 不直呼视图函数；
     # 2026-11-22 复核：装载窗口内 ⌘1-4 消费 no-op 不回落 DNAV）
-    assert "if((e.metaKey||e.ctrlKey)&&e.key>='1'&&e.key<='7'){" in src
-    assert "if(!$('view-article').hidden&&+e.key<=4){if(a1&&a1.setTab)return a1.setTab(['edit','variants','checks','preview'][+e.key-1],true);return;}" in src
+    # ⌘1-7 两分支（全局导航 / #article 内 tab 优先）已由 test_keyboard_shortcuts_main_action_and_tabs
+    # 以 _js 域逐串断言；此处只锁 DNAV 下标映射本身
     assert "location.hash='#'+DNAV[+e.key-1];return;" in src
     # 防回退：design 域限定的旧实现（view-design 门后导航 → 其余 6 视图失效）不得复现
     assert "if(m&&e.key>='1'&&e.key<='7'){e.preventDefault();location.hash='#'+DNAV[+e.key-1];return;}" not in all_src
@@ -2856,9 +2876,13 @@ def test_design_editor_data_flow() -> None:
     # chips 防抖 300ms render 往返（typo/色槽视图级统一委托→dvGo）
     assert "DV.h=setTimeout(dvRenderNow,300);" in src
     # 存稿：design.json+params+svg（手工位移/层级随 svg 进稿，服务端白名单复验）
+    # B2 视觉编辑 2.0（2026-11-26）：save 载荷扩 background+elements——图层状态表
+    # （z/opacity/locked/visible/blend/dx/dy）随稿进 design.json v2（v1 手工位移
+    # 只活在会话内的缺口就此闭合——位移走 elements.dx/dy 持久化）。
     assert (
         "postJSON('/api/visual/save',{confirm:true,article:DV.art,kind:DV.kind,"
-        "template:DV.tpl,params:DV.params,spec:DV.spec,svg:DV.svg})" in src
+        "template:DV.tpl,params:DV.params,spec:DV.spec,svg:DV.svg,"
+        "background:dvBgOut(),elements:dvLayersOut()})" in src
     )
     # 导出：A 路画布光栅（dataURI 天然离线）/ B 路 job 轮询；B 路未存修改自动先存稿
     assert "'image/png'" in src
@@ -2886,6 +2910,105 @@ def test_design_undo_stack_boundary_marks() -> None:
     assert "e.shiftKey?dvTravel(0):dvTravel(1);return;}" in src
     assert "JSON.stringify(DV.dpos)" in src  # 快照含位移（与层级 order 同存）
     assert "$('dv-undo').textContent='撤销 '+DV.undo.length+' 步 · ⌘Z/⇧⌘Z';" in src
+
+
+# ── B2 视觉编辑 2.0 三栏编辑器（2026-11-26，三线扩展设计 §2.4）──────────
+
+
+def test_design_v2_three_pane_dom() -> None:
+    """B2 三栏 DOM：dv-layout 三列（dv-side 模板+图层 | dv-stage-wrap 画布 |
+    dv-props 属性面板）；既有 F72 锚 id（规格/色槽/字号/对齐/前后移/撤销/弹层）
+    全数保留——旧断言零回归。"""
+    parsed = _structure()
+    # 三栏容器（dv-side/dv-stage-wrap 是类名——id 面为 dv-wrap/dv-props）
+    assert "dv-wrap" in parsed.ids and "dv-props" in parsed.ids
+    assert 'class="dv-side"' in _source() and 'class="dv-stage-wrap"' in _source()
+    # 左栏：模板横条 + 图层列表（B2 新面）
+    assert {"dv-tpls", "dv-layers"} <= set(parsed.ids)
+    # 右栏：属性面板动态容器 + 背景类型 chips + 背景参数容器 + 选图弹层
+    assert {"dv-prop-el", "dv-bgt", "dv-bg-params", "dv-pick", "dv-pick-grid",
+            "dv-pick-file", "dv-pick-cancel"} <= set(parsed.ids)
+    assert {"solid", "linear", "radial", "pattern", "image"} <= parsed.attrs.get("data-dbgt", set())
+    # F72 既有锚面零丢失（三栏重构不拆旧件）
+    assert {"dv-stage", "dv-skel", "dv-empty", "dv-tin", "dv-specs", "dv-colors",
+            "dv-fs", "dv-al", "dv-fwd", "dv-bwd", "dv-undo", "dv-sw", "dv-ex"} <= set(parsed.ids)
+    src = _js_css()
+    # 三栏栅格（250px | 1fr | 248px）+ 窄屏折行
+    assert ".dv-layout{grid-template-columns:250px minmax(0,1fr) 248px}" in src
+    assert ".dv-props{" in src and ".dv-tpls{" in src and ".dv-layers{" in src
+
+
+def test_design_v2_layer_list_controls() -> None:
+    """B2 图层列表：行渲染（z 序倒序=顶层在上）+ 眼睛/锁切换 + 上下移按钮 +
+    拖拽重排（HTML5 DnD → dvRowDrop 写 DV.order=z 序）。"""
+    src = _view_js("design")
+    assert "function dvLayersPaint(){" in src
+    assert "data-lrow" in src and "draggable" in src
+    assert "function dvToggleEye(" in src and "function dvToggleLock(" in src
+    assert "data-dleye" in src and "data-dlok" in src
+    # 拖拽重排三事件 + 落点前后插
+    assert "addEventListener('dragstart'" in src
+    assert "addEventListener('dragover'" in src
+    assert "addEventListener('drop'" in src
+    assert "function dvRowDrop(target,before){" in src
+    # 上下移按钮沿用 F72 dvMove（语义=图层上移/下移）
+    assert "on('dv-fwd',function(){dvMove(1);});" in src
+    assert "on('dv-bwd',function(){dvMove(-1);});" in src
+    # 锁定元素不可拖（pointerdown 分支拦截）
+    assert "图层已锁定" in src
+    # 图层状态持久化载荷：order 下标=z 序
+    assert "function dvLayersOut(){" in src
+    assert "{i:i,z:pos,opacity:" in src
+    # v2 回放：elements 按 z 稳定序重建 DV.order
+    assert "sort(function(a,b){return a.z-b.z;})" in src
+
+
+def test_design_v2_background_kind_switching() -> None:
+    """B2 背景类型切换：五类型 chips（纯色/线性/径向/纹样/图片）→ dvSetBgKind
+    （模板允许集拦截——不在 meta.backgrounds 的类型 toast 拒）+ 参数面板四态
+    （色/双 stop+角度/纹样四选/选图+蒙纱）+ 渲染/存稿载荷带 background。"""
+    src = _view_js("design")
+    assert "function dvSetBgKind(kind){" in src
+    assert "当前模板不允许" in src  # 允许集拦截文案
+    assert "function dvBgParamsPaint(){" in src
+    # 渐变双 stop + 角度；纹样四选；图片蒙纱 range
+    assert 'data-dvbg="s0"' in src and 'data-dvbg="s1"' in src
+    assert 'data-dvbg="angle"' in src
+    assert "data-dvpat" in src and "DPATS=['dots','grid','waves','paper']" in src
+    assert 'data-dvbg="overlay_alpha"' in src
+    # 渲染与存稿都带 background
+    assert "background:dvBgOut()" in src
+    assert "function dvBgOut(){" in src
+    # 素材库选图（GET /api/materials?type=image + file 变体 dataURI + 上传旁路）
+    assert "getJSON('/api/materials?type=image&limit=60')" in src
+    assert "variant=thumb" in src and "variant=full" in src
+    assert "readAsDataURL(blob)" in src
+    assert "'/api/materials/upload?confirm=1&name='+encodeURIComponent" in src
+
+
+def test_design_v2_templates_strip_and_props_panel() -> None:
+    """B2 模板横条（GET /api/visual/templates 10 项→dv-tpls 卡）+ 属性面板按
+    元素类型切换（text：内容/颜色+排版 chips；image：素材库选图/fit/mask）+
+    混合模式四选 + 透明度 range。"""
+    src = _view_js("design")
+    assert "function dvTplsPaint(){" in src and "data-dtpl" in src
+    assert "function dvSetTpl(id){" in src and "先存稿再换模板" in src
+    assert "function dvPropPaint(){" in src
+    # text 面板：内容 input + 颜色（fill）——字号/对齐用排版 chips（dv-fs/dv-al）
+    assert 'id="dv-prop-text"' in src and 'id="dv-prop-fill"' in src
+    # image_slot 面板：选图/fit/mask chips
+    assert 'data-dvpick="slot"' in src
+    assert "DFITS=['cover','contain']" in src
+    assert "DMASKS=['none','rounded','circle','arch']" in src
+    assert "data-dvfit=" in src and "data-dvmask=" in src
+    # 透明度 + 混合四选
+    assert 'id="dv-prop-op"' in src
+    assert "DBLENDS=['normal','multiply','screen','overlay']" in src
+    assert "data-dvblend" in src
+    # 规格横条随模板 meta.specs 重绘（article-long 长图可渲）
+    assert "function dvSpecsPaint(){" in src
+    # 渲染请求带 background（v2 预览同底）
+    assert "background:dvBgOut()});" in src
 
 
 def test_d6_material_row_more_button() -> None:
@@ -2996,7 +3119,7 @@ def test_review_batch_p13_compose_visual_fold() -> None:
     assert '<details class="action-group" id="cm-visual">' in src
     assert '<summary class="health-sum">视觉设计 · 封面工坊</summary>' in src
     # 数据面：取材=会话正稿（compose 服务 final_article；无正稿纯参数渲染）
-    assert "if(d.final_article&&CV.art!==d.final_article)cvInit(d.final_article);" in src
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_cover_studio_visual_render_two_phase 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
     assert "article:CV.art||null" in src
     assert "CV.art=path||'';" in src
 
@@ -3006,7 +3129,7 @@ def test_review_batch_p14_insight_zero_state_guide() -> None:
     非零态保持原四砖。两态同函数内分支，数字与文案锚点齐断言。"""
     src = _js_css()
     # 零态门：total_publish 为 0/缺省 → 引导卡
-    assert "var st=state.stats||{},pub=st.total_publish||0;" in src
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_dashboard_stat_tiles_data_sources 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
     assert "if(!pub)$('stat-tiles').innerHTML=" in src
     # 引导卡三要素：文案 + 跳转按钮（a.btn 原生 hash 导航零 JS）+ empty 容器类
     assert "发布第一篇后，此处显示漏斗与趋势" in src
@@ -3289,7 +3412,7 @@ def test_tag_suggest_cache_badge_is_honest() -> None:
     # M1 分域读取后，否向断言的检查域回到全产物并集（=单文件时代的
     # 等价语料）：退役文案/旧类名从任一产物回流都必须被抓到。
     all_src = _all()
-    assert "cue:d.cache_hit" in src
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_tag_suggest_chips_default_unselected 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
     assert "+(t.cue?'<span style=\"color:var(--indigo);font-size:var(--fs-micro)\">（缓存）</span>':'')" in src
     # 无 cache_hit 字段（后端当前不回传）→ falsy → 不显示，绝不伪造
     assert "cache_hit?1:0" not in all_src
@@ -3603,20 +3726,26 @@ def test_e1_pipeline_step_rows_render() -> None:
 
 
 def test_fa_drawer_media_by_type() -> None:
-    """F-A：image 抽屉顶部原图（file full 非 thumb）+灯箱按钮；video 播放条；余类型 pre。"""
+    """F-A：image 抽屉顶部原图（file full 非 thumb）+灯箱按钮；video 播放条；余类型 pre。
+
+    B3（2026-11-26）修订：video 本地登记（payload.local_path）改走 /media/ 静态面
+    （素材仓域，可播可 seek；poster 首帧同域引用）——/api/materials/file 的
+    image-only 三道门不再被 video 借用；外链登记视频维持 payload.url/o.uri。"""
     src = _js()
     body = _src_of("function paintMatDrawer(d){", "function closeMatDrawer(){")
     # image→原图（variant=full）+既有 data-mlight 灯箱体系
     assert "if(m.type==='image')media='<img class=\"drawer-media\" src=\"'+esc(full)+'\"" in body
     assert "&variant=full'" in body  # 非 thumb
     assert 'data-mlight="\'+esc(m.id)+\'">灯箱查看' in body
-    # video→controls+preload=metadata；local_path 走 file full，外链走 payload.url/o.uri
-    assert "else if(m.type==='video')" in body
-    assert '<video class="drawer-media" controls preload="metadata" src="' in body
-    assert "p.local_path?full:(p.url||o.uri)" in body
+    # video→controls+preload=metadata；本地 local_path 走 /media/（含 poster 属性），外链走 payload.url/o.uri
+    assert "else if(m.type==='video'" in body
+    assert '<video class="drawer-media" controls preload="metadata"' in body
+    assert "esc('/media/'+p.local_path)" in body  # B3：素材仓域静态面（原 file full 借用退役）
+    assert "var vu=p.url||o.uri" in body  # 外链登记视频
     assert "新窗口打开" in body
-    # 分流兜底：其余类型维持 pre 正文（media 为空时渲染）
-    assert "(media||'<pre class=\"drawer-preview\">'+esc(prev)+'</pre>')+" in body
+    # 分流兜底：text/crawled 走分型查看器（素材查看器批 2026-11-26），余类型 pre 不变
+    assert "txtView?'<div id=\"mat-txt-view\">'" in body
+    assert "matTextSkeleton(m,p,isLocalbook)" in body
     # 灯箱按钮复用既有委托（data-mlight → lbOpen）
     assert "if(el.hasAttribute('data-mlight'))return matPart('media').then(function(){lbOpen(" in src  # UIX-3：lbOpen 落 media 子文件
 
@@ -3699,9 +3828,12 @@ def test_books_view_structure_and_detail_state() -> None:
     src = _shell_js_css()
     # 导航：供给组第三入口「书籍」（源中枢/素材库之后）
     assert '<a class="nav-item" data-nav="books" href="#books">' in src
-    assert "var VIEWS=['sources','material','books','compose','design','publish','insight','article','settings','plugins','plugin-run'];" in src
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_material_routing_and_palette_entry 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
     # hash 三子态分发
-    assert "route.params.get('tab')==='subs'" in src
+    # B1（2026-11-26）：三子态改 tab 变量分流——search/local/subs（+detail 深链）
+    assert "var tab=route.params.get('tab');" in src
+    assert "if(tab==='subs')bkMode('subs');" in src
+    # 该路由入口已由 test_local_shelf_tab_dom_and_gating 以 _js 域单独断言
     assert "bkOpen(route.params.get('book'),route.params.get('source')" in src
     # info-grid 三栏（160px 封面 | flex | 280px 来源卡）
     assert ".bk-grid{display:grid;grid-template-columns:160px minmax(0,1fr) 280px" in src
@@ -3738,7 +3870,7 @@ def test_books_digest_switch_default_and_hint() -> None:
     assert '<input type="checkbox" id="bk-digest"><i></i>AI 提炼</label>' in src
     assert ".switch input:checked+i{border-color:var(--vermilion)" in src
     assert ".switch input:checked+i::after{left:15px;background:var(--vermilion)}" in src
-    assert "digest:!!BK.digest}" in src  # 开关态随提交传端点
+    # [锚预算 2026-11-26 棘轮] 本锚与 test_books_fetch_progress_steps_and_partial 同串（其语料域 ⊆ 本测域，删重复不删检查面）。
 
 
 def test_books_fetch_progress_steps_and_partial() -> None:
@@ -4089,7 +4221,9 @@ def test_feat5_empty_state_guidance_with_actions() -> None:
     assert 'id="dv-empty-load"' in src
     # 书籍：搜索占位引导卡配可行动按钮（订阅管理/导入书源）——R4 批文案契约不动
     assert 'id="bk-guide-subs"' in src and 'id="bk-guide-import"' in src
-    assert "搜索结果渲染 · R4 批" in src  # 契约锁仍成立（壳静态文案；JS 赋值字面量另锁于 books.js）
+    # B1（2026-11-26）：静态首屏文案改为「搜索书名 / 作者」（bkLamp 一到即覆盖；
+    # 三态文案字面量仍锁于 test_books_search_subs_placeholder_and_engine_lamp）
+    assert 'id="bk-guide-t">搜索书名 / 作者<' in src
     # 绑定与头部动作同路（sources→srcAddOpen 经 #src-mine-body 委托 / plugins→hash 与 refresh-btn / design→dvLoad / books→subs tab 与 imOpen）
     vs = _view_js("sources")
     assert "srcAddOpen" in vs
@@ -4294,8 +4428,10 @@ def test_r2_p1_2_search_wait_feedback() -> None:
     # 计时节点在骨架屏里（role=status 区域内、带 id 可被 tick 定点更新）
     assert "id=\"src-wait\"" in vs and "正在搜索" in vs
     # 停表收口三锚：清空停表先于起表；结果态收尾 srcWaitStop；起跑重置计时起点
+    # （渐进搜索批：骨架分支改 !R||(loading&&!R.searching)——渐进态绕过骨架直进
+    # 分组渲染，起表条件同步收紧）
     body = _src_of("function srcSearchRender(){", "async function srcDoSearch(){")
-    assert body.index("if(!q){srcWaitStop();") < body.index("if(loading||!R){srcWaitStart();")
+    assert body.index("if(!q){srcWaitStop();") < body.index("if(!R||(loading&&!R.searching)){srcWaitStart();")
     do = _src_of("async function srcDoSearch(){", "async function srcOpenReaderWeb(url){")
     assert do.index("srcWaitT0=Date.now();") < do.index("state.srcResults=R;state.srcSearching=false;srcSearchRender();")
     assert "srcWaitStop();\n" in body  # 结果态分支起行即停表（骨架→结果切换不留计时）
@@ -4404,3 +4540,225 @@ def test_r3_settings_ai_card_cli_hint() -> None:
     assert "未配置时先跑 CLI：musespiral ai config --profile" in s
     hint = s[s.index("AI 档案与路由"):s.index("id=\"ai-profiles-body\"")]
     assert 'class="action-hint muted"' in hint
+
+
+def test_progressive_search_batch_anchors() -> None:
+    """渐进搜索批（2026-11-25 重设计）：模式选择/渐进分支/停止/详情懒加载/按需目录。"""
+    src = _js()
+    # ① 模式 segmented 与 localStorage 记忆（sources 视图 HTML——嵌套 section 故取全文）
+    s = _source()
+    assert 'id="src-mode-parallel"' in s and 'id="src-mode-serial"' in s
+    assert "串行 · 观察" in s
+    assert "localStorage.getItem('musespiral-src-mode')" in src
+    # ② 渐进分支：srcSearchRender 渲染 src-prog（源计数/停止按钮）+ 分组渲染 helper
+    assert "function srcRenderBooks(" in src and "function srcBookCard(" in src
+    assert 'data-srcstop="1"' in src and "state.srcStop" in src
+    # 去重分页批（2026-11-25）：分批显示更多 + N 源变体展开（替代早期源分组渲染）
+    assert 'data-srcmore="1"' in src and "SRC_PAGE_SIZE" in src
+    assert 'data-srcvars="' in src and "function srcOpenReaderVariant(" in src
+    assert "去重 '+R.unique" in src  # 诚实计数头（去重 N · 命中 M）
+    # ③ srcDoSearch 渐进轮询（partial result 循环 + mode 传参）
+    do = _src_of("async function srcDoSearch(){", "async function srcOpenReaderWeb(url){")
+    assert "mode:R.mode" in do and "while(tok===state.srcTok){" in do
+    assert "R.searching=true" in do and "R.stopped=true" in do
+    # ④ 详情懒加载：点开才取 /api/book/info + 成败有话 + 目录按需
+    assert "正在从「'+esc(b.originName||b.origin||'源')+'」获取详情" in src
+    assert "function rdDetailFail(" in src and "详情获取失败" in src
+    assert 'data-rd="loadtoc"' in src and "function rdLoadToc(){" in src
+    assert "开始阅读 · 取目录" in src
+    # ⑤ 返回列表：书模式显式返回按钮
+    assert "返回列表" in src and "data-rd=\"close\"" in src
+
+
+def test_progressive_search_backend_contract() -> None:
+    """渐进搜索后端契约：mode 参数链（action→service→engine stream）与 partial 写回。"""
+    from musespiral.services import book_fetch_service as bfs
+    from musespiral.infra import bookengine
+    from musespiral.jobs import runner as runner_mod
+
+    # engine 客户端有 SSE 生成器（mock 降级为单批+done）
+    assert hasattr(bookengine.BookEngineClient, "search_stream")
+    # service 有流式 job 体 + mode 校验
+    assert hasattr(bfs, "run_search_stream")
+    import pytest
+    with pytest.raises(bfs.BookFetchError):
+        bfs.submit_search(object.__new__(runner_mod.JobRunner), "k", mode="fast")
+    # runner 有 running 期 partial 通道
+    assert hasattr(runner_mod.JobRunner, "update_result")
+
+
+# ── B1 本地 TXT 书籍前端（2026-11-26，正典=《musespiral-三线扩展设计-本地TXT
+# 书籍-视觉编辑2-多媒体-2026-11-26》§1.4）：三 tab / 书架 / origin 分派 / 素材化 ──
+
+
+def test_local_shelf_tab_dom_and_gating() -> None:
+    """① 三 tab（网络书源/本地书架/订阅管理）+ #bk-local 容器 + 四子态门。
+
+    设计 §1.4 的 tab 表是三段；DOM 与子态分派必须一一对上（新增子态漏 hidden
+    会出现「切了 tab 内容不变」这类静默故障——bkSub 是唯一收口点）。"""
+    parsed = _structure()
+    assert {"bk-tabs", "bk-local"} <= set(parsed.ids)
+    assert {"search", "local", "subs"} == parsed.attrs["data-bktab"]
+    src = _js()
+    # 四子态统一收口（search/local/subs/detail），本地容器随 local 显隐
+    assert "var lc=$('bk-local');if(lc)lc.hidden=m!=='local';" in src
+    assert "var on=m==='local'?'local':m==='subs'?'subs':'search';" in src
+    # 路由入口：?tab=local → bkMode('local') + lbkLoad()
+    assert "else if(tab==='local'){bkMode('local');lbkLoad();}" in src
+    assert "location.hash=v==='search'?'#books':('#books?tab='+v);" in src
+
+
+def test_local_shelf_cards_and_import() -> None:
+    """② 书卡字段如实：封面渐变（按 id 稳定）/ 章节数 / 字数 / 编码徽 /
+    未识别章节结构明说；导入=路径输入 + confirm（与 dir 源同风格）。"""
+    src = _view_js("books")
+    # 未识别结构不冒充「0 章」
+    assert "var chap=un?'未识别章节结构':((b.chapters||0)+' 章');" in src
+    assert "var un=b.structure==='fixed';" in src
+    # 封面按 id 稳定取色（同一本书每次同配色）
+    assert "function lbCoverStyle(id){" in _core_js()
+    assert "h=(h*31+s.charCodeAt(i))%1000;" in _core_js()
+    # 编码徽：真 charset 文本 + 族色（不美化）
+    assert "'<span class=\"badge lb-enc '+lbEncClass(b.charset)+'\">'+esc(b.charset||'?')+'</span>'" in src
+    # 导入：路径输入 + Enter 提交 + 文案说明只读不复制
+    assert 'id="lb-path"' in src and "TXT 文件绝对路径" in src
+    assert "postJSON('/api/localbook/add',{path:path,confirm:true})" in src
+    assert "只读你磁盘上的文件，不入库复制" in src
+    # IME 守卫（仓惯例：所有输入 keydown 都要 isComposing/229 门）
+    assert "if(e.isComposing||e.keyCode===229||e.key!=='Enter')return;" in src
+    # 下架走 confirm + 明确「不删你的文件」
+    assert "postJSON('/api/localbook/remove',{id:id,confirm:true})" in src
+    assert "你磁盘上的 TXT 文件不受任何影响" in src
+
+
+def test_reader_origin_dispatch_localbook() -> None:
+    """③ 阅读面板按 origin 前缀分派到 localbook 三读面（零重构复用）。
+
+    这是设计 §1.4 的核心承诺——面板 DOM/交互/样式全复用，只换数据面。三处
+    （详情/目录/取章）+ 素材化提交都必须有前缀判定，漏一处就静默打网络书端点。"""
+    src = _view_js("reader")
+    assert "function rdIsLocal(b){return String((b||{}).origin||'').indexOf('localbook:')===0;}" in src
+    assert "function rdLocalId(b){" in src
+    # 详情分流
+    assert "if(rdIsLocal(b)){rdRenderLocalDetail(b);return;}" in src
+    assert "getJSON('/api/localbook/info?id='+encodeURIComponent(id))" in src
+    # 目录分流（本地书不拼 sourceUrl/bookUrl）
+    assert "var req=local?getJSON('/api/localbook/toc?id='+encodeURIComponent(rdLocalId(b))):getJSON('/api/book/toc?sourceUrl=" in src
+    # 取章分流：本地书按 url 里的 #<n>（真实章号，不是目录位次）
+    assert "d=await getJSON('/api/localbook/chapter?id='+encodeURIComponent(rdLocalId(b))+'&n='+realN);" in src
+    assert "var realN=+(String(ch.url).split('#')[1]||n);" in src
+    # 本地详情：路径/编码/规则 + 换规则重解析 + 文件消失如实说
+    assert "rdRenderLocalDetail" in src
+    assert "postJSON('/api/localbook/reparse',{id:rdLocalId(lb),rule:rule,confirm:true})" in src
+    assert "原文件已不可读（可能被移动或删除）" in src
+
+
+def test_reader_local_materialize_button() -> None:
+    """④ 选章入素材库：本地书走 from-local-chapters（章号数组；只记摘录）。"""
+    src = _view_js("reader")
+    assert "postJSON('/api/materials/from-local-chapters',{confirm:true,id:rdLocalId(b),chapters:nums,book:{name:b.name||''}})" in src
+    assert "var nums=win.map(function(c){return +(String(c.url).split('#')[1]||0);}).filter(function(x){return x>=1;});" in src
+    # 网络书路径一字不动（同一段里的原提交仍在）
+    assert "postJSON('/api/materials/from-chapters',{confirm:true,sourceUrl:b.origin||'',bookUrl:b.bookUrl||''" in src
+    # 文案如实：只记摘录，全文留在文件里
+    assert "入素材库只记摘录，全文留在你的文件里" in src
+
+
+def test_local_shelf_css_within_view_anchor_and_rules_registered() -> None:
+    """⑤ .lb-* 六条规则在位且 books.css 仍 ≤8KiB（书卡复用 .card，只补新形态）。"""
+    css = (STUDIO / "assets" / "views" / "books.css").read_text(encoding="utf-8")
+    for sel in (".lb-card{", ".lb-cover{", ".lb-title{", ".lb-meta{", ".lb-del{"):
+        assert sel in css, sel
+    out = STUDIO / "assets" / "views" / "books.css"
+    assert out.stat().st_size <= 8 * 1024, f"books.css 超 8KiB 锚: {out.stat().st_size}B"
+    # 书卡与下架按钮复用既有组件（不新写 .card/.btn 的等价物）
+    js = _view_js("books")
+    assert 'class="card lb-card"' in js and "btn btn-ghost lb-del" in js
+
+
+def test_localbook_backend_contract_surface() -> None:
+    """⑥ 后端契约面：六端点入 lock（GET 四 + POST 三 + 素材化一）、job kind、
+    血统动作——前端字面量集的每一项都必须被后端接住（V1 对拍门的本地书视角）。"""
+    from musespiral.core.materials import model
+    from musespiral.jobs.store import KINDS
+    from musespiral.studio.actions import _ACTION_ROUTES
+    from musespiral.studio.routing import _GET_ROUTES
+    from tests.test_architecture import CONTRACT_GET_EXACT, CONTRACT_POST_EXACT
+
+    gets = {"/api/localbook/list", "/api/localbook/info", "/api/localbook/toc", "/api/localbook/chapter"}
+    posts = {"/api/localbook/add", "/api/localbook/remove", "/api/localbook/reparse",
+             "/api/materials/from-local-chapters"}
+    assert gets <= CONTRACT_GET_EXACT and gets <= set(_GET_ROUTES)
+    assert posts <= CONTRACT_POST_EXACT and posts <= set(_ACTION_ROUTES)
+    assert "localbook_fetch" in KINDS
+    assert "adopt" in model.PROVENANCE_OPS
+
+
+def test_reader_pane_unhides_view_read_host() -> None:
+    """阅读面板祖先 hidden 解除（2026-11-26 B1 批修的 HEAD 既有缺陷）。
+
+    缺陷现场（真实 Chromium 实测）：`#reader-pane` 是 `position:fixed` 浮层，但
+    DOM 挂在 `#view-reader` 里；该 section 由 `showView` 按 VIEWS 列表显隐，而
+    VIEWS 不含 `reader` → 它永远 `hidden`，`[hidden]{display:none!important}`
+    把面板整棵子树吃掉：`p.hidden=false` 之后 `is_visible()` 仍为 false。表现为
+    「点书卡毫无反应」（网络书与本地书同病，非本批引入）。
+
+    修法：rdOpen 打开时解除祖先 hidden、rdClose 关闭时复原——面板不占路由视图位。
+    本测锁两侧（只解不复原会让 display:none 之外的版面被占位）。"""
+    src = _view_js("reader")
+    open_seg = src[src.index("function rdOpen(kind,data){"):src.index("function rdClose(now){")]
+    assert "var host=$('view-reader');if(host)host.hidden=false;" in open_seg
+    close_seg = src[src.index("function rdClose(now){"):src.index("function rdTop(){")]
+    assert "var host=$('view-reader'),hideHost=function(){if(host)host.hidden=true;};" in close_seg
+    # 两条路径（同步关 / 过渡后关）都复原
+    assert close_seg.count("hideHost();") == 2
+
+
+def test_localbook_material_in_compose_pool_d4fix() -> None:
+    """D4' 修复锚（闭环一断点）：localbook 素材（excerpt 无 text）在「我的
+    素材」池放行 + 生成侧 prompt.py 现取章节正文（双端同一 uri 前缀判据）。"""
+    src = _js()
+    assert "indexOf('localbook:')!==0" in src  # cmMineRows 放行
+    from musespiral.services.compose import prompt as _p
+    import inspect
+    body = inspect.getsource(_p)
+    assert 'uri.startswith("localbook:")' in body
+    assert "localbook_service.book_chapter" in body
+
+
+def test_material_viewer_batch_anchors() -> None:
+    """素材查看器批（2026-11-26）：四型内容面 + 大小门控 + localbook 现取。"""
+    body = _view_js("material-drawer")  # 段注释不出产物——直接取视图子文件
+    # ① 分型分派：text/crawled 且（有 text 或 localbook）→ 查看器；image/video 保留
+    assert "txtView=(m.type==='text'||m.type==='crawled')" in body
+    assert "isLocalbook=String(o.uri||'').indexOf('localbook:')" in body
+    # ② 大小门控 + md 启发 + 渲染/原文切换
+    assert "MAT_TXT_CAP=30000" in body and "matLooksMd" in body
+    assert "mat-txt-md" in body and "mat-txt-raw" in body
+    # ③ localbook 现取（render API 内现取章节——红线不复制）
+    assert "mat-lb-full" in body and "/api/materials/render?id=" in body
+    # ④ 沙箱 iframe（无 allow-*：不可信内容零脚本执行）
+    assert '<iframe sandbox style=' in body
+    # ⑤ 端点：payload render + 截断门 + parse_blocks 复用
+    from musespiral.studio import payload as _pl
+    assert hasattr(_pl, "_materials_render_payload")
+    assert _pl.RENDER_CAP == 30000
+    from musespiral.core.content.parser import parse_blocks
+    assert callable(parse_blocks)
+
+
+def test_visual_editor_v2_v5_anchors() -> None:
+    """视觉编辑审查批（2026-11-26）：V2 发布中心封面入口 + V3 导出路径提示 + V5 文章搜索。"""
+    src = _js()
+    # V2：发布中心卡片封面按钮 + 委托
+    assert 'data-dvart="' in src and "qcard-cover-btn" in src
+    assert "location.hash='#design?article='" in src
+    # V3：导出 toast 带目录路径
+    assert "（在文章旁 .design/ 目录）" in src
+    # V5：datalist 联想 + 过滤联动
+    assert "dv-art-list" in src and "dv-art-filter" in src
+    # V4：服务端 article kind 取材
+    from musespiral.services import visual_service as _vs
+    import inspect
+    body = inspect.getsource(_vs._fill_article_defaults)
+    assert 'meta.kind == "article"' in body and ":::video" in body

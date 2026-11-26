@@ -271,7 +271,7 @@ def _get_job(server, job_id: str, timeout: float = 10.0) -> dict:
 
 def test_jobs_kinds_include_quality_loop() -> None:
     """具名锚：quality_loop 入白名单（19→20，计数随扩键同步）。"""
-    assert "quality_loop" in KINDS and len(KINDS) == 20
+    assert "quality_loop" in KINDS and len(KINDS) == 21  # B1 +localbook_fetch
 
 
 def test_studio_quality_loop_all_pass_zero_ai(server, studio_root: Path) -> None:

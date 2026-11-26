@@ -144,3 +144,65 @@ def test_books_detail_state_core_elements_visible(e2e_server, browser_page) -> N
     for element_id in ("bk-range", "bk-opbar", "bk-prog", "bk-digest", "bk-import-btn", "bk-absent"):
         locator = browser_page.locator(f"#{element_id}")
         assert locator.count() == 1, f"详情态条件元素 #{element_id} 不在 DOM 中"
+
+
+def test_books_local_shelf_full_chain(e2e_server, browser_page, tmp_path: Path) -> None:
+    """B1 本地书架全链（真 Chromium）：导入 GB18030 TXT → 书卡 → 阅读面板
+    → 目录 → 取章 → 选章入素材库。
+
+    这是本批唯一的「前端整链」机器证据：字符串锚只能证明代码里写了字面量，
+    这里证明按钮点得动、数据真流到 DOM。写盘用 GB18030（设计 §四门要求
+    「真实 TXT（GB18030）实测」）。"""
+    book = tmp_path / "星河彼岸.txt"
+    book.write_bytes(
+        "作者：测试君\n\n第一章 天穹裂痕\n雨是三更时分来的。\n\n第二章 观测站\n记录员走进来。\n\n第三章 第三象限\n裂痕又扩大了。\n".encode("gb18030")
+    )
+    base = f"http://127.0.0.1:{e2e_server.server_address[1]}"
+    page = browser_page
+    page.goto(f"{base}/#books?tab=local")
+    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_function(
+        "() => { const el = document.getElementById('bk-local'); return el && !el.hidden; }",
+        timeout=8000,
+    )
+    # 空态 → 导入
+    assert page.locator("#lb-path").is_visible()
+    page.fill("#lb-path", str(book))
+    page.click("#lb-add")
+    page.wait_for_selector(".lb-card", timeout=10000)
+    card = page.locator(".lb-card").first
+    assert "星河彼岸" in card.inner_text()
+    assert "3 章" in card.inner_text()
+    assert "gb18030" in card.inner_text()
+    # 点书卡 → 阅读面板（origin=localbook:<id> → localbook/info）
+    card.click()
+    page.wait_for_selector("#reader-pane:not([hidden])", timeout=8000)
+    page.wait_for_function(
+        "() => { const el = document.getElementById('rd-toc'); return el && el.textContent.indexOf('取目录') >= 0; }",
+        timeout=10000,
+    )
+    body_text = page.locator("#rd-scroll").inner_text()
+    # 元信息行如实陈列：本地文件 / 章数 / 编码 / 字数 / 规则**中文名**（rule_name）
+    assert "本地文件" in body_text and "3 章" in body_text
+    assert "gb18030" in body_text and "规则 中文小说标准" in body_text
+    # 规则下拉当前项 = meta 里的 rule（可切换重解析的入口）
+    assert page.input_value("#rd-rule") == "cn-novel-standard"
+    # 取目录 → 点第一章 → 正文
+    page.click('#rd-toc [data-rd="loadtoc"]')
+    page.wait_for_function(
+        "() => document.querySelectorAll('#rd-toc [data-rd=\"chapter\"]').length === 3",
+        timeout=10000,
+    )
+    page.click('#rd-toc [data-rd="chapter"][data-n="1"]')
+    page.wait_for_function(
+        "() => { const a = document.querySelector('#rd-scroll .rd-article'); return a && a.textContent.indexOf('雨是三更时分来的') >= 0; }",
+        timeout=10000,
+    )
+    # 选章入素材库（from-local-chapters job）——提交后面板关闭、任务入队
+    page.click('[data-rd="ingest"]')
+    page.wait_for_selector("#reader-pane", state="hidden", timeout=10000)
+    # 素材真落库（后端断言，不靠前端自报）
+    listing = page.evaluate("fetch('/api/materials?limit=5').then(r => r.json())")
+    assert listing["items"], "选章入素材库后素材应为空"
+    titles = [(m.get("origin") or {}).get("title", "") for m in listing["items"]]
+    assert any("星河彼岸" in t for t in titles), titles

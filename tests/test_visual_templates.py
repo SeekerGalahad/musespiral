@@ -42,13 +42,21 @@ COLORS = {
     "accent": "#dc2626",
 }
 
-BUILTIN_IDS = {"vermilion-slab", "indigo-slab", "xhs-card", "points-three"}
+# B2 视觉编辑 2.0 批（2026-11-26）：注册表 4→10——新六模板
+# article-long/xhs-cover-pro/interview-card/list-three/quote-poster/chapter-divider
+# （三线扩展设计 §2.3；kind=article 为本批新增类型）。
+BUILTIN_IDS = {
+    "vermilion-slab", "indigo-slab", "xhs-card", "points-three",
+    "article-long", "xhs-cover-pro", "interview-card",
+    "list-three", "quote-poster", "chapter-divider",
+}
 
 
 # ── F74-T1 注册表完整性 ──────────────────────────────────────
 
 
 def test_f74t1_registry_has_four_builtins() -> None:
+    """B2 起注册表=内置十模板（4 旧 + 6 新）；键集=id 集。"""
     assert set(REGISTRY) == BUILTIN_IDS
     assert set(REGISTRY) == {m.id for m in REGISTRY.values()}  # 键集=id 集
 
@@ -57,18 +65,27 @@ def test_f74t1_metadata_complete() -> None:
     for tid, meta in REGISTRY.items():
         assert isinstance(meta, TemplateMeta)
         assert meta.id == tid
-        assert meta.kind in ("cover", "social", "infographic")
+        # B2：+article（图文长页/章节分隔）
+        assert meta.kind in ("cover", "social", "infographic", "article")
         assert meta.specs and all(s in SPECS for s in meta.specs)
         assert isinstance(meta.params_schema, dict) and meta.params_schema
         assert meta.slot_colors
         assert callable(meta.build)
+        # B2：背景允许种类恒为 Background.kind 白名单子集
+        assert meta.backgrounds
+        assert set(meta.backgrounds) <= {"solid", "linear", "radial", "pattern", "image"}
 
 
 def test_f74t1_build_callable_produces_doc() -> None:
     for tid, meta in REGISTRY.items():
         _, params = resolve(REGISTRY, tid, params={"title": f"{tid} 标题"})
         doc = meta.build(params, COLORS, meta.specs[0])
-        assert (doc.width, doc.height) == SPECS[meta.specs[0]]
+        if meta.specs[0] == "article-long":
+            # 长图规格高度自适应（SPECS 钉上限非定值）：article-long 整页
+            # clamp [1400,8000]；chapter-divider 在长图流里是 520 短页。
+            assert doc.width == 1080 and 520 <= doc.height <= 8000, (tid, doc.height)
+        else:
+            assert (doc.width, doc.height) == SPECS[meta.specs[0]]
         assert doc.elements
         assert all(e.kind in ELEMENT_WHITELIST for e in doc.elements)
 
@@ -258,10 +275,21 @@ def test_f73t4_points_three_all_zero_data() -> None:
 
 @pytest.mark.parametrize("tid", sorted(BUILTIN_IDS))
 def test_full_chain_all_specs_valid_svg(tid: str) -> None:
-    """四内置 × 各自全部 spec：resolve→build→layout→svg 全链 XML 合法。"""
-    params = {"title": "全链冒烟" * 6, "hook": "钩子"}
-    if tid == "points-three":
+    """全部模板 × 各自全部 spec：resolve→build→layout→svg 全链 XML 合法
+    （B2 起注册表十模板；各模板 params 按其 schema 给——新六模板无 hook 槽）。"""
+    params: dict = {"title": "全链冒烟" * 6, "hook": "钩子"}
+    if tid in ("points-three", "list-three"):
         params = {"title": "全链冒烟", "points": [{"label": "一", "value": 2}]}
+    elif tid == "chapter-divider":
+        params = {"number": "02", "title": "全链冒烟"}
+    elif tid == "article-long":
+        params = {"title": "全链冒烟", "subtitle": "副题", "paragraphs": "第一段。\n\n第二段。"}
+    elif tid == "interview-card":
+        params = {"title": "全链冒烟" * 6, "author": "作者", "role": "工程师"}
+    elif tid == "quote-poster":
+        params = {"title": "全链冒烟" * 6, "author": "作者"}
+    elif tid == "xhs-cover-pro":
+        params = {"title": "全链冒烟" * 6, "hook": "钩子", "tag": "# 标签"}
     meta, merged = resolve(REGISTRY, tid, params=params)
     for spec in meta.specs:
         doc = layout_document(meta.build(merged, COLORS, spec))

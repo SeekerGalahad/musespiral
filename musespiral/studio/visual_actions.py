@@ -38,10 +38,11 @@ def _int_or_none(data: dict[str, Any], key: str) -> int | None:
 
 
 def _action_visual_render(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
-    """POST /api/visual/render {template, params?, spec, article?, theme?, source_ref?}。
+    """POST /api/visual/render {template, params?, spec, article?, theme?, source_ref?, background?}。
 
     - article 给出时补齐封面/社媒缺省键（title/hook 自动取材）；
     - source_ref 给出（F73）时按 source_ref.kind 兜底抽取并覆写 params.points；
+    - B2：background 给出时随渲（Background 校验 + 模板允许集，违例 400）；
     - 纯计算 POST（零落盘，refine preview 同语义）；错误 → 400 可读。
     """
     template = _require_str(data, "template")
@@ -51,6 +52,9 @@ def _action_visual_render(ctx: _StudioContext, data: dict[str, Any]) -> dict[str
     params = data.get("params")
     if params is not None and not isinstance(params, dict):
         raise _HttpError(400, "params 必须是对象")
+    background = data.get("background")
+    if background is not None and not isinstance(background, dict):
+        raise _HttpError(400, "background 必须是对象")
     article = data.get("article")
     article_path: Path | None = None
     if article is not None:
@@ -69,7 +73,7 @@ def _action_visual_render(ctx: _StudioContext, data: dict[str, Any]) -> dict[str
             merged_params["points"] = info["params"]["points"]
         svg, merged = visual_service.render(
             template=template, params=merged_params, spec=spec, theme=theme,
-            article_path=article_path,
+            article_path=article_path, background=background,
         )
     except ValueError as exc:
         raise _HttpError(400, str(exc)) from None
@@ -87,7 +91,10 @@ def _require_article(ctx: _StudioContext, data: dict[str, Any]) -> Path:
 
 
 def _action_visual_save(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, Any]:
-    """POST /api/visual/save：设计稿落盘（版本池先行 + 原子写）。"""
+    """POST /api/visual/save：设计稿落盘 v2（版本池先行 + 原子写）。
+
+    B2：background/elements 随稿（图层状态表 {i,z,opacity,locked,visible,
+    blend,dx,dy}——提交期执法，违例 400）。"""
     article_rel = _require_str(data, "article")
     article = _resolve_file(ctx.root, article_rel)
     kind = _require_str(data, "kind")
@@ -98,12 +105,19 @@ def _action_visual_save(ctx: _StudioContext, data: dict[str, Any]) -> dict[str, 
         raise _HttpError(400, "params 必须是对象")
     if overrides is not None and not isinstance(overrides, dict):
         raise _HttpError(400, "params_overrides 必须是对象")
+    background = data.get("background")
+    if background is not None and not isinstance(background, dict):
+        raise _HttpError(400, "background 必须是对象")
+    elements = data.get("elements")
+    if elements is not None and not isinstance(elements, list):
+        raise _HttpError(400, "elements 必须是数组")
     try:
         result = visual_service.save_design(
             article, kind=kind, template=template, spec=data.get("spec"),
             params=params, params_overrides=overrides,
             preset_id=data.get("preset_id"), svg=data.get("svg"),
             theme=data.get("theme") or "lapis",
+            background=background, elements=elements,
         )
     except ValueError as exc:
         raise _HttpError(400, str(exc)) from None

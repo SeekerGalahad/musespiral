@@ -281,7 +281,7 @@ def test_unknown_skip_name_rejected_zero_job(
 
 
 def test_jobs_kinds_include_pipeline() -> None:
-    assert {"pipeline", "plugin_pipeline"} <= KINDS and len(KINDS) == 20
+    assert {"pipeline", "plugin_pipeline"} <= KINDS and len(KINDS) == 21  # B1 +localbook_fetch
     for kind in (
         "adapt", "pack", "publish", "batch_adapt", "status", "annotate_rewrite",
         "fetch", "sync_stats", "compose_generate", "ingest", "clip",

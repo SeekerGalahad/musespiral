@@ -16,7 +16,7 @@ function E(id){return document.getElementById(id);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function req(p,o){return fetch(p,o).then(function(r){return r.json().then(function(d){if(!r.ok||(d&&d.ok===false))throw new Error((d&&(d.error||d.message))||('HTTP '+r.status));return d;});});}
 var MTY={text:'文档',image:'图片',video:'视频',link:'链接',radar_signal:'雷达信号',crawled:'抓取',derived:'衍生'};
-var OPS={summarize:'提炼摘要',synthesize:'跨素材综合',generate:'AI 生成',book_fetch:'书源取文',plugin_pipeline:'插件流水线',published_from:'文章反哺',distill:'论点提炼'};
+var OPS={summarize:'提炼摘要',synthesize:'跨素材综合',generate:'AI 生成',book_fetch:'书源取文',plugin_pipeline:'插件流水线',published_from:'文章反哺',distill:'论点提炼',adopt:'本地书选章'};
 var LOW=0.5; // 与 core.js CONF_LOW 同值（行内徽与筛选同口径；改值两处同步）
 var V={id:'',tab:0,st:'',detail:null};
 /* chip + 容器自注入（paintMatDrawer 每次重绘洗掉 DOM，repaint 时补挂） */

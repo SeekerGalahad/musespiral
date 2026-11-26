@@ -177,3 +177,15 @@ mark{background:color-mix(in srgb,var(--amber) 18%,transparent);color:inherit;bo
 .chips>.notice-card{flex:1 1 100%;padding:12px 14px}
 .jobs-menu .notice-card,.coll-rail .notice-card{padding:12px 14px}
 .modal-lg{width:min(720px,100%)}
+.rd-fetch{display:flex;align-items:center;gap:8px;font-size:var(--fs-caption);color:var(--ink-2);background:var(--wash);border:1px solid var(--line-1);border-radius:8px;padding:8px 12px;margin:0 0 14px}
+.rd-fetch.ok{color:var(--jade);background:rgba(47,158,110,.08);border-color:rgba(47,158,110,.3)}
+.rd-fetch.err{color:var(--crimson);background:rgba(201,42,42,.06);border-color:rgba(201,42,42,.3)}
+.rd-web-steps{display:flex;margin:0 0 14px}
+.rd-web-steps .w-step{flex:1;text-align:center;font-size:11px;color:var(--ink-3);padding:6px 0}
+.rd-web-steps .w-step i{display:block;width:9px;height:9px;border-radius:50%;background:var(--line-2);margin:0 auto 4px}
+.rd-web-steps .w-step.done{color:var(--jade)}
+.rd-web-steps .w-step.done i{background:var(--jade)}
+.rd-web-steps .w-step.doing{color:var(--vermilion)}
+.rd-web-steps .w-step.doing i{background:var(--vermilion);animation:srcPulse 1.2s ease infinite}
+.qcard-cover-btn{font-size:11px;padding:2px 8px;color:var(--indigo)}
+.qcard-cover-btn:hover{color:var(--indigo);border-color:var(--indigo)}

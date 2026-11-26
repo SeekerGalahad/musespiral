@@ -111,7 +111,33 @@ CORE_MAX = 163_840            # 160KiB
 # core.css +304B（qcheck 可点击 + P0-3 读取失败卡收编）。总交付面 652,686→666,575B；
 # 本硬门按同协议 660,000→670,000 对齐（实测 666,575B + ~3.4K 锚距；W16 双轨后
 # 磁盘=观测指标，硬门=gzip 在 test_build_ui，此处锚只拦突变式增长）。
-TOTAL_MAX = 670_000  # 2026-11-25 收尾批 660,000→670,000（实测 666,575；
+# B1 本地 TXT 书籍批增长归因（2026-11-26，+12,753B）：books.js +5,153B（三 tab
+# 子态 + 书架网格/导入/下架 + 转阅读面板）、reader.js +4,327B（origin 前缀分派 +
+# 本地书详情 + 换规则重解析 + from-local-chapters 提交 + 阅读面板祖先
+# #view-reader[hidden] 解除/复原——修 HEAD 就有的「面板 hidden=false 但被祖先
+# display:none!important 吃掉」缺陷，见 rdOpen/rdClose 注释）、core.js +725B
+# （三件展示工具 lbEncClass/lbWan/lbCoverStyle——books 与 reader 两视图共消费，
+# 按 V1 跨视图门归 core）、books.css +546B（.lb-* 六条，书卡复用 .card）、
+# books.html.js +133B（三 tab 行 + #bk-local 容器）。总交付面 688,885B；
+# 本硬门按既有「随批对齐实际水位」协议 680,000→692,000（实测 688,885 + ~3.1K
+# 锚距；权威判定仍在 test_build_ui 三档与 gzip 双轨）。
+# B2 视觉编辑 2.0 批（2026-11-26）：三栏编辑器 +12,758B（design.js 13,708→
+# 32,112B：模板横条/图层列表 DnD/属性面板/背景五类型面板/素材选图弹层+上传；
+# design.css 1,970→4,798B：.dv- 新规则族；design.html +1.7KB 三栏骨架+选图弹层）
+# ——单视图门全守恒（design.css 4.8KB<8KiB / design.js 32.1KB<40KiB，core 面
+# 零增长）。总交付面实测 711,643B；本硬门按既有「随批对齐实际水位」协议
+# 692,000→715,000（实测 +3.4K 锚距；权威判定仍在 test_build_ui 三档与 gzip
+# 双轨）。
+# B3 多媒体与视频发布批增长归因（2026-11-26，+11,510B）：editor.js
+# +5,884B（🎬 插入媒体弹层：选图/选视频格子+insert_media 提交+edVideoMd/
+# edDurFmt 纯函数+工具栏钮）、editor.css +1,704B（.ed-med-* 弹层族）、
+# core.js +1,100B（clip 双入口本地路径分支+mountEdit article 桥）、
+# material-core.js +570B（video 卡首帧缩略+⏱ 徽章+fmtDur）、article.js
+# +454B（sbs 媒体清单）、publish.js +137B（🎬/🖼 徽章）。总交付面
+# 711,643→725,051B（含 mdToHtml :::video 段 + mdBlocks 容器分支 + 素材
+# 视图按钮 title 文案）；本硬门按既有「随批对齐实际水位」协议 715,000→
+# 727,000（实测 +1.9K 锚距；权威判定仍在 test_build_ui 三档与 gzip 双轨）。
+TOTAL_MAX = 736_000  # 2026-11-26 素材查看器批 727,000→736,000（实测 731,786：md 沙箱渲染/门控/localbook 现取 + 三线扩展；余 4,214）
                      # W16 双轨后磁盘=观测指标，硬门=gzip 在 test_build_ui；此处锚
                      # 只拦突变式增长，600KB 旧红线随 W16 裁决退役）
 FIRST_SCREEN_MAX = 245_760    # 240KiB

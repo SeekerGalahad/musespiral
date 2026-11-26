@@ -18,7 +18,10 @@ from .security import _HttpError, _StudioContext, _error_payload, _query_str, _r
 
 
 def _visual_design_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> dict[str, Any]:
-    """GET /api/visual/design：设计稿全文（design.json + 白名单复验后的 SVG）。"""
+    """GET /api/visual/design：设计稿全文（design.json + 白名单复验后的 SVG）。
+
+    B2：v2 键（background/elements/version）原样透出；v1 老稿经 load_design
+    归一补默认（background=None / elements=[] / version=1）——前端零分叉。"""
     rel = _query_str(query, "article")
     if not rel:
         raise _HttpError(400, "缺少必填参数 article（root 内相对路径）")
@@ -43,6 +46,10 @@ def _visual_design_payload(ctx: _StudioContext, query: dict[str, list[str]]) -> 
         "spec": design["spec"],
         "updated_at": design.get("updated_at"),
         "svg": svg,
+        # B2 v2 键（v1 老稿由 load_design 补缺省——缺键不发 undefined）
+        "version": design.get("version", 1),
+        "background": design.get("background"),
+        "elements": design.get("elements") or [],
     }
 
 
@@ -50,7 +57,9 @@ def _visual_templates_payload() -> dict[str, Any]:
     """GET /api/visual/templates：内置注册表元数据（零 secret）。
 
     F-B 色板升级（2026-11-18）：顶层 slot_hexes={槽→hex}——theme_colors()
-    对默认主题一次映射（色块化 chip 的 style background 数据面）。"""
+    对默认主题一次映射（色块化 chip 的 style background 数据面）。
+    B2（2026-11-26）：每模板附 backgrounds 允许种类（编辑器右栏背景面板
+    类型切换的合法集——4 旧模板恒 solid，新六模板按设计 §2.3 声明）。"""
     items: list[dict[str, Any]] = []
     for tid, meta in sorted(REGISTRY.items()):
         items.append({
@@ -60,6 +69,7 @@ def _visual_templates_payload() -> dict[str, Any]:
             "params_schema": meta.params_schema,
             "slot_colors": dict(meta.slot_colors),
             "color_slots": list(SEMANTIC_COLOR_SLOTS),
+            "backgrounds": list(meta.backgrounds),
         })
     return {"items": items, "slot_hexes": dict(visual_service.theme_colors())}
 

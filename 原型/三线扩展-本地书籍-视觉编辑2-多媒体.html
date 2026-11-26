@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-zcode-design>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>musespiral 三线扩展原型 · 本地书架 / 视觉编辑 2.0 / 多媒体</title>
+<style>
+:root{
+  --paper-0:#faf7f2;--paper-1:#fff;--wash:#f3eee6;
+  --ink-1:#2b2722;--ink-2:#6b6459;--ink-3:#a39a8d;
+  --line-1:#e8e2d6;--line-2:#d4ccbb;
+  --vermilion:#c9452c;--vermilion-ink:#a83823;--tint:rgba(201,69,44,.08);
+  --indigo:#3b5bdb;--jade:#2f9e6e;--amber:#d97706;--crimson:#c92a2a;
+  --radius:10px;--pill:999px;
+  --fs-h1:22px;--fs-h2:16px;--fs-h3:14px;--fs-body:13.5px;--fs-cap:12px;
+  --shadow-sm:0 1px 3px rgba(43,39,34,.07);--shadow-md:0 4px 16px rgba(43,39,34,.10);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--paper-0);color:var(--ink-1);font:var(--fs-body)/1.65 -apple-system,"PingFang SC","Hiragino Sans GB",sans-serif;-webkit-font-smoothing:antialiased;padding:28px 20px 60px}
+button{font:inherit;cursor:pointer;border:1px solid var(--line-2);background:var(--paper-1);border-radius:8px;padding:5px 13px;color:var(--ink-1);transition:.15s}
+button:hover{border-color:var(--ink-3)}
+.btn-primary{background:var(--vermilion);border-color:var(--vermilion);color:#fff}
+.btn-primary:hover{background:var(--vermilion-ink)}
+.btn-ghost{border-color:transparent;background:none;color:var(--ink-2)}
+.btn-sm{padding:3px 9px;font-size:var(--fs-cap)}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-size:var(--fs-h1)}
+.sub{color:var(--ink-2);font-size:var(--fs-cap);margin-top:3px;margin-bottom:18px}
+.sect{margin-bottom:34px}
+.sect-h{display:flex;align-items:baseline;gap:10px;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid var(--line-2)}
+.sect-h h2{font-size:17px}
+.sect-h .tag{font-size:11px;background:var(--vermilion);color:#fff;border-radius:var(--pill);padding:1px 9px;font-weight:600}
+.sect-h .note{color:var(--ink-2);font-size:var(--fs-cap);margin-left:auto}
+.card{background:var(--paper-1);border:1px solid var(--line-1);border-radius:var(--radius);box-shadow:var(--shadow-sm)}
+.muted{color:var(--ink-2);font-size:var(--fs-cap)}
+.badge{display:inline-block;font-size:10px;border-radius:4px;padding:0 6px;border:1px solid var(--line-1);color:var(--ink-2)}
+
+/* ══ 1. 本地书架 ══ */
+.tabs{display:inline-flex;border:1px solid var(--line-2);border-radius:9px;overflow:hidden;margin-bottom:14px}
+.tabs button{border:0;border-radius:0;padding:6px 16px;font-size:var(--fs-cap);color:var(--ink-2)}
+.tabs button.on{background:var(--vermilion);color:#fff;font-weight:600}
+.lib-bar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));gap:12px}
+.book{display:flex;flex-direction:column;gap:8px;padding:12px;cursor:pointer;transition:.18s}
+.book:hover{box-shadow:var(--shadow-md);transform:translateY(-1px)}
+.book-cover{height:96px;border-radius:7px;display:grid;place-items:center;color:#fff;font-weight:700;font-size:26px;letter-spacing:.05em}
+.book-title{font-weight:600;font-size:var(--fs-h3);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.book-meta{font-size:11px;color:var(--ink-2);display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.enc{font-size:10px;border-radius:4px;padding:0 5px;background:var(--wash);color:var(--ink-2);border:1px solid var(--line-1)}
+.enc.gb{color:var(--amber);border-color:rgba(217,119,6,.35)}
+
+/* 阅读面板（本书） */
+.reader-demo{display:grid;grid-template-columns:1fr 300px;gap:14px;margin-top:14px}
+.rd-main{padding:16px 20px;min-height:240px}
+.rd-toc-side{padding:14px}
+.rd-ch{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:6px;font-size:var(--fs-cap);cursor:pointer}
+.rd-ch:hover{background:var(--wash)}
+.rd-ch .n{color:var(--ink-3);width:26px;font-variant-numeric:tabular-nums}
+.rd-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.rd-h h3{font-size:15px}
+.rd-body-txt p{margin-bottom:10px;text-indent:2em;line-height:1.9}
+.checkbox-row{display:flex;align-items:center;gap:8px;font-size:var(--fs-cap);padding:5px 8px;border-radius:6px}
+.checkbox-row:hover{background:var(--wash)}
+.range-bar{display:flex;gap:8px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--line-1);flex-wrap:wrap}
+
+/* ══ 2. 视觉编辑 2.0 ══ */
+.editor{display:grid;grid-template-columns:172px 1fr 236px;gap:0;border:1px solid var(--line-1);border-radius:var(--radius);overflow:hidden;background:var(--paper-1);box-shadow:var(--shadow-sm);min-height:440px}
+.ed-left{border-right:1px solid var(--line-1);padding:10px;background:var(--paper-1)}
+.ed-left h4,.ed-right h4{font-size:11px;letter-spacing:.06em;color:var(--ink-3);text-transform:uppercase;margin:6px 0 8px}
+.tpl-strip{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:8px}
+.tpl{flex:none;width:44px;height:58px;border-radius:5px;border:1.5px solid var(--line-2);cursor:pointer;display:grid;place-items:center;font-size:9px;color:var(--ink-2);text-align:center;line-height:1.2;padding:2px;background:var(--wash)}
+.tpl.on{border-color:var(--vermilion);box-shadow:0 0 0 2px var(--tint);color:var(--vermilion);font-weight:600}
+.layer{display:flex;align-items:center;gap:6px;padding:5px 7px;border-radius:6px;font-size:var(--fs-cap);cursor:pointer;border:1px solid transparent}
+.layer:hover{background:var(--wash)}
+.layer.on{background:var(--tint);border-color:rgba(201,69,44,.3)}
+.layer .ic{width:14px;height:14px;flex:none;color:var(--ink-3)}
+.layer .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.layer .eye,.layer .lock{width:16px;height:16px;flex:none;color:var(--ink-3);background:none;border:0;padding:0;display:grid;place-items:center}
+.layer .eye.off{opacity:.35}
+.ed-canvas{background:#efeae1;display:grid;place-items:center;padding:20px;position:relative;overflow:auto}
+.artboard{background:#fff;box-shadow:0 2px 14px rgba(0,0,0,.12);position:relative;overflow:hidden}
+/* 画布内元素：绝对定位演示层级 */
+.ab-el{position:absolute;cursor:pointer}
+.ab-el.sel{outline:2px solid var(--vermilion);outline-offset:1px}
+.ab-hero{left:0;top:0;right:0;height:120px;background:linear-gradient(135deg,#3b5bdb,#8b5cf6);display:grid;place-items:center;color:#fff;font-size:11px;letter-spacing:.1em}
+.ab-title{left:18px;right:18px;top:138px;font-size:19px;font-weight:800;line-height:1.4;color:#1f1b16}
+.ab-sub{left:18px;right:18px;top:196px;font-size:11px;color:#6b6459}
+.ab-body{left:18px;right:18px;top:220px;font-size:10px;line-height:1.9;color:#3a352e}
+.ab-quote{left:18px;right:18px;top:288px;background:#f8f5ee;border-left:3px solid #c9452c;padding:7px 9px;font-size:10px;color:#4a443c}
+.handle{position:absolute;width:7px;height:7px;background:#fff;border:1.5px solid var(--vermilion);border-radius:1px}
+.handle.nw{left:-4px;top:-4px}.handle.ne{right:-4px;top:-4px}.handle.sw{left:-4px;bottom:-4px}.handle.se{right:-4px;bottom:-4px}
+.ed-right{border-left:1px solid var(--line-1);padding:11px;background:var(--paper-1);font-size:var(--fs-cap)}
+.prop{margin-bottom:11px}
+.prop label{display:block;color:var(--ink-2);font-size:11px;margin-bottom:4px}
+.prop input[type=text],.prop select{width:100%;border:1px solid var(--line-2);border-radius:6px;padding:5px 8px;font:inherit;background:#fff}
+.prop input[type=range]{width:100%}
+.bg-types{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:8px}
+.bg-t{border:1.5px solid var(--line-2);border-radius:6px;height:34px;display:grid;place-items:center;font-size:9.5px;cursor:pointer;color:var(--ink-2)}
+.bg-t.on{border-color:var(--vermilion);color:var(--vermilion);font-weight:600}
+.swatches{display:flex;gap:5px;flex-wrap:wrap}
+.sw{width:18px;height:18px;border-radius:50%;cursor:pointer;border:2px solid transparent}
+.sw.on{border-color:var(--vermilion);box-shadow:0 0 0 2px #fff inset}
+.pat-strip{display:flex;gap:6px;margin-top:6px}
+.pat{width:30px;height:22px;border-radius:4px;border:1px solid var(--line-2);cursor:pointer}
+.pat[data-p="dots"]{background-image:radial-gradient(#c5bdb0 1px,transparent 1px);background-size:6px 6px}
+.pat[data-p="grid"]{background-image:linear-gradient(#d8d1c5 1px,transparent 1px),linear-gradient(90deg,#d8d1c5 1px,transparent 1px);background-size:8px 8px}
+.pat[data-p="waves"]{background-image:repeating-linear-gradient(45deg,#e9e3d8,#e9e3d8 3px,#f5f1ea 3px,#f5f1ea 6px)}
+.pat[data-p="paper"]{background-image:repeating-linear-gradient(0deg,#f2ede4,#f2ede4 2px,#eae4d8 2px,#eae4d8 4px)}
+.img-slot{border:1.5px dashed var(--line-2);border-radius:6px;padding:10px;text-align:center;font-size:11px;color:var(--ink-2);cursor:pointer}
+.img-slot:hover{border-color:var(--vermilion);color:var(--vermilion)}
+
+/* ══ 3. 多媒体文章 ══ */
+.media-flow{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.pane{padding:14px}
+.pane h4{font-size:var(--fs-h3);margin-bottom:9px;display:flex;gap:6px;align-items:center}
+.video-card{display:flex;gap:10px;padding:9px;border:1px solid var(--line-1);border-radius:8px;margin-bottom:8px;align-items:center}
+.video-poster{width:88px;height:52px;border-radius:5px;background:linear-gradient(135deg,#2b2722,#4a443c);display:grid;place-items:center;color:#fff;font-size:14px;flex:none;position:relative}
+.video-poster .dur{position:absolute;right:3px;bottom:3px;background:rgba(0,0,0,.7);color:#fff;font-size:9px;border-radius:3px;padding:0 4px}
+.video-meta .t{font-weight:600;font-size:var(--fs-cap)}
+.video-meta .m{font-size:11px;color:var(--ink-2)}
+.editor-mock{border:1px solid var(--line-1);border-radius:8px;padding:12px;background:#fff;font-size:var(--fs-cap);line-height:2}
+.toolbar{display:flex;gap:4px;border-bottom:1px solid var(--line-1);padding-bottom:7px;margin-bottom:9px;flex-wrap:wrap}
+.toolbar button{padding:2px 8px;font-size:11px}
+.anchored{margin:8px 0;padding:8px 10px;background:var(--wash);border-radius:6px;font-size:11px}
+.anchored .ts{color:var(--indigo);font-family:ui-monospace,monospace}
+.embedded-video{margin:9px 0;border:1px solid var(--line-1);border-radius:7px;overflow:hidden}
+.embedded-video .ph{height:92px;background:linear-gradient(135deg,#1e3a5f,#3b5bdb);display:grid;place-items:center;color:#fff;font-size:20px}
+.embedded-video .bar{display:flex;align-items:center;gap:7px;padding:6px 9px;font-size:10px;color:var(--ink-2)}
+.embedded-video .bar .progress{flex:1;height:3px;background:var(--line-1);border-radius:2px;position:relative}
+.embedded-video .bar .progress i{position:absolute;inset:0 44% 0 0;background:var(--vermilion);border-radius:2px}
+.pack-list{border:1px solid var(--line-1);border-radius:8px;overflow:hidden}
+.pack-row{display:flex;justify-content:space-between;align-items:center;padding:7px 11px;font-size:var(--fs-cap);border-bottom:1px solid var(--line-1)}
+.pack-row:last-child{border-bottom:0}
+.pack-row .sz{color:var(--ink-3);font-variant-numeric:tabular-nums}
+.plat-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.pchip{border:1px solid var(--line-2);border-radius:var(--pill);padding:2px 10px;font-size:11px;color:var(--ink-2)}
+.pchip.on{background:var(--vermilion);border-color:var(--vermilion);color:#fff}
+
+@media(max-width:900px){
+  .editor{grid-template-columns:1fr}
+  .ed-left,.ed-right{border:0;border-bottom:1px solid var(--line-1)}
+  .reader-demo,.media-flow{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>musespiral 三线扩展 · 交互原型</h1>
+<p class="sub">本地 TXT 书籍 → 视觉编辑 2.0 → 多媒体与视频发布（2026-11-26 设计稿，对应实施工作流 B1/B2/B3）</p>
+
+<!-- ══════════ 1 本地书架 ══════════ -->
+<section class="sect" data-variant="local-books">
+  <div class="sect-h"><h2>① 本地书架（书籍视图 · 第三 tab）</h2><span class="tag">B1</span><span class="note">只读你磁盘上的文件 · 不复制入库 · 编码/章节如实</span></div>
+
+  <div class="tabs" id="bk-tabs">
+    <button>搜索网络书源</button><button class="on">本地书架</button><button>订阅管理</button>
+  </div>
+
+  <div class="lib-bar">
+    <button class="btn-primary">＋ 导入 TXT</button>
+    <span class="badge">全部 12</span><span class="badge">在读 3</span><span class="badge">已入素材 5</span>
+    <span class="muted" style="margin-left:auto">章节规则：自动识别 · 可切换 profile</span>
+  </div>
+
+  <div class="lib-grid">
+    <div class="card book" onclick="openBook('星河彼岸','科幻·末日','1,204','216 万字','UTF-8')">
+      <div class="book-cover" style="background:linear-gradient(135deg,#3b5bdb,#8b5cf6)">星河</div>
+      <div class="book-title">星河彼岸</div>
+      <div class="book-meta"><span>1,204 章</span><span>216 万字</span><span class="enc">UTF-8</span></div>
+    </div>
+    <div class="card book" onclick="openBook('云海剑歌','仙侠·长篇','3,876','512 万字','GB18030')">
+      <div class="book-cover" style="background:linear-gradient(135deg,#2f9e6e,#0d9488)">云海</div>
+      <div class="book-title">云海剑歌</div>
+      <div class="book-meta"><span>3,876 章</span><span>512 万字</span><span class="enc gb">GB18030</span></div>
+    </div>
+    <div class="card book" onclick="openBook('我的读书笔记','随笔','1','未识别章节','UTF-8')">
+      <div class="book-cover" style="background:linear-gradient(135deg,#d97706,#c9452c)">笔记</div>
+      <div class="book-title">我的读书笔记.txt</div>
+      <div class="book-meta"><span>未识别章节结构</span><span class="enc">UTF-8</span></div>
+    </div>
+    <div class="card book" onclick="openBook('今夜有雨','言情·短篇','46','8.2 万字','GBK')">
+      <div class="book-cover" style="background:linear-gradient(135deg,#c9452c,#e07a4f)">今夜</div>
+      <div class="book-title">今夜有雨</div>
+      <div class="book-meta"><span>46 章</span><span>8.2 万字</span><span class="enc gb">GBK</span></div>
+    </div>
+  </div>
+
+  <div class="reader-demo card" id="reader-demo" hidden>
+    <div class="rd-main">
+      <div class="rd-h">
+        <h3 id="rd-name">星河彼岸</h3>
+        <div style="display:flex;gap:6px"><button class="btn-sm">选章入素材库</button><button class="btn-sm btn-ghost" onclick="closeBook()">关闭</button></div>
+      </div>
+      <p class="muted" style="margin-bottom:12px" id="rd-meta">本地文件 · 1,204 章 · UTF-8 · 规则 cn-novel-standard · 216 万字</p>
+      <div class="rd-body-txt">
+        <h4 style="margin-bottom:8px;font-size:15px">第一章 天穹裂痕</h4>
+        <p>雨是三更时分来的。先是远处有闷雷走动，像有什么东西在天穹上探路，后来风起了，雨点斜斜地打在观测站的合金外壳上，叮叮当当，像一万根细针同时落下。</p>
+        <p>我放下手中的读数板，望向那面巨大的观测窗。星河在窗外铺展，亿万光年外的光此刻正落在我视网膜上——它们出发的时候，人类还没有走出山洞。</p>
+        <p>「记录员。」身后传来师姐的声音，带着一丝不易察觉的颤抖，「裂痕又扩大了，这一次是第三象限。」</p>
+      </div>
+      <div class="range-bar">
+        <span class="badge">已选 1 章</span>
+        <button class="btn-sm">本章</button><button class="btn-sm">第 1-10 章</button><button class="btn-sm">自定义范围</button>
+        <span class="muted">入素材库后可进创作工坊引用</span>
+      </div>
+    </div>
+    <div class="rd-toc-side">
+      <h4 style="font-size:12px;color:var(--ink-3);margin-bottom:8px">目录 · 第 1 / 30 页</h4>
+      <div class="rd-ch"><span class="n">1</span><span>第一章 天穹裂痕</span></div>
+      <div class="rd-ch"><span class="n">2</span><span>第二章 观测站</span></div>
+      <div class="rd-ch"><span class="n">3</span><span>第三章 师姐</span></div>
+      <div class="rd-ch"><span class="n">4</span><span>第四章 第三象限</span></div>
+      <div class="rd-ch"><span class="n">5</span><span>第五章 光年之外</span></div>
+      <p class="muted" style="margin-top:8px">↑ 目录与网络书同形，阅读面板零改动复用</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ 2 视觉编辑 2.0 ══════════ -->
+<section class="sect" data-variant="visual-editor">
+  <div class="sect-h"><h2>② 视觉编辑 2.0 · 三栏编辑器</h2><span class="tag">B2</span><span class="note">模板+图层 / 画布 / 属性+背景；图片槽与背景层</span></div>
+
+  <div class="editor">
+    <!-- 左：模板 + 图层 -->
+    <div class="ed-left">
+      <h4>模板</h4>
+      <div class="tpl-strip">
+        <div class="tpl on">图文<br>长页</div>
+        <div class="tpl">小红书<br>封面</div>
+        <div class="tpl">访谈<br>卡</div>
+        <div class="tpl">金句<br>海报</div>
+        <div class="tpl">章节<br>分隔</div>
+      </div>
+      <h4>图层（点击选中）</h4>
+      <div id="layers">
+        <div class="layer" data-el="hero"><span class="ic">▣</span><span class="nm">hero 头图</span><button class="eye">👁</button><button class="lock">🔓</button></div>
+        <div class="layer on" data-el="title"><span class="ic">T</span><span class="nm">主标题</span><button class="eye">👁</button><button class="lock">🔓</button></div>
+        <div class="layer" data-el="sub"><span class="ic">T</span><span class="nm">副标题</span><button class="eye">👁</button><button class="lock">🔓</button></div>
+        <div class="layer" data-el="body"><span class="ic">¶</span><span class="nm">正文段</span><button class="eye">👁</button><button class="lock">🔓</button></div>
+        <div class="layer" data-el="quote"><span class="ic">❝</span><span class="nm">引语块</span><button class="eye">👁</button><button class="lock">🔓</button></div>
+      </div>
+      <div style="display:flex;gap:5px;margin-top:9px">
+        <button class="btn-sm" title="上移层级">↑ 上移</button><button class="btn-sm" title="下移层级">↓ 下移</button>
+      </div>
+    </div>
+
+    <!-- 中：画布 -->
+    <div class="ed-canvas">
+      <div class="artboard" id="artboard" style="width:300px;height:340px">
+        <div class="ab-el ab-hero" data-el="hero">HERO IMAGE（从素材库选图）</div>
+        <div class="ab-el ab-title sel" data-el="title">我在城市里寻找一片海<span class="handle nw"></span><span class="handle ne"></span><span class="handle sw"></span><span class="handle se"></span></div>
+        <div class="ab-el ab-sub" data-el="sub">一个关于河流、旧城与记忆的漫游笔记</div>
+        <div class="ab-el ab-body" data-el="body">雨是三更时分来的。我沿着河岸走了很久，霓虹倒在新修的堤坝上，像把整条江翻了过来。有人说这里三十年前是滩涂，有人说是码头，没有人说得清。</div>
+        <div class="ab-el ab-quote" data-el="quote">「城市不是被建造的，它是一层一层长出来的。」</div>
+      </div>
+    </div>
+
+    <!-- 右：属性面板 -->
+    <div class="ed-right">
+      <h4>选中：主标题</h4>
+      <div class="prop"><label>内容</label><input type="text" value="我在城市里寻找一片海"></div>
+      <div class="prop"><label>字号 19px · 对齐</label><select><option>左对齐</option><option>居中</option><option>右对齐</option></select></div>
+      <div class="prop"><label>颜色</label><div class="swatches"><span class="sw on" style="background:#1f1b16"></span><span class="sw" style="background:#c9452c"></span><span class="sw" style="background:#3b5bdb"></span><span class="sw" style="background:#2f9e6e"></span></div></div>
+      <div class="prop"><label>透明度 · 100%</label><input type="range" value="100"></div>
+
+      <h4 style="margin-top:14px">背景层</h4>
+      <div class="bg-types">
+        <div class="bg-t">纯色</div><div class="bg-t on">渐变</div><div class="bg-t">图案</div><div class="bg-t">图片</div>
+      </div>
+      <div class="prop"><label>渐变方向 · 135°</label><input type="range" value="135"></div>
+      <div class="prop"><label>渐变两端</label>
+        <div class="swatches"><span class="sw on" style="background:#f8f5ee"></span><span class="sw" style="background:#fdf0e8"></span><span class="sw" style="background:#eef2ff"></span><span class="sw" style="background:#ecfdf5"></span></div>
+      </div>
+      <div class="prop"><label>纹理（可选）</label>
+        <div class="pat-strip"><span class="pat" data-p="dots"></span><span class="pat" data-p="grid"></span><span class="pat" data-p="waves"></span><span class="pat" data-p="paper"></span></div>
+      </div>
+      <button class="btn-primary btn-sm" style="width:100%;margin-top:8px">存稿 · 导出 PNG</button>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ 3 多媒体与视频 ══════════ -->
+<section class="sect" data-variant="media-article">
+  <div class="sect-h"><h2>③ 多媒体文章与视频发布</h2><span class="tag">B3</span><span class="note">素材库选媒体 → 编辑器插入 → 视频物料包（视频号人工上传）</span></div>
+
+  <div class="media-flow">
+    <!-- 左：编辑器 -->
+    <div class="card pane">
+      <h4>文章编辑器 · 插入媒体</h4>
+      <div class="editor-mock">
+        <div class="toolbar"><button>B</button><button>H2</button><button>链接</button><button style="border-color:var(--vermilion);color:var(--vermilion)">＋ 插入素材</button><button>AI 摘要</button></div>
+        <div>## 我在城市里寻找一片海</div>
+        <div class="anchored"><span class="ts">[00:03:35]</span> 我沿着河岸走了很久，霓虹倒在新修的堤坝上…<div class="muted" style="margin-top:3px">↑ 时间戳锚（已有能力）：文字可回溯到视频原处</div></div>
+        <div class="embedded-video">
+          <div class="ph">▶</div>
+          <div class="bar"><span>00:03:35 / 08:33</span><div class="progress"><i></i></div><span>1×</span></div>
+        </div>
+        <div class="muted" style="font-size:10px;margin-top:3px">^ :::video{src=… poster=…} 块 · 编辑器内联播放</div>
+        <div style="margin-top:8px">后来雨停了，河对岸的灯一盏一盏熄灭。</div>
+      </div>
+    </div>
+
+    <!-- 右：素材库 + 物料包 -->
+    <div class="card pane">
+      <h4>素材库 · 媒体素材</h4>
+      <div class="video-card">
+        <div class="video-poster">▶<span class="dur">8:33</span></div>
+        <div class="video-meta"><div class="t">城市漫游·河岸篇.mp4</div><div class="m">1.2 GB · 1080p · 513s · 首帧已取</div></div>
+        <button class="btn-sm btn-primary" style="margin-left:auto">插入</button>
+      </div>
+      <div class="video-card">
+        <div class="video-poster" style="background:linear-gradient(135deg,#2f9e6e,#0d9488)">▶<span class="dur">2:14</span></div>
+        <div class="video-meta"><div class="t">旧城改造访谈.mp4</div><div class="m">380 MB · 134s</div></div>
+        <button class="btn-sm" style="margin-left:auto">插入</button>
+      </div>
+
+      <h4 style="margin-top:14px">视频号物料包（导出后人工上传）</h4>
+      <div class="pack-list">
+        <div class="pack-row"><span>video.mp4</span><span class="sz">1.2 GB</span></div>
+        <div class="pack-row"><span>poster.jpg</span><span class="sz">240 KB</span></div>
+        <div class="pack-row"><span>meta.json<span class="muted">（标题/话题/章节时间点）</span></span><span class="sz">1.2 KB</span></div>
+        <div class="pack-row"><span>README.md<span class="muted">（上传步骤）</span></span><span class="sz">0.5 KB</span></div>
+      </div>
+      <div class="plat-chips">
+        <span class="pchip on">视频号</span><span class="pchip on">B 站</span><span class="pchip">抖音</span><span class="pchip">公众号（图文导流）</span>
+      </div>
+      <p class="muted" style="margin-top:8px">视频号无公开草稿 API——诚实做物料包，不假装自动发布。</p>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<script>
+function openBook(name, kind, chs, words, enc){
+  var demo = document.getElementById('reader-demo');
+  demo.hidden = false;
+  document.getElementById('rd-name').textContent = name;
+  document.getElementById('rd-meta').textContent = '本地文件 · ' + chs + ' 章 · ' + enc + ' · 规则 cn-novel-standard · ' + words;
+  demo.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+function closeBook(){ document.getElementById('reader-demo').hidden = true; }
+
+/* 图层选择 → 画布高亮联动 */
+document.getElementById('layers').addEventListener('click', function(e){
+  var layer = e.target.closest('.layer');
+  if (!layer) return;
+  var el = layer.dataset.el;
+  document.querySelectorAll('.layer').forEach(function(l){ l.classList.toggle('on', l === layer); });
+  document.querySelectorAll('.ab-el').forEach(function(b){
+    var on = b.dataset.el === el;
+    b.classList.toggle('sel', on);
+    var h = b.querySelectorAll('.handle');
+    if (on && !h.length) {
+      ['nw','ne','sw','se'].forEach(function(c){ var s=document.createElement('span'); s.className='handle '+c; b.appendChild(s); });
+    } else if (!on) { h.forEach(function(x){ x.remove(); }); }
+  });
+});
+/* 画布点击 → 选图层 */
+document.querySelectorAll('.ab-el').forEach(function(b){
+  b.addEventListener('click', function(){
+    var l = document.querySelector('.layer[data-el="'+b.dataset.el+'"]');
+    if (l) l.click();
+  });
+});
+/* 背景类型切换（演示态样式） */
+document.querySelectorAll('.bg-t').forEach(function(t){
+  t.addEventListener('click', function(){
+    document.querySelectorAll('.bg-t').forEach(function(x){ x.classList.remove('on'); });
+    t.classList.add('on');
+    var ab = document.getElementById('artboard');
+    var kind = t.textContent;
+    if (kind === '渐变') ab.style.background = 'linear-gradient(135deg,#f8f5ee,#fdf0e8)';
+    else if (kind === '纯色') ab.style.background = '#fff';
+    else if (kind === '图案') ab.style.background = '#faf7f2 radial-gradient(#e2dbcd 1px,transparent 1px) 0 0/9px 9px';
+    else ab.style.background = 'linear-gradient(135deg,#dbe4ff,#eef2ff)';
+  });
+});
+</script>
+</body>
+</html>

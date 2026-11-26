@@ -646,7 +646,7 @@ def test_jobs_kinds_include_book_kinds() -> None:
     # 流水线批（2026-11-20）新增 plugin_pipeline（计数随扩键同步；该批的具名
     # 锚在 tests/test_pipeline_plugins.py::test_jobs_kinds_include_plugin_pipeline）；
     # 19→20：P1 批（2026-11-23）新增 quality_loop（具名锚在 tests/test_quality_loop.py）
-    assert {"book_search", "book_fetch", "plugin_pipeline"} <= KINDS and len(KINDS) == 20
+    assert {"book_search", "book_fetch", "plugin_pipeline"} <= KINDS and len(KINDS) == 21  # B1 localbook_fetch（2026-11-26）
 
 
 def test_tasks_include_book_digest_keys() -> None:

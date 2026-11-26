@@ -10,6 +10,9 @@
   - add_uploaded（分流：文档后缀走提取，其余按图片）；
   - register_video（F61 登记制：URL 校验→规范化幂等锚 video://→落库，
     零出网）；
+  - register_local_video（B3 2026-11-26：本地视频文件登记——读盘→内容
+    寻址落仓（硬链接优先）→ffprobe 时长/ffmpeg 首帧封面探测，缺席/失败
+    如实置空不报错）；
   - read_material_file（F60 文件服务三道门：路径边界/后缀白名单/魔数复核
     ——服务层统一 ValueError=400 / FileNotFoundError=404）。
 """
@@ -326,6 +329,104 @@ def register_video(
         uri=uri,
         title=title.strip() or (segments[-1] if segments else parsed.hostname or normalized),
         payload={"url": url.strip(), "meta": meta},
+        fetched_at=fetched_at or _now_iso(),
+    )
+    row = add_material(material)
+    return {"material": row, "dedup": False}
+
+
+# ── 本地视频登记（B3 多媒体与视频发布，2026-11-26）─────────────────────
+
+
+def register_local_video(
+    path: str,
+    *,
+    title: str = "",
+    note: str = "",
+    duration_text: str = "",
+    fetched_at: str | None = None,
+) -> dict[str, Any]:
+    """本地视频文件登记（B3）：读盘→内容寻址落仓→ffprobe/ffmpeg 元数据探测。
+
+    与 register_video（URL 登记制，零出网零读盘）互补——本地视频是真实
+    文件，登记即**复制进素材仓**（硬链接优先，跨卷复制——material-sink
+    durable 副本同款判例：仓内自洽才可被 /media/ 服务与物料包引用）。
+    分工与红线：
+
+    - 路径门：expanduser 后必须存在且是文件、后缀 ∈ mp4/webm/mov
+      （白名单与 /media/ 服务面一致），否则 ValueError（400）；
+    - 元数据（B3 任务书）：时长 ffprobe、首帧封面 ffmpeg——**缺席/失败
+      如实置空不报错**（登记主链路不被增强信息阻塞）；URL 登记的
+      register_video 天然无此二者（零出网不下载），同为诚实空值；
+    - 幂等锚 uri = localvideo://sha256:<内容散列>（同文件重登记同 id
+      零追加；与 upload:// scheme 区分——文件面语义不同）；
+    - payload.meta 落 {bytes, sha256, filename, source_path, duration?,
+      poster?, duration_text?, note?}——poster 为仓内相对路径（/media/
+      消费面），duration 为秒（float）。
+    """
+    from pathlib import Path as _Path
+
+    from ...infra import media_store  # 函数体内导入（导入期解耦）
+
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError("缺少必填字段 path（本地视频文件路径）")
+    raw = path.strip()
+    if raw.startswith("~") or raw.startswith("/"):
+        file_path = _Path(raw).expanduser()
+    else:
+        raise ValueError(f"path 必须是绝对路径或 ~/ 开头（拒绝相对路径歧义）: {raw}")
+    if "\x00" in raw:
+        raise ValueError("path 含非法字符（NUL）")
+    ext = file_path.suffix.lower().lstrip(".")
+    if ext not in media_store.VIDEO_EXTS:
+        raise ValueError(
+            f"不支持的视频格式（仅 {'/'.join(media_store.VIDEO_EXTS)}）: {raw!r}"
+        )
+    if not file_path.is_file():
+        raise FileNotFoundError(f"视频文件不存在: {file_path.name}")
+    for field, value in (("title", title), ("note", note), ("duration_text", duration_text)):
+        if not isinstance(value, str):
+            raise ValueError(f"{field} 必须是字符串")
+        if len(value) > _VIDEO_TEXT_MAX:
+            raise ValueError(f"{field} 最长 {_VIDEO_TEXT_MAX} 字符: {len(value)}")
+
+    # 内容散列：流式读（视频 GB 级不能整读进内存）
+    h = hashlib.sha256()
+    with file_path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+    sha256 = h.hexdigest()
+    uri = f"localvideo://sha256:{sha256}"
+    mid = model.make_material_id(VIDEO_SOURCE_ID, "video", uri)
+    existing = get_material(mid)
+    if existing is not None:
+        return {"material": existing, "dedup": True}
+
+    stored = media_store.store_media_file(mid, ext, file_path)
+    probed = media_store.probe_video_meta(mid, file_path)
+    meta: dict[str, Any] = {
+        "bytes": stored.stat().st_size,
+        "sha256": sha256,
+        "filename": file_path.name,
+        "source_path": str(file_path),
+    }
+    if probed.get("duration") is not None:
+        meta["duration"] = probed["duration"]
+    if probed.get("poster"):
+        meta["poster"] = probed["poster"]
+    if duration_text.strip():
+        meta["duration_text"] = duration_text.strip()
+    if note.strip():
+        meta["note"] = note.strip()
+    material = model.make_material(
+        mtype="video",
+        source_id=VIDEO_SOURCE_ID,
+        uri=uri,
+        title=title.strip() or file_path.stem,
+        payload={
+            "local_path": media_store.local_rel_path(mid, ext),
+            "meta": meta,
+        },
         fetched_at=fetched_at or _now_iso(),
     )
     row = add_material(material)

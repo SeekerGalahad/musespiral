@@ -499,7 +499,7 @@ def _poll_terminal(store: JobStore, job_id: str, timeout_s: float = 15.0) -> dic
 
 def test_jobs_kinds_include_plugin_pipeline() -> None:
     """具名锚：plugin_pipeline 入白名单（18→19），计数随扩键同步（19→20：P1 批 2026-11-23 +quality_loop，具名锚在 tests/test_quality_loop.py）。"""
-    assert "plugin_pipeline" in KINDS and len(KINDS) == 20
+    assert "plugin_pipeline" in KINDS and len(KINDS) == 21  # B1 +localbook_fetch
 
 
 def test_job_golden_path_done(plugins_root: Path, runs_root: Path) -> None:
